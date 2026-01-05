@@ -101,28 +101,84 @@
     <!-- Local Html5-Qrcode -->
     <script src="/static/libs/html5-qrcode.min.js" defer></script>
 
-    <!-- Pi SDK - Loading Locally to bypass blockage -->
-    <script src="/static/libs/pi-sdk.js"></script>
+    <!-- Pi SDK - Load from official CDN for production, local fallback for development -->
     <script>
-        window.addEventListener('load', function () {
-            if (typeof Pi === 'undefined') {
-                // Retry just in case
-                console.log('Pi undefined on load, checking again in 1s...');
+        (function() {
+            const isPiBrowser = navigator.userAgent.includes('PiBrowser');
+            const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+            
+            // In Pi Browser on production domain, use official CDN
+            // In localhost, try local file first, then CDN
+            if (isPiBrowser && !isLocalhost) {
+                // Production: Use official Pi SDK CDN
+                const script = document.createElement('script');
+                script.src = 'https://sdk.minepi.com/pi-sdk.js';
+                script.async = true;
+                script.onload = function() {
+                    console.log('✅ Pi SDK loaded from official CDN');
+                    // #region agent log
+                    fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.html:105',message:'Pi SDK loaded from CDN',data:{source:'https://sdk.minepi.com/pi-sdk.js',isPiBrowser:true},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H'})}).catch(()=>{});
+                    // #endregion
+                };
+                script.onerror = function() {
+                    console.error('❌ Failed to load Pi SDK from CDN');
+                    // #region agent log
+                    fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.html:112',message:'Pi SDK CDN load failed',data:{source:'https://sdk.minepi.com/pi-sdk.js'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H'})}).catch(()=>{});
+                    // #endregion
+                };
+                document.head.appendChild(script);
+            } else {
+                // Development: Try local file, fallback to CDN
+                const script = document.createElement('script');
+                script.src = '/static/libs/pi-sdk.js';
+                script.async = true;
+                script.onload = function() {
+                    console.log('✅ Pi SDK loaded from local file');
+                    // #region agent log
+                    fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.html:122',message:'Pi SDK loaded from local',data:{source:'/static/libs/pi-sdk.js'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H'})}).catch(()=>{});
+                    // #endregion
+                };
+                script.onerror = function() {
+                    console.warn('⚠️ Local Pi SDK failed, trying CDN...');
+                    const cdnScript = document.createElement('script');
+                    cdnScript.src = 'https://sdk.minepi.com/pi-sdk.js';
+                    cdnScript.async = true;
+                    cdnScript.onload = function() {
+                        console.log('✅ Pi SDK loaded from CDN (fallback)');
+                    };
+                    document.head.appendChild(cdnScript);
+                };
+                document.head.appendChild(script);
+            }
+            
+            // Verify Pi SDK is loaded after a delay
+            window.addEventListener('load', function () {
+                // In Production (Pi Browser), wait longer for CDN to load
+                const waitTime = (isPiBrowser && !isLocalhost) ? 3000 : 2000;
                 setTimeout(() => {
                     if (typeof Pi === 'undefined') {
-                        const ua = navigator.userAgent;
-                        if (ua.includes('PiBrowser')) {
-                            alert('CRITICAL: Pi SDK failed to load even locally!');
+                        console.error('❌ Pi SDK not loaded after timeout!', { isPiBrowser, isLocalhost, waitTime });
+                        // #region agent log
+                        fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.html:140',message:'Pi SDK still undefined after load',data:{isPiBrowser,isLocalhost},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H'})}).catch(()=>{});
+                        // #endregion
+                        if (isPiBrowser) {
+                            console.error('CRITICAL: Pi SDK failed to load in Pi Browser! Please check your internet connection.');
+                            // Don't show alert in production - just log
                         }
-                        console.error('Pi SDK not loaded!');
                     } else {
-                        console.log('Pi SDK loaded successfully (Local).');
+                        console.log('✅ Pi SDK verified and ready', { 
+                            hasPi: typeof Pi !== 'undefined', 
+                            hasAuthenticate: typeof Pi?.authenticate === 'function',
+                            hasInit: typeof Pi?.init === 'function',
+                            PiVersion: Pi?.version || 'unknown'
+                        });
+                        // #region agent log
+                        fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.html:147',message:'Pi SDK verified ready',data:{hasPi:typeof Pi!=='undefined',hasAuthenticate:typeof Pi?.authenticate==='function'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H'})}).catch(()=>{});
+                        // #endregion
                     }
-                }, 1000);
-            } else {
-                console.log('Pi SDK loaded successfully (Local).');
-            }
-        });
+                }, waitTime);
+            });
+        })();
     </script>
 
     <!-- Note: DOMPurify and ethers are now loaded as ES modules via esm.sh in security.js -->
@@ -575,6 +631,14 @@
             <!-- Authentication Section -->
             <div id="auth-section">
                 <h2>Authentication</h2>
+                <div id="pi-browser-warning" style="display: none; background: #fff3cd; border: 2px solid #ffc107; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+                    <p style="color: #856404; font-weight: bold; margin: 0;">
+                        ⚠️ CRITICAL: This app requires Pi Browser!
+                    </p>
+                    <p style="color: #856404; margin: 10px 0 0 0;">
+                        Pi authentication only works in Pi Browser. Please open this app in Pi Browser to continue.
+                    </p>
+                </div>
                 <div class="auth-actions">
                     <button id="pi-auth-btn" class="btn btn-lg btn-green">
                         Login with Pi Network
@@ -1428,8 +1492,33 @@
 
             // Pi Authentication Handler (Req #1)
             const piAuthBtn = document.getElementById('pi-auth-btn');
+            const piBrowserWarning = document.getElementById('pi-browser-warning');
+            
+            // Check if running in Pi Browser on page load
+            if (piBrowserWarning) {
+                const isPiBrowser = navigator.userAgent.includes('PiBrowser');
+                if (!isPiBrowser) {
+                    piBrowserWarning.style.display = 'block';
+                    if (piAuthBtn) {
+                        piAuthBtn.disabled = true;
+                        piAuthBtn.style.opacity = '0.5';
+                        piAuthBtn.title = 'Pi Browser required';
+                    }
+                } else {
+                    piBrowserWarning.style.display = 'none';
+                }
+            }
+            
             if (piAuthBtn) {
                 piAuthBtn.addEventListener('click', async () => {
+                    // Check Pi Browser again before authenticating
+                    const isPiBrowser = navigator.userAgent.includes('PiBrowser');
+                    if (!isPiBrowser) {
+                        const authStatus = document.getElementById('auth-status');
+                        authStatus.innerHTML = '<p class="error-text">✗ This app requires Pi Browser. Please open this app in Pi Browser to authenticate.</p>';
+                        return;
+                    }
+                    
                     // Show loading state
                     const authStatus = document.getElementById('auth-status');
                     authStatus.innerHTML = '<p class="info-text">⏳ Authenticating with Pi Network...</p>';
@@ -1437,7 +1526,13 @@
                     piAuthBtn.textContent = 'Authenticating...';
 
                     try {
+                        // #region agent log
+                        fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.html:1440',message:'Button click - calling authenticate()',data:{hasPiAdapter:!!piAdapter},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
+                        // #endregion
                         const result = await piAdapter.authenticate();
+                        // #region agent log
+                        fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.html:1443',message:'authenticate() returned',data:{success:result?.success,error:result?.error},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
+                        // #endregion
                         if (result.success) {
                             // Save merchant ID after successful authentication
                             // STATE MANAGEMENT FIX: Use window.dbManager for consistency
@@ -1462,9 +1557,13 @@
                             const sanitizedError = typeof DOMPurify !== 'undefined' 
                                 ? DOMPurify.sanitize(result.error || '') 
                                 : String(result.error || '').replace(/[<>&"']/g, '');
+                            const isPiBrowser = navigator.userAgent.includes('PiBrowser');
+                            const browserNote = isPiBrowser 
+                                ? '<p class="note-text">⚠️ Please ensure you have completed KYC verification in Pi Browser.</p>'
+                                : '<p class="error-text">⚠️ CRITICAL: Pi authentication requires Pi Browser. Please open this app in Pi Browser (not regular browser).</p>';
                             authStatus.innerHTML =
                                 '<p class="error-text">✗ Authentication failed: ' + sanitizedError + '</p>' +
-                                '<p class="note-text">Note: Pi authentication is required. Please use Pi Browser.</p>';
+                                browserNote;
                         }
                     } catch (error) {
                         // XSS FIX: Sanitize error message before displaying

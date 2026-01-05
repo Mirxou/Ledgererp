@@ -867,15 +867,27 @@ async def get_stellar_secret_from_pi_api(access_token: str) -> Optional[str]:
 @app.get("/api/pi/kyc-status")
 async def get_kyc_status(request: Request):
     """Check KYC status from Pi Network"""
+    # #region agent log
+    import json; open('.cursor/debug.log', 'a', encoding='utf-8').write(json.dumps({"location":"main.py:867","message":"get_kyc_status() called","data":{},"timestamp":int(time.time()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"D"},ensure_ascii=False)+'\n'); open('.cursor/debug.log', 'a', encoding='utf-8').close()
+    # #endregion
     try:
         auth_header = request.headers.get("Authorization", "")
+        # #region agent log
+        import json; open('.cursor/debug.log', 'a', encoding='utf-8').write(json.dumps({"location":"main.py:872","message":"Auth header received","data":{"hasHeader":bool(auth_header),"startsWithBearer":auth_header.startswith("Bearer ") if auth_header else False},"timestamp":int(time.time()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"D"},ensure_ascii=False)+'\n'); open('.cursor/debug.log', 'a', encoding='utf-8').close()
+        # #endregion
         if not auth_header.startswith("Bearer "):
             raise HTTPException(status_code=401, detail="Missing or invalid authorization header")
         
         access_token = auth_header.replace("Bearer ", "")
+        # #region agent log
+        import json; open('.cursor/debug.log', 'a', encoding='utf-8').write(json.dumps({"location":"main.py:877","message":"Access token extracted","data":{"tokenLength":len(access_token)},"timestamp":int(time.time()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"D"},ensure_ascii=False)+'\n'); open('.cursor/debug.log', 'a', encoding='utf-8').close()
+        # #endregion
         
         # TODO: Call Pi Network API to check KYC status
         # For now, return verified (in production, call Pi Network's KYC API)
+        # #region agent log
+        import json; open('.cursor/debug.log', 'a', encoding='utf-8').write(json.dumps({"location":"main.py:888","message":"Returning KYC status (placeholder)","data":{"completed":True,"kyc_status":"verified"},"timestamp":int(time.time()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"D"},ensure_ascii=False)+'\n'); open('.cursor/debug.log', 'a', encoding='utf-8').close()
+        # #endregion
         return {
             "completed": True,
             "kyc_completed": True,
