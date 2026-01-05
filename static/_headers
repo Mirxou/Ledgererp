@@ -1,0 +1,47 @@
+# Cloudflare Pages Headers - Fix MIME Types
+# Build Output Directory = static, so files are at root level
+
+# JavaScript files
+/js/*
+  Content-Type: application/javascript; charset=utf-8
+
+# CSS files
+/css/*
+  Content-Type: text/css; charset=utf-8
+
+# JSON files
+/*.json
+  Content-Type: application/json; charset=utf-8
+
+# HTML files
+/*.html
+  Content-Type: text/html; charset=utf-8
+
+# Image files
+/*.png
+  Content-Type: image/png
+/*.jpg
+  Content-Type: image/jpeg
+/*.jpeg
+  Content-Type: image/jpeg
+/*.svg
+  Content-Type: image/svg+xml
+/*.ico
+  Content-Type: image/x-icon
+
+# Font files
+/*.woff
+  Content-Type: font/woff
+/*.woff2
+  Content-Type: font/woff2
+/*.ttf
+  Content-Type: font/ttf
+
+# Library files
+/libs/*
+  Content-Type: application/javascript; charset=utf-8
+
+# Well-known files
+/.well-known/*
+  Content-Type: text/plain; charset=utf-8
+

@@ -1,0 +1,10 @@
+/*    /index.html   200
+
+# Redirect old /static/ paths to new paths (for cache compatibility)
+/static/js/*    /js/:splat   301
+/static/libs/*    /libs/:splat   301
+/static/css/*    /css/:splat   301
+/static/*.html    /:splat.html   301
+/static/*.json    /:splat.json   301
+/static/*.png    /:splat.png   301
+/static/*.ico    /:splat.ico   301

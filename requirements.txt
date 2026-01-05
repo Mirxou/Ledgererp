@@ -1,0 +1,37 @@
+# Pi Ledger - Python Dependencies
+# Install with: pip install -r requirements.txt
+
+# Web Framework
+fastapi
+uvicorn[standard]
+starlette
+
+# Request Handling
+python-multipart
+aiohttp
+anyio
+
+# Configuration & Validation (Req #45: Strict Config)
+pydantic
+pydantic-settings  # Required for strict config validation
+
+# Security & Authentication
+sqlalchemy
+python-jose[cryptography]
+passlib[bcrypt]
+
+# Environment Variables
+python-dotenv
+
+# PDF Generation (Req #21: AML Reports)
+reportlab
+PyPDF2
+
+# Utilities
+python-dateutil
+
+# Testing
+requests
+pytest
+pytest-cov
+httpx

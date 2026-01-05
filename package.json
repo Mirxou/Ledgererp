@@ -1,0 +1,20 @@
+{
+  "name": "ledger-erp",
+  "version": "1.0.0",
+  "description": "Non-Custodial ERP System for Pi Network Merchants",
+  "main": "index.html",
+  "scripts": {
+    "start": "python app/main.py",
+    "dev": "uvicorn app.main:app --reload --reload-dir app --host 0.0.0.0 --port 8000",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "pi-network",
+    "erp",
+    "non-custodial"
+  ],
+  "author": "Ledger ERP Team",
+  "license": "MIT",
+  "dependencies": {},
+  "devDependencies": {}
+}

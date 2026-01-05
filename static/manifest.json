@@ -1,0 +1,63 @@
+{
+  "name": "Ledger ERP",
+  "short_name": "LedgerERP",
+  "description": "Non-Custodial ERP System for Pi Network Merchants",
+  "version": "1.0.0",
+  "manifest_version": 2,
+  "icons": [
+    {
+      "src": "/static/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/static/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ],
+  "start_url": "/static/index.html",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#7b1fa2",
+  "orientation": "portrait-primary",
+  "scope": "/static/",
+  "permissions": [
+    "storage",
+    "notifications"
+  ],
+  "pi_app": {
+    "app_id": "pi-ledger-erp",
+    "name": "Ledger ERP",
+    "description": "Secure Non-Custodial ERP for Pi Network Merchants",
+    "category": "business",
+    "version": "1.0.0",
+    "developer": "mirxou",
+    "support_email": "abounaas54@gmail.com",
+    "home_url": "https://ledgererp.online/static/index.html",
+    "icon_url": "https://ledgererp.online/static/icon-512.png",
+    "privacy_policy_url": "https://ledgererp.online/static/privacy.html",
+    "terms_of_service_url": "https://ledgererp.online/static/terms.html",
+    "screenshot_urls": [
+      "https://ledgererp.online/static/screenshots/screenshot_dashboard.png",
+      "https://ledgererp.online/static/screenshots/screenshot_invoice.png",
+      "https://ledgererp.online/static/screenshots/screenshot_receipt.png"
+    ],
+    "features": [
+      "Non-custodial invoice management",
+      "Pi Network payment processing",
+      "Zero-knowledge encryption",
+      "Offline-first architecture",
+      "Multi-language support (Arabic/English)"
+    ],
+    "tags": [
+      "business",
+      "erp",
+      "accounting",
+      "invoicing",
+      "finance"
+    ],
+    "age_rating": "E",
+    "content_rating": "Everyone"
+  }
+}

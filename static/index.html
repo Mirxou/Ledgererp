@@ -1,0 +1,2510 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport"
+        content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Ledger ERP - Non-Custodial ERP</title>
+
+    <!-- Pi Network App Manifest -->
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#7b1fa2">
+    <link rel="apple-touch-icon" href="/favicon.ico">
+    <meta name="description"
+        content="Non-Custodial ERP System for Pi Network Merchants - Zero-Knowledge Financial Management">
+
+    <!-- Pi Network App Metadata -->
+    <meta name="pi-app-id" content="pi-ledger-erp">
+    <meta name="pi-app-name" content="Ledger ERP">
+    <meta name="pi-app-version" content="1.0.0">
+    <link rel="stylesheet" href="/css/style.css">
+
+    <!-- Req #15: SRI Hashes for external scripts -->
+    <!-- Req #24: Dexie - Load as script tag (UMD module, not ES module) -->
+    <!-- IMPORTANT: Load as script tag, NOT ES module import -->
+    <script>
+        // Production Console Wrapper - Disable logs in production
+        (function () {
+            // Detect production environment
+            const isProduction = window.location.hostname !== 'localhost' && 
+                                window.location.hostname !== '127.0.0.1' &&
+                                !window.location.hostname.includes('ngrok') &&
+                                !window.location.hostname.includes('localhost');
+
+            // Store original console methods
+            const originalLog = console.log;
+            const originalError = console.error;
+            const originalWarn = console.warn;
+            const originalInfo = console.info;
+            const originalDebug = console.debug;
+
+            // In production, disable console.log but keep console.error and console.warn for critical errors
+            if (isProduction) {
+                console.log = function () {
+                    // Silently ignore in production
+                };
+                console.info = function () {
+                    // Silently ignore in production
+                };
+                console.debug = function () {
+                    // Silently ignore in production
+                };
+                // Keep error and warn for debugging critical issues
+                console.error = originalError;
+                console.warn = originalWarn;
+            } else {
+                // Development mode: ON-SCREEN DEBUGGER for Mobile
+                const debugContainer = document.createElement('div');
+                debugContainer.id = 'debug-console';
+                debugContainer.style.cssText = 'position:fixed;bottom:0;left:0;width:100%;height:150px;background:rgba(0,0,0,0.9);color:#0f0;font-family:monospace;font-size:10px;overflow-y:scroll;z-index:99999;padding:5px;pointer-events:none;opacity:0.8;';
+                document.head.appendChild(debugContainer);
+
+                window.addEventListener('DOMContentLoaded', () => {
+                    document.body.appendChild(debugContainer);
+                });
+
+                function logToScreen(msg, type) {
+                    const line = document.createElement('div');
+                    line.style.color = type === 'error' ? '#ff5555' : (type === 'warn' ? '#ffb86c' : '#50fa7b');
+                    line.style.borderBottom = '1px solid #333';
+                    line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+                    if (debugContainer) {
+                        debugContainer.appendChild(line);
+                        debugContainer.scrollTop = debugContainer.scrollHeight;
+                    }
+                }
+
+                console.log = function (...args) {
+                    originalLog.apply(console, args);
+                    logToScreen(args.map(a => typeof a === 'object' ? JSON.stringify(a) : a).join(' '), 'log');
+                };
+
+                console.error = function (...args) {
+                    originalError.apply(console, args);
+                    logToScreen(args.map(a => typeof a === 'object' ? JSON.stringify(a) : a).join(' '), 'error');
+                };
+
+                console.warn = function (...args) {
+                    originalWarn.apply(console, args);
+                    logToScreen(args.map(a => typeof a === 'object' ? JSON.stringify(a) : a).join(' '), 'warn');
+                };
+
+                window.onerror = function (msg, url, line) {
+                    logToScreen(`Uncaught Error: ${msg} @ ${url}:${line}`, 'error');
+                };
+
+                console.log('Debug Console Initialized (Development Mode)');
+            }
+        })();
+    </script>
+    <!-- Local Dexie with CDN fallback - load CDN directly if local fails -->
+    <script>
+        (function() {
+            const script = document.createElement('script');
+            script.src = '/libs/dexie.min.js';
+            script.defer = true;
+            script.onerror = function() {
+                console.warn('Local Dexie failed, loading from CDN...');
+                const cdnScript = document.createElement('script');
+                cdnScript.src = 'https://cdn.jsdelivr.net/npm/dexie@3.2.4/dist/dexie.min.js';
+                cdnScript.defer = true;
+                document.head.appendChild(cdnScript);
+            };
+            document.head.appendChild(script);
+        })();
+    </script>
+    <!-- Local Html5-Qrcode -->
+    <script src="/libs/html5-qrcode.min.js" defer></script>
+
+    <!-- Pi SDK - Loading Locally to bypass blockage -->
+    <script src="/libs/pi-sdk.js"></script>
+    <script>
+        window.addEventListener('load', function () {
+            if (typeof Pi === 'undefined') {
+                // Retry just in case
+                console.log('Pi undefined on load, checking again in 1s...');
+                setTimeout(() => {
+                    if (typeof Pi === 'undefined') {
+                        const ua = navigator.userAgent;
+                        if (ua.includes('PiBrowser')) {
+                            alert('CRITICAL: Pi SDK failed to load even locally!');
+                        }
+                        console.error('Pi SDK not loaded!');
+                    } else {
+                        console.log('Pi SDK loaded successfully (Local).');
+                    }
+                }, 1000);
+            } else {
+                console.log('Pi SDK loaded successfully (Local).');
+            }
+        });
+    </script>
+
+    <!-- Note: DOMPurify and ethers are now loaded as ES modules via esm.sh in security.js -->
+
+    <!-- Req #29: Self-hosted fonts (China Safe) - Using system fonts as fallback -->
+    <style>
+        /* Req #29: Use system fonts (no external dependencies, China-safe) */
+        /* Req #42: Dark Mode Support - CSS Variables */
+        :root {
+            --bg-color: #ffffff;
+            --text-color: #333333;
+            --border-color: #dddddd;
+            --card-bg: #ffffff;
+            --input-bg: #ffffff;
+            --modal-bg: #ffffff;
+            --footer-bg: #333333;
+            --footer-text: #ffffff;
+            --success-color: #4CAF50;
+            --error-color: #f44336;
+            --primary-color: #7b1fa2;
+        }
+
+        /* Req #42: Dark Mode - Detect system preference */
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --bg-color: #1a1a1a;
+                --text-color: #e0e0e0;
+                --border-color: #444444;
+                --card-bg: #2a2a2a;
+                --input-bg: #2a2a2a;
+                --modal-bg: #2a2a2a;
+                --footer-bg: #1a1a1a;
+                --footer-text: #e0e0e0;
+            }
+        }
+
+        * {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, 'Microsoft YaHei', '微软雅黑', sans-serif;
+            color: var(--text-color);
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+        }
+
+        /* Req #29: RTL Support */
+        [dir="rtl"] {
+            direction: rtl;
+            text-align: right;
+        }
+
+        [dir="ltr"] {
+            direction: ltr;
+            text-align: left;
+        }
+
+        /* CSS Classes to replace inline styles (CSP compliant) */
+        .hidden {
+            display: none !important;
+        }
+
+        .visible {
+            display: block !important;
+        }
+
+        .success-text {
+            color: green;
+            font-weight: bold;
+        }
+
+        .error-text {
+            color: red;
+            font-weight: bold;
+        }
+
+        .demo-container {
+            margin-top: 20px;
+            padding: 15px;
+            background: #f0f0f0;
+            border-radius: 5px;
+        }
+
+        .demo-header {
+            margin-bottom: 10px;
+        }
+
+        /* PERFORMANCE: Critical CSS - Loading Spinner (shown immediately) */
+        /* Req #42: Dark Mode - Loading spinner adapts to theme */
+        #loading-spinner {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: var(--bg-color);
+            opacity: 0.95;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 10000;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+        }
+
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #4CAF50;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 20px;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        .spinner-text {
+            color: #666;
+            font-size: 16px;
+            text-align: center;
+        }
+
+        /* Welcome Modal Styles */
+        #welcome-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            display: none;
+            /* Hidden by default, shown via JavaScript */
+            justify-content: center;
+            align-items: center;
+            z-index: 10001;
+            padding: 20px;
+        }
+
+        .welcome-content {
+            background: var(--modal-bg);
+            border-radius: 10px;
+            padding: 30px;
+            max-width: 500px;
+            text-align: center;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+        }
+
+        .welcome-content h2 {
+            color: #4CAF50;
+            margin-top: 0;
+        }
+
+        .welcome-content p {
+            color: #666;
+            line-height: 1.6;
+            margin: 15px 0;
+        }
+
+        .welcome-buttons {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin-top: 20px;
+        }
+
+        .welcome-btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+        }
+
+        .welcome-btn-primary {
+            background: #4CAF50;
+            color: white;
+        }
+
+        .welcome-btn-secondary {
+            background: #f0f0f0;
+            color: #333;
+        }
+
+        /* About Modal Styles */
+        #about-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 10002;
+            padding: 20px;
+        }
+
+        .about-content {
+            background: var(--modal-bg);
+            border-radius: 10px;
+            padding: 30px;
+            max-width: 600px;
+            max-height: 80vh;
+            overflow-y: auto;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+        }
+
+        .about-content h2 {
+            color: #4CAF50;
+            margin-top: 0;
+        }
+
+        .about-feature {
+            margin: 20px 0;
+            padding: 15px;
+            background: var(--card-bg);
+            border-radius: 5px;
+            border: 1px solid var(--border-color);
+        }
+
+        .about-feature h3 {
+            color: #4CAF50;
+            margin-top: 0;
+        }
+
+        /* Req #40: Universal Printing Support - System Printer CSS */
+        @media print {
+
+            /* Hide everything except receipt */
+            body * {
+                visibility: hidden;
+            }
+
+            /* Show only receipt container */
+            #print-receipt-container,
+            #print-receipt-container * {
+                visibility: visible;
+            }
+
+            /* Position receipt at top-left */
+            #print-receipt-container {
+                position: absolute;
+                left: 0;
+                top: 0;
+                width: 80mm;
+                /* Standard thermal receipt width */
+                margin: 0;
+                padding: 0;
+            }
+
+            /* Remove margins, headers, footers */
+            @page {
+                margin: 0;
+                size: 80mm auto;
+                /* Thermal paper width */
+            }
+
+            /* Receipt styling */
+            .receipt-content {
+                font-family: 'Courier New', monospace;
+                font-size: 12pt;
+                line-height: 1.2;
+                color: black;
+                background: white;
+                padding: 5mm;
+            }
+
+            .receipt-header {
+                text-align: center;
+                font-weight: bold;
+                font-size: 14pt;
+                margin-bottom: 10px;
+                border-bottom: 1px dashed #000;
+                padding-bottom: 10px;
+            }
+
+            .receipt-line {
+                border-bottom: 1px dashed #ccc;
+                margin: 5px 0;
+            }
+
+            .receipt-item {
+                margin: 5px 0;
+            }
+
+            .receipt-total {
+                font-weight: bold;
+                font-size: 13pt;
+                margin-top: 10px;
+                border-top: 2px solid #000;
+                padding-top: 10px;
+            }
+
+            .receipt-footer {
+                text-align: center;
+                margin-top: 15px;
+                font-size: 10pt;
+                border-top: 1px dashed #000;
+                padding-top: 10px;
+            }
+        }
+
+        /* Print receipt container (hidden by default) */
+        #print-receipt-container {
+            display: none;
+        }
+
+        /* Req #44: Toast Animation Styles */
+        @keyframes slideInRight {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        @keyframes slideOutRight {
+            from {
+                transform: translateX(0);
+                opacity: 1;
+            }
+
+            to {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+        }
+    </style>
+
+    <!-- Req #15: CSP Meta Tag (additional layer) - Allow ES modules -->
+    <!-- Req #29: Allow esm.sh for ES module compatibility -->
+    <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://sdk.minepi.com https://esm.sh https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' 'unsafe-hashes'; connect-src 'self' https://api.minepi.com https://cdn.jsdelivr.net https://esm.sh https://static.cloudflareinsights.com;">
+</head>
+
+<body>
+    <!-- PERFORMANCE: Loading Spinner (shown immediately, hidden after init) -->
+    <div id="loading-spinner">
+        <div class="spinner"></div>
+        <div class="spinner-text">Loading Ledger ERP...</div>
+    </div>
+
+    <!-- GDPR: Welcome Modal (First Visit Consent) -->
+    <div id="welcome-modal">
+        <div class="welcome-content">
+            <h2>🛡️ Welcome to Ledger ERP</h2>
+            <p><strong>Non-Custodial, Zero-Knowledge ERP System</strong></p>
+            <p>Your financial data stays on your device. We never see your transactions, invoices, or wallet
+                information.</p>
+            <div class="bg-success-soft p-15 rounded-5 my-20 text-left">
+                <strong>🔒 Privacy First:</strong>
+                <ul class="list-compact">
+                    <li>All data encrypted locally on your device</li>
+                    <li>Zero-knowledge architecture (backend is "blind")</li>
+                    <li>No tracking, no analytics, no data collection</li>
+                    <li>Works completely offline</li>
+                </ul>
+            </div>
+            <p class="text-small text-muted">
+                By clicking "I Agree", you acknowledge that you have read and agree to our
+                <a href="#" onclick="Modal.showIframe('/privacy.html', 'Privacy Policy'); return false;"
+                    class="link-success">Privacy Policy</a>
+                and <a href="#" onclick="Modal.showIframe('/terms.html', 'Terms of Service'); return false;"
+                    class="link-success">Terms of Service</a>.
+            </p>
+            <div class="welcome-buttons">
+                <button id="welcome-agree-btn" class="welcome-btn welcome-btn-primary"
+                    onclick="handleWelcomeAgree(event);">
+                    ✓ I Agree to Terms
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- About Modal -->
+    <div id="about-modal">
+        <div class="about-content">
+            <h2>💎 About Ledger ERP</h2>
+            <p><strong>Unique Value Proposition:</strong></p>
+            <p>Ledger ERP is not just another cashier app. It's a <strong>Non-Custodial ERP System</strong> that solves
+                real problems for Pi Network merchants:</p>
+
+            <div class="about-feature">
+                <h3>🔐 Zero-Knowledge Architecture</h3>
+                <p>Your data is encrypted locally and never leaves your device. The backend is "blind" - it cannot see
+                    your transactions, invoices, or financial data. This protects you from data breaches and ensures
+                    complete privacy.</p>
+            </div>
+
+            <div class="about-feature">
+                <h3>💰 Solves Liquidity Problems</h3>
+                <p>Many merchants struggle with cash flow. Ledger ERP allows you to accept Pi payments instantly,
+                    reducing dependency on slow bank transfers and expensive payment processors.</p>
+            </div>
+
+            <div class="about-feature">
+                <h3>📱 Offline-First Design</h3>
+                <p>Works completely offline. Create invoices, manage inventory, and track sales even without internet.
+                    Perfect for markets, festivals, and areas with poor connectivity.</p>
+            </div>
+
+            <div class="about-feature">
+                <h3>🌍 Global Compliance</h3>
+                <p>Built with privacy regulations in mind (GDPR, CCPA). No data collection means no compliance
+                    headaches. Your business, your data, your control.</p>
+            </div>
+
+            <div class="mt-20 p-15 bg-warning-soft rounded-5">
+                <p class="m-0"><strong>🎯 Why This Matters:</strong></p>
+                <p class="mt-10 mb-0">Traditional ERP systems require you to trust a third party with your financial
+                    data. Ledger ERP puts you in complete control. This is the future of business software -
+                    decentralized, private, and user-owned.</p>
+            </div>
+
+            <div class="mt-20 text-center">
+                <button id="close-about-btn" class="welcome-btn welcome-btn-primary w-100">
+                    Close
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div id="app">
+        <!-- Req #13: Update Required Overlay (hidden by default) -->
+        <div id="update-required-overlay"></div>
+
+        <!-- Header -->
+        <header class="app-header">
+            <div class="logo-container">
+                <img src="/logo.png" alt="Ledger ERP Logo" class="app-logo">
+                <h1>Ledger ERP</h1>
+            </div>
+            <p>Non-Custodial ERP System</p>
+        </header>
+
+        <!-- Main Content -->
+        <main class="app-main">
+            <!-- Req #3: Demo Mode Button -->
+            <!-- CRITICAL: Demo Mode is for testing/review purposes only -->
+            <div id="demo-mode-section" class="demo-mode-section">
+                <h2>Demo Mode</h2>
+                <p>
+                    <strong>For Reviewers:</strong> Demo Mode allows testing the application without Pi Network
+                    authentication.
+                    This is a testing feature only and does not represent the full production experience.
+                </p>
+                <button id="demo-mode-btn" class="btn btn-md btn-blue">
+                    Enter Demo Mode
+                </button>
+            </div>
+
+            <!-- Req #8: Anti-Phishing Warning -->
+            <div id="phishing-warning">
+                ⚠️ تنبيه: لا تقم أبداً بإدخال كلمات محفظة Pi الخاصة بك هنا.
+                <br>Warning: Never enter your Pi wallet seed phrase here.
+            </div>
+
+            <!-- Authentication Section -->
+            <div id="auth-section">
+                <h2>Authentication</h2>
+                <div class="auth-actions">
+                    <button id="pi-auth-btn" class="btn btn-lg btn-green">
+                        Login with Pi Network
+                    </button>
+                    <button id="skip-auth-btn" class="btn btn-lg btn-orange">
+                        Setup Without Authentication
+                    </button>
+                </div>
+                <div id="auth-status"></div>
+                <p class="form-note">
+                    💡 <strong>For Development:</strong> Use "Setup Without Authentication" to test the setup process
+                    without Pi Network login.
+                </p>
+            </div>
+
+            <!-- Setup Section (for new merchants) -->
+            <div id="setup-section" class="hidden">
+                <h2>Setup Your Merchant Account</h2>
+                <p>Generate your 12-word recovery phrase (BIP-39)</p>
+
+                <div class="form-group">
+                    <label>Recovery Phrase (12 words):</label>
+                    <textarea id="mnemonic-input" rows="3" class="input-full"
+                        placeholder="Enter 12 words here"></textarea>
+                    <small class="form-note">This is NOT your Pi wallet seed phrase. Generate a new one for this
+                        application.</small>
+                </div>
+
+                <div class="form-group">
+                    <label>PIN Code:</label>
+                    <input type="password" id="pin-input" class="input-full" placeholder="Enter 6-digit PIN">
+                </div>
+                <div class="setup-buttons-group">
+                    <button id="generate-mnemonic-btn" class="btn btn-primary">Generate New
+                        Phrase</button>
+                    <button id="scan-setup-qr-btn" class="btn btn-orange">📱 Scan Setup QR</button>
+                </div>
+                <button id="setup-complete-btn" class="btn btn-md btn-green">
+                    Complete Setup
+                </button>
+            </div>
+
+            <!-- Dashboard Section -->
+            <div id="dashboard-section">
+                <div id="dashboard-view" class="dashboard-view">
+                    <!-- Demo Mode Banner (hidden by default) -->
+                    <div id="demo-mode-banner" class="banner-demo">
+                        <span class="icon-lg mr-10">🧪</span>
+                        <span><strong>DEMO MODE</strong> - Test the application with sample data. All features are
+                            available for testing. Data is saved to your local browser database.</span>
+                        <span class="icon-lg ml-10">🧪</span>
+                    </div>
+
+                    <!-- Live Store Indicator (hidden by default) -->
+                    <div id="live-store-indicator" class="banner-live">
+                        <span class="icon-lg mr-10">🟢</span>
+                        <span>LIVE STORE - Ready for Production</span>
+                        <span class="icon-lg ml-10">🟢</span>
+                    </div>
+
+                    <!-- Dashboard Header -->
+                    <div class="shop-header">
+                        <div>
+                            <h2 id="shop-name" class="shop-name">Shop Name</h2>
+                            <div class="shop-actions">
+                                <span>Network Status:</span>
+                                <span id="network-status" class="icon-lg">🟢</span>
+                            </div>
+                        </div>
+                        <div class="action-buttons">
+                            <button id="b2b-market-btn" class="btn btn-sm btn-purple">
+                                🌐 B2B Market
+                            </button>
+                            <button id="export-data-btn" class="btn btn-sm btn-grey">
+                                📤 Export Data
+                            </button>
+                            <button id="create-vault-backup-btn" class="btn btn-sm btn-blue">
+                                ☁️ Create Cloud Backup
+                            </button>
+                            <button id="restore-from-vault-btn" class="btn btn-sm btn-orange">
+                                🔄 Restore from Backup
+                            </button>
+                            <button id="close-shift-btn" class="btn btn-sm btn-red">
+                                📊 Close Shift
+                            </button>
+                            <button id="add-device-btn" class="btn btn-sm btn-add-device">
+                                📱 Add Device
+                            </button>
+                            <button id="import-products-btn" class="btn btn-sm btn-orange">
+                                📥 Import CSV
+                            </button>
+                            <button id="create-invoice-btn" class="btn btn-sm btn-green">
+                                ➕ Create Invoice
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Stats Cards -->
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <div class="stat-label">Total Sales (Pi)</div>
+                            <div id="total-sales-pi" class="stat-value stat-value-green">0.00</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">Total Cash (Offline)</div>
+                            <div id="total-cash-offline" class="stat-value stat-value-blue">
+                                <span id="cash-currency-symbol">$</span><span id="cash-amount">0.00</span>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">Total Invoices</div>
+                            <div id="total-invoices" class="stat-value stat-value-orange">0</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">Daily Revenue</div>
+                            <div id="daily-revenue" class="stat-value stat-value-revenue">+0.00</div>
+                        </div>
+                    </div>
+
+                    <!-- Invoice List -->
+                    <div class="content-card">
+                        <h3>Recent Invoices</h3>
+                        <div id="invoices-table-container">
+                            <table id="invoices-table" class="table-full">
+                                <thead>
+                                    <tr class="table-header">
+                                        <th class="th-left">Invoice ID / Ref</th>
+                                        <th class="th-right">Amount</th>
+                                        <th class="th-center">Currency</th>
+                                        <th class="th-center">Status</th>
+                                        <th class="th-left">Date</th>
+                                        <th class="th-center">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="invoices-tbody">
+                                    <tr>
+                                        <td colspan="5" class="table-empty">
+                                            Loading invoices...
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Invoice Modal -->
+            <dialog id="invoice-modal" class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h2>Create New Invoice</h2>
+                        <button id="close-modal-btn" class="modal-close">&times;</button>
+                    </div>
+
+                    <form id="invoice-form">
+                        <!-- Exchange Rate Selector (Reference Only) -->
+                        <div class="form-highlight">
+                            <label class="form-label-block">
+                                Exchange Rate (Reference Only - للأغراض الضريبية فقط):
+                            </label>
+                            <div class="form-radio-group">
+                                <label class="form-radio-label">
+                                    <input type="radio" name="rate-type" id="rate-gcv" value="gcv" checked
+                                        class="form-radio-input">
+                                    <span>GCV ($314,159/Pi)</span>
+                                </label>
+                                <label class="form-radio-label">
+                                    <input type="radio" name="rate-type" id="rate-custom" value="custom"
+                                        class="form-radio-input">
+                                    <span>Custom Rate:</span>
+                                </label>
+                                <input type="number" id="custom-rate-input" placeholder="10.00" step="any"
+                                    min="0.0000001" value="10.00" disabled class="input-narrow">
+                                <span class="text-muted text-small">$/Pi</span>
+                            </div>
+                            <p class="m-0 text-small text-muted text-italic">
+                                This rate is used only for tax purposes and cash deduction calculations
+                            </p>
+                        </div>
+
+                        <!-- Customer Name -->
+                        <div class="form-group">
+                            <label class="form-label-block">Customer Name:</label>
+                            <input type="text" id="customer-name" placeholder="Enter customer name" class="input-full">
+                        </div>
+
+                        <!-- External Reference ID (Optional) -->
+                        <div class="form-group">
+                            <label class="form-label-block">
+                                External Reference / Paper ID (Optional):
+                            </label>
+                            <input type="text" id="external-ref-input"
+                                placeholder="e.g., #500 (Your paper invoice number)" class="input-full">
+                            <p class="form-note">
+                                Link this invoice to your physical paper invoice number
+                            </p>
+                        </div>
+
+                        <!-- Items List (Prices in Pi) -->
+                        <div class="form-group">
+                            <div class="items-header">
+                                <label class="items-label">
+                                    Items (Prices in Pi - π):
+                                </label>
+                                <div class="items-buttons">
+                                    <button type="button" id="scan-barcode-btn" class="btn btn-sm btn-orange">
+                                        📷 Scan Barcode
+                                    </button>
+                                    <button type="button" id="add-item-btn" class="btn btn-sm btn-blue">
+                                        + Add Item
+                                    </button>
+                                </div>
+                            </div>
+                            <p class="items-hint">
+                                💡 Enter item prices directly in Pi (π). Example: 0.5 π for bread, 2.0 π for coffee
+                            </p>
+                            <div id="items-list">
+                                <!-- Items will be added dynamically -->
+                            </div>
+                        </div>
+
+                        <!-- Cash Paid (Deduction) -->
+                        <div class="cash-deduction-section">
+                            <label class="form-label-block">
+                                Offline Cash Down-payment (USD/Local) - خصم الكاش:
+                            </label>
+                            <div class="cash-input-group">
+                                <input type="number" id="cash-paid-input" placeholder="0.00" step="any" min="0"
+                                    value="0" class="cash-input">
+                                <span class="currency-label">USD</span>
+                                <span class="conversion-arrow">→</span>
+                                <span id="cash-paid-pi-equivalent" class="cash-pi-value">-π0.00</span>
+                            </div>
+                            <p class="form-note">
+                                This cash amount will be converted to Pi and deducted from the total
+                            </p>
+                        </div>
+
+                        <div class="separator-line"></div>
+
+                        <!-- Summary Section - Pi-First Design -->
+                        <div class="form-group">
+                            <h3 class="summary-title">Invoice Summary</h3>
+
+                            <!-- Pi Calculation Breakdown -->
+                            <div class="pi-breakdown">
+                                <div class="breakdown-row">
+                                    <span class="breakdown-label">Total Items (Pi):</span>
+                                    <span id="total-items-pi" class="breakdown-value">π0.00</span>
+                                </div>
+                                <div class="breakdown-row">
+                                    <span class="breakdown-label">Less: Cash Paid (Pi equivalent):</span>
+                                    <span id="cash-deduction-pi"
+                                        class="breakdown-value breakdown-value-red">-π0.00</span>
+                                </div>
+                                <div class="breakdown-row breakdown-row-subtotal">
+                                    <span class="breakdown-label">Subtotal (Pi):</span>
+                                    <span id="subtotal-pi" class="breakdown-value">π0.00</span>
+                                </div>
+                                <div class="breakdown-row">
+                                    <span class="breakdown-label">Network Fee:</span>
+                                    <span class="breakdown-value">+π0.01</span>
+                                </div>
+                            </div>
+
+                            <!-- Final Total - Large and Clear -->
+                            <div class="final-total">
+                                <div class="final-total-label">
+                                    NET TO PAY (QR CODE)
+                                </div>
+                                <div id="total-pi-with-fee" class="final-total-value">
+                                    π0.01
+                                </div>
+                                <p class="final-total-note">
+                                    This is the exact amount the QR code will request
+                                </p>
+                            </div>
+
+                            <!-- Tax/Fiscal Reference (Footer Note) -->
+                            <div class="tax-reference">
+                                <span class="tax-label">
+                                    Estimated Value: <span id="total-fiat" class="tax-value">$0.00</span>
+                                    <span class="tax-note">(For Tax/Fiscal Purposes Only - للأغراض الضريبية فقط)</span>
+                                </span>
+                            </div>
+                        </div>
+
+                        <!-- QR Code Display -->
+                        <div id="qr-container" class="qr-container hidden">
+                            <h3>Scan QR Code to Pay</h3>
+                            <div id="qr-code" class="qr-code-wrapper">
+                                <canvas id="qr-code-canvas" class="qr-canvas"></canvas>
+                            </div>
+                            <p class="qr-expiry">This QR code expires in 120 minutes</p>
+                        </div>
+
+                        <!-- Action Buttons -->
+                        <div class="modal-actions">
+                            <button type="button" id="cancel-invoice-btn" class="btn btn-md btn-red">
+                                Cancel
+                            </button>
+                            <button type="button" id="btn-print-receipt" class="btn btn-md btn-grey">
+                                🖨️ Print Receipt
+                            </button>
+                            <button type="button" id="btn-save-draft" class="btn btn-md btn-blue">
+                                💾 Save Invoice
+                            </button>
+                            <button type="button" id="btn-generate-qr" class="btn btn-md btn-green">
+                                📱 Generate Payment QR
+                            </button>
+                            <button type="button" id="btn-copy-link" class="btn btn-md btn-purple">
+                                📋 Copy Link for Chat
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </dialog>
+        </main>
+
+        <!-- Req #4: Footer Disclaimer -->
+        <footer class="app-footer">
+            <div class="footer-buttons">
+                <button id="settings-btn" class="footer-btn">
+                    ⚙️ Settings
+                </button>
+                <button id="report-bug-btn" class="footer-btn">
+                    🐞 Report Issue
+                </button>
+            </div>
+            <p class="footer-disclaimer">
+                <strong>Disclaimer:</strong> Ledger ERP is an independent application and is not affiliated with,
+                endorsed by, or sponsored by the Pi Core Team or Pi Network Foundation.
+            </p>
+            <div class="footer-links">
+                <a href="#" onclick="Modal.showIframe('/privacy.html', 'Privacy Policy'); return false;"
+                    class="footer-link">Privacy Policy</a>
+                <span class="footer-separator">|</span>
+                <a href="#" onclick="Modal.showIframe('/terms.html', 'Terms of Service'); return false;"
+                    class="footer-link">Terms of Service</a>
+            </div>
+            <p class="footer-version">
+                Ledger ERP v1.0.0 | Non-Custodial ERP System
+            </p>
+        </footer>
+    </div>
+
+    <!-- Load modules - MUST be after script tags -->
+    <script src="/js/ui-utils.js"></script>
+    <!-- Add delay to ensure script tags are fully loaded -->
+    <script>
+        // Ensure script tags are loaded before modules
+        window.addEventListener('load', () => {
+            console.log('Page fully loaded. Script tags should be ready.');
+            console.log('Final check - Dexie:', typeof window.Dexie);
+            console.log('Final check - DOMPurify:', typeof window.DOMPurify);
+            
+            // Check if module script is running
+            setTimeout(() => {
+                if (!window.moduleScriptRunning) {
+                    console.error('❌ Module script not running! ES modules may not be supported.');
+                    console.warn('⚠️ Attempting to load modules without ES modules...');
+                    // Fallback: Try to load modules directly using script tags
+                    const spinner = document.getElementById('loading-spinner');
+                    if (spinner) {
+                        spinner.style.display = 'none';
+                        console.log('✅ Loading spinner hidden (fallback)');
+                    }
+                    
+                    // Load modules using script tags as fallback
+                    const modules = [
+                        '/js/security.js',
+                        '/js/pi-adapter.js',
+                        '/js/lifecycle.js',
+                        '/js/db.js',
+                        '/js/invoice.js'
+                    ];
+                    
+                    let loadedCount = 0;
+                    modules.forEach((src, index) => {
+                        const script = document.createElement('script');
+                        script.src = src;
+                        script.onload = () => {
+                            loadedCount++;
+                            console.log(`✅ Loaded module ${index + 1}/${modules.length}: ${src}`);
+                            if (loadedCount === modules.length) {
+                                console.log('✅ All modules loaded via script tags');
+                                // Try to initialize app
+                                setTimeout(() => {
+                                    // RACE CONDITION FIX: Use guard to prevent multiple initApp calls
+                                    if (typeof initApp === 'function' && !window.appInitialized && !window.initAppScheduled) {
+                                        window.initAppScheduled = true;
+                                        console.log('🔄 Attempting to initialize app after loading modules...');
+                                        initApp().catch(err => console.error('Error in initApp:', err));
+                                    }
+                                }, 500);
+                            }
+                        };
+                        script.onerror = () => {
+                            console.warn(`⚠️ Failed to load module: ${src}`);
+                            loadedCount++;
+                            if (loadedCount === modules.length) {
+                                // RACE CONDITION FIX: Use guard to prevent multiple initApp calls
+                                if (typeof initApp === 'function' && !window.appInitialized) {
+                                    console.log('🔄 Attempting to initialize app without all modules...');
+                                    // Don't set appInitialized here - let initApp handle it
+                                    initApp().catch(err => console.error('Error in initApp:', err));
+                                }
+                            }
+                        };
+                        document.head.appendChild(script);
+                    });
+                    
+                    // RACE CONDITION FIX: Also try to initialize app immediately (for demo mode)
+                    // Only if not already scheduled
+                    if (typeof initApp === 'function' && !window.appInitialized && !window.initAppScheduled) {
+                        window.initAppScheduled = true;
+                        console.log('🔄 Attempting to initialize app immediately (demo mode)...');
+                        setTimeout(() => {
+                            if (!window.appInitialized) {
+                                initApp().catch(err => console.error('Error in initApp:', err));
+                            }
+                        }, 1000);
+                    }
+                }
+            }, 2000);
+        });
+    </script>
+    <script type="module">
+        // Req #29: Self-hosted modules (China Safe)
+        // CRITICAL: Wait for external libraries (Dexie, DOMPurify) to load first
+        console.log('=== Module Script Started ===');
+        console.log('Document ready state:', document.readyState);
+        console.log('Current window.Dexie:', typeof window !== 'undefined' ? typeof window.Dexie : 'N/A');
+        console.log('Current window.DOMPurify:', typeof window !== 'undefined' ? typeof window.DOMPurify : 'N/A');
+        
+        // Mark that module script is running
+        window.moduleScriptRunning = true;
+
+        // Wait for Dexie to be available (DOMPurify and ethers are loaded as ES modules)
+        import { CSVImportManager } from '/js/csv-import.js';
+        import QRious from 'https://esm.sh/qrious@4.0.2';
+
+        async function waitForLibraries() {
+            let attempts = 0;
+            const maxAttempts = 200; // 20 seconds max (increased for slow connections)
+
+            console.log('=== Waiting for Dexie (script tag) ===');
+            console.log('Note: DOMPurify and ethers will be loaded as ES modules');
+
+            while (attempts < maxAttempts) {
+                const dexieReady = typeof window !== 'undefined' && window.Dexie;
+
+                if (dexieReady) {
+                    console.log('✅✅✅ DEXIE LOADED ✅✅✅');
+                    console.log('Dexie:', typeof window.Dexie);
+                    return true;
+                }
+
+                if (attempts % 20 === 0) {
+                    console.log(`⏳ Waiting for Dexie... (${attempts}/${maxAttempts})`);
+                    console.log('Current window.Dexie:', typeof window.Dexie);
+                }
+
+                await new Promise(resolve => setTimeout(resolve, 100));
+                attempts++;
+            }
+
+            // Final check before giving up
+            if (window.Dexie) {
+                console.log('✅✅✅ DEXIE FOUND IN FINAL CHECK ✅✅✅');
+                return true;
+            }
+
+            console.error('❌❌❌ TIMEOUT WAITING FOR DEXIE ❌❌❌');
+            // Try CDN fallback before giving up
+            console.warn('Trying CDN fallback for Dexie...');
+            const script = document.createElement('script');
+            script.src = 'https://cdn.jsdelivr.net/npm/dexie@3.2.4/dist/dexie.min.js';
+            script.defer = true;
+            document.head.appendChild(script);
+            // Wait a bit more for CDN to load
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            if (window.Dexie) {
+                console.log('✅✅✅ DEXIE LOADED FROM CDN ✅✅✅');
+                return true;
+            }
+            // Don't throw error, try to continue anyway
+            console.warn('Continuing without Dexie - some features may not work');
+            return false;
+        }
+
+        // Import modules after libraries are loaded
+        let securityManager, piAdapter, lifecycleManager, dbManager, invoiceManager;
+
+        try {
+            // Wait for libraries (but don't fail if it times out)
+            const librariesReady = await waitForLibraries();
+            if (!librariesReady) {
+                console.warn('⚠️ Libraries not fully loaded, but continuing anyway...');
+            }
+
+            console.log('Starting module imports...');
+
+            // Cache busting: Disabled for local compatibility
+            const cacheBuster = ''; // '?v=' + Date.now();
+
+            console.log('Importing security.js...');
+            securityManager = (await import('/js/security.js' + cacheBuster)).default;
+            console.log('security.js loaded');
+
+            console.log('Importing pi-adapter.js...');
+            piAdapter = (await import('/js/pi-adapter.js' + cacheBuster)).default;
+            console.log('pi-adapter.js loaded');
+
+            console.log('Importing lifecycle.js...');
+            lifecycleManager = (await import('/js/lifecycle.js' + cacheBuster)).default;
+            console.log('lifecycle.js loaded');
+
+            console.log('Importing db.js...');
+            dbManager = (await import('/js/db.js' + cacheBuster)).default;
+            console.log('db.js loaded');
+
+            console.log('Importing invoice.js...');
+            invoiceManager = (await import('/js/invoice.js' + cacheBuster)).default;
+            console.log('invoice.js loaded');
+
+            // Import error handler
+            console.log('Importing error-handler.js...');
+            const errorHandlerModule = await import('/js/error-handler.js' + cacheBuster);
+            window.ErrorHandler = errorHandlerModule.default;
+            console.log('error-handler.js loaded');
+
+            // Import shift management and B2B modules
+            console.log('Importing shift-management.js...');
+            const shiftModule = await import('/js/shift-management.js' + cacheBuster);
+            window.ShiftManager = shiftModule.ShiftManager;
+            console.log('shift-management.js loaded');
+
+            console.log('Importing b2b.js...');
+            const b2bModule = await import('/js/b2b.js' + cacheBuster);
+            window.B2BDirectory = b2bModule.B2BDirectory;
+            console.log('b2b.js loaded');
+
+            // Import image compression utility
+            console.log('Importing image-compression.js...');
+            const imageCompressionModule = await import('/js/image-compression.js' + cacheBuster);
+            window.ImageCompressor = imageCompressionModule.ImageCompressor;
+            console.log('image-compression.js loaded');
+
+            console.log('All modules imported successfully!');
+            // Mark modules as loaded
+            window.modulesLoaded = true;
+        } catch (error) {
+            console.error('Error importing modules:', error);
+            console.error('Error stack:', error.stack);
+            // Hide loading spinner even on error
+            hideLoadingSpinner();
+            // Don't throw error, try to continue anyway
+            console.warn('Continuing despite module import errors - some features may not work');
+            window.modulesLoaded = false;
+            // Don't show alert, just log
+            console.warn('Module import error: ' + error.message);
+        }
+
+        // RACE CONDITION FIX: Ensure initApp is called even if modules fail
+        // Use a single timeout with guard to prevent multiple calls
+        if (!window.initAppTimeoutSet) {
+            window.initAppTimeoutSet = true;
+            setTimeout(() => {
+                if (typeof initApp === 'function' && !window.appInitialized) {
+                    console.log('🔄 Ensuring initApp is called...');
+                    initApp().catch(err => {
+                        console.error('Error in initApp:', err);
+                        hideLoadingSpinner();
+                    });
+                }
+            }, 5000);
+        }
+
+        // Global function for HTML onclick (must be defined before HTML loads)
+        function handleWelcomeAgree(e) {
+            // Debug telemetry removed for production
+            if (e) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+
+            const modal = document.getElementById('welcome-modal');
+
+            if (modal) {
+                localStorage.setItem('pi_ledger_terms_accepted', 'true');
+                modal.style.display = 'none';
+
+                const spinner = document.getElementById('loading-spinner');
+                if (spinner) spinner.style.display = 'none';
+
+                // Debug telemetry removed for production
+
+                // Initialize app - wait for async function
+                if (typeof initApp === 'function') {
+                    // #region agent log
+                    // Debug telemetry removed for production
+                    // #endregion
+                    initApp().then(() => {
+                        // #region agent log
+                        // Debug telemetry removed for production
+                        // #endregion
+                    }).catch(err => {
+                        // #region agent log
+                        // Debug telemetry removed for production
+                        // #endregion
+                        console.error('Error in initApp:', err);
+                    });
+                } else {
+                    // #region agent log
+                    // Debug telemetry removed for production
+                    // #endregion
+                    // Wait for initApp to be available
+                    setTimeout(() => {
+                        if (typeof initApp === 'function') {
+                            initApp().catch(err => console.error('Error in initApp:', err));
+                        }
+                    }, 1000);
+                }
+            }
+        }
+
+        // GDPR: Check if user has agreed to terms (first visit check)
+        function hasAgreedToTerms() {
+            return localStorage.getItem('pi_ledger_terms_accepted') === 'true';
+        }
+
+        function setTermsAccepted() {
+            localStorage.setItem('pi_ledger_terms_accepted', 'true');
+        }
+
+        // Hide loading spinner
+        function hideLoadingSpinner() {
+            const spinner = document.getElementById('loading-spinner');
+            if (spinner) {
+                spinner.style.display = 'none';
+                console.log('✅ Loading spinner hidden');
+            } else {
+                console.warn('⚠️ Loading spinner element not found');
+            }
+        }
+
+        // Safety timeout: Hide spinner after 10 seconds regardless
+        setTimeout(() => {
+            const spinner = document.getElementById('loading-spinner');
+            if (spinner && spinner.style.display !== 'none') {
+                console.warn('⚠️ Force hiding loading spinner after timeout');
+                hideLoadingSpinner();
+                // RACE CONDITION FIX: Try to initialize app if not already done
+                if (typeof initApp === 'function' && !window.appInitialized && !window.initAppScheduled) {
+                    window.initAppScheduled = true;
+                    console.log('🔄 Attempting to initialize app after timeout...');
+                    initApp().catch(err => console.error('Error in delayed initApp:', err));
+                }
+            }
+        }, 10000);
+
+        // Show welcome modal on first visit
+        let welcomeModalInitialized = false;
+        function showWelcomeModal() {
+            if (welcomeModalInitialized) {
+                return; // Already initialized
+            }
+
+            const modal = document.getElementById('welcome-modal');
+            const agreeBtn = document.getElementById('welcome-agree-btn');
+
+            if (!modal || !agreeBtn) {
+                console.error('Welcome modal or agree button not found');
+                // If modal doesn't exist, just initialize app
+                initApp();
+                return;
+            }
+
+            // Hide loading spinner BEFORE showing modal (spinner might be covering the modal)
+            hideLoadingSpinner();
+
+            modal.style.display = 'flex';
+            welcomeModalInitialized = true;
+
+            // Simple approach: Add event listener directly to the button
+            // Remove any existing onclick handler first
+            agreeBtn.onclick = null;
+
+            // Define the click handler function and make it globally accessible
+            window.handleAgreeClick = function handleAgreeClick(e) {
+                // Debug telemetry removed for production
+                e.preventDefault();
+                e.stopPropagation();
+                try {
+                    setTermsAccepted();
+                    modal.style.display = 'none';
+                    // Hide loading spinner and initialize app
+                    hideLoadingSpinner();
+                    // Debug telemetry removed for production
+                    initApp().then(() => {
+                        // #region agent log
+                        // Debug telemetry removed for production
+                        // #endregion
+                    }).catch(err => {
+                        // #region agent log
+                        // Debug telemetry removed for production
+                        // #endregion
+                        console.error('Error in initApp:', err);
+                    });
+                } catch (error) {
+                    console.error('Error in I Agree button handler:', error);
+                    // #region agent log
+                    // Debug telemetry removed for production
+                    // #endregion
+                    alert('Error: ' + error.message);
+                }
+            }
+
+            // Add event listener using addEventListener
+            agreeBtn.addEventListener('click', handleAgreeClick);
+
+            // Also set onclick as fallback (for maximum compatibility)
+            agreeBtn.onclick = handleAgreeClick;
+        }
+
+        // Show About modal
+        function showAboutModal() {
+            const modal = document.getElementById('about-modal');
+            const closeBtn = document.getElementById('close-about-btn');
+
+            if (!modal || !closeBtn) return;
+
+            modal.style.display = 'flex';
+
+            closeBtn.addEventListener('click', () => {
+                modal.style.display = 'none';
+            });
+
+            // Close on background click
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) {
+                    modal.style.display = 'none';
+                }
+            });
+        }
+
+        // Setup About button (early binding)
+        const aboutBtn = document.getElementById('about-btn');
+        if (aboutBtn) {
+            aboutBtn.addEventListener('click', showAboutModal);
+        }
+
+        // Wait for DOM to be ready
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', () => {
+                console.log('DOM Content Loaded - checking terms agreement');
+                // GDPR: Check first visit
+                if (!hasAgreedToTerms()) {
+                    console.log('User has not agreed to terms, showing welcome modal');
+                    showWelcomeModal();
+                } else {
+                    console.log('User has already agreed to terms, initializing app');
+                    initApp();
+                }
+            });
+        } else {
+            // DOM already loaded
+            console.log('DOM already loaded - checking terms agreement');
+            // GDPR: Check first visit
+            if (!hasAgreedToTerms()) {
+                console.log('User has not agreed to terms, showing welcome modal');
+                showWelcomeModal();
+            } else {
+                console.log('User has already agreed to terms, initializing app');
+                initApp();
+            }
+        }
+
+        async function initApp() {
+            // Prevent multiple calls
+            if (window.appInitialized) {
+                console.log('⚠️ initApp already called, skipping...');
+                return;
+            }
+            window.appInitialized = true;
+
+            // #region agent log
+            // Debug telemetry removed for production
+            // #endregion
+            console.log('🚀 DOM ready, initializing application...');
+
+            // Hide loading spinner immediately
+            hideLoadingSpinner();
+            
+            // Check if modules are loaded
+            if (!window.modulesLoaded) {
+                console.warn('⚠️ Modules not loaded yet. Waiting for modules...');
+                // Wait a bit for modules to load
+                await new Promise(resolve => setTimeout(resolve, 2000));
+                if (!window.modulesLoaded) {
+                    console.error('❌ Modules still not loaded after waiting. Some features may not work.');
+                    // Show error message but continue
+                    const demoSection = document.getElementById('demo-mode-section');
+                    if (demoSection) {
+                        demoSection.innerHTML += '<p style="color: red; margin-top: 10px;">⚠️ Warning: Some features may not work due to module loading issues. Please refresh the page.</p>';
+                    }
+                }
+            }
+
+            // #region agent log
+            // Debug telemetry removed for production
+            // #endregion
+
+            try {
+                // Initialize Pi SDK (must be done before authentication)
+                if (piAdapter) {
+                    try {
+                        await piAdapter.initialize();
+                        console.log('Pi SDK initialized');
+                        // Suppress postMessage warnings/errors in development (localhost)
+                        // These are normal in localhost and don't affect functionality
+                        if (window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost') {
+                            const originalWarn = console.warn;
+                            const originalError = console.error;
+                            const suppressedMessages = ['postMessage', 'app-cdn.minepi.com', 'target origin', 'Failed to execute'];
+
+                            console.warn = function (...args) {
+                                const message = args.join(' ');
+                                if (suppressedMessages.some(msg => message.includes(msg))) {
+                                    return; // Suppress
+                                }
+                                originalWarn.apply(console, args);
+                            };
+
+                            console.error = function (...args) {
+                                const message = args.join(' ');
+                                if (suppressedMessages.some(msg => message.includes(msg))) {
+                                    return; // Suppress
+                                }
+                                originalError.apply(console, args);
+                            };
+
+                            console.log('🔇 PostMessage warnings suppressed in development mode');
+                        }
+                    } catch (err) {
+                        console.warn('Pi SDK initialization failed (this is OK for demo mode):', err.message);
+                    }
+                }
+
+                // Initialize lifecycle manager (Req #13)
+                if (lifecycleManager) {
+                    lifecycleManager.initialize().then(result => {
+                        console.log('Lifecycle initialized:', result);
+                    }).catch(err => {
+                        console.error('Lifecycle init error:', err);
+                    });
+                }
+
+                // STATE MANAGEMENT FIX: Assign managers to window for global access
+                window.dbManager = dbManager;
+                window.invoiceManager = invoiceManager;
+                window.piAdapter = piAdapter;
+                window.securityManager = securityManager;
+                window.lifecycleManager = lifecycleManager;
+                console.log('✅ Global managers assigned to window');
+
+                // Initialize database (Req #24) - Must complete before demo mode
+                // Store dbInitialized in a way that event handler can access it
+                window.dbInitialized = false;
+                if (dbManager) {
+                    try {
+                        await dbManager.initialize();
+                        console.log('Database initialized');
+                        window.dbInitialized = true;
+                    } catch (err) {
+                        console.error('Database init error:', err);
+                        alert('خطأ في تهيئة قاعدة البيانات. Error initializing database: ' + err.message);
+                    }
+                }
+
+                // Demo Mode Handler (Req #3)
+                const demoBtn = document.getElementById('demo-mode-btn');
+                if (!demoBtn) {
+                    console.error('Demo mode button not found!');
+                    alert('خطأ: لم يتم العثور على زر وضع التجريبي. Error: Demo mode button not found!');
+                    return;
+                }
+
+                console.log('Demo mode button found, attaching event listener...');
+
+                // Remove any existing listeners by cloning
+                const newDemoBtn = demoBtn.cloneNode(true);
+                demoBtn.parentNode.replaceChild(newDemoBtn, demoBtn);
+
+                newDemoBtn.addEventListener('click', async (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+
+                    try {
+                        console.log('=== Demo mode button clicked ===');
+
+                        // Disable button to prevent double-click
+                        newDemoBtn.disabled = true;
+                        newDemoBtn.textContent = 'جارٍ التحميل... Loading...';
+
+                        // STATE MANAGEMENT FIX: Use window.dbManager for consistency
+                        const currentDbManager = window.dbManager || dbManager;
+                        
+                        // Ensure database is initialized first
+                        if (!window.dbInitialized && currentDbManager) {
+                            console.log('Database not initialized yet, initializing now...');
+                            await currentDbManager.initialize();
+                            window.dbInitialized = true;
+                            console.log('Database initialized successfully');
+                        }
+
+                        if (!currentDbManager) {
+                            throw new Error('Database manager not available');
+                        }
+
+                        // Load demo data
+                        console.log('Loading demo data...');
+                        await currentDbManager.loadDemoData();
+                        console.log('Demo data loaded successfully');
+
+                        // Show dashboard with demo data (isDemoMode = true)
+                        await showDashboard(true);
+
+                        console.log('=== Demo mode activated successfully ===');
+                    } catch (error) {
+                        console.error('Error in demo mode:', error);
+                        console.error('Error stack:', error.stack);
+                        alert('خطأ في تحميل البيانات التجريبية.\nError loading demo data: ' + error.message + '\n\nCheck console (F12) for details.');
+
+                        // Re-enable button
+                        newDemoBtn.disabled = false;
+                        newDemoBtn.textContent = 'Enter Demo Mode';
+                    }
+                });
+
+                console.log('Event listener attached to demo button');
+            } catch (error) {
+                console.error('Error in initApp:', error);
+                alert('خطأ في تهيئة التطبيق. Error initializing app: ' + error.message);
+            }
+
+            // Pi Authentication Handler (Req #1)
+            const piAuthBtn = document.getElementById('pi-auth-btn');
+            if (piAuthBtn) {
+                piAuthBtn.addEventListener('click', async () => {
+                    // Show loading state
+                    const authStatus = document.getElementById('auth-status');
+                    authStatus.innerHTML = '<p class="info-text">⏳ Authenticating with Pi Network...</p>';
+                    piAuthBtn.disabled = true;
+                    piAuthBtn.textContent = 'Authenticating...';
+
+                    try {
+                        const result = await piAdapter.authenticate();
+                        if (result.success) {
+                            // Save merchant ID after successful authentication
+                            // STATE MANAGEMENT FIX: Use window.dbManager for consistency
+                            const currentDbManager = window.dbManager || dbManager;
+                            if (currentDbManager && result.user && result.user.uid) {
+                                await currentDbManager.setCurrentMerchantId(result.user.uid);
+                                console.log('✅ Merchant ID saved after authentication:', result.user.uid);
+                            } else if (!currentDbManager) {
+                                console.warn('⚠️ Database manager not available to save merchant ID');
+                            }
+                            
+                            // XSS FIX: Sanitize username before displaying
+                            const sanitizedUsername = typeof DOMPurify !== 'undefined' 
+                                ? DOMPurify.sanitize(result.user.username || '') 
+                                : String(result.user.username || '').replace(/[<>&"']/g, '');
+                            authStatus.innerHTML =
+                                '<p class="success-text">✓ Authenticated as: ' + sanitizedUsername + '</p>';
+                            document.getElementById('setup-section').classList.remove('hidden');
+                            console.log('✅ Authentication successful! Setup section is now visible.');
+                        } else {
+                            // XSS FIX: Sanitize error message before displaying
+                            const sanitizedError = typeof DOMPurify !== 'undefined' 
+                                ? DOMPurify.sanitize(result.error || '') 
+                                : String(result.error || '').replace(/[<>&"']/g, '');
+                            authStatus.innerHTML =
+                                '<p class="error-text">✗ Authentication failed: ' + sanitizedError + '</p>' +
+                                '<p class="note-text">Note: In development (localhost), Pi authentication may not work. Use "Demo Mode" instead.</p>';
+                        }
+                    } catch (error) {
+                        // XSS FIX: Sanitize error message before displaying
+                        const sanitizedErrorMsg = typeof DOMPurify !== 'undefined' 
+                            ? DOMPurify.sanitize(error.message || '') 
+                            : String(error.message || '').replace(/[<>&"']/g, '');
+                        authStatus.innerHTML =
+                            '<p class="error-text">✗ Authentication error: ' + sanitizedErrorMsg + '</p>' +
+                            '<p class="note-text">Note: In development (localhost), Pi authentication may not work. Use "Demo Mode" instead.</p>';
+                    } finally {
+                        piAuthBtn.disabled = false;
+                        piAuthBtn.textContent = 'Login with Pi Network';
+                    }
+                });
+            }
+
+            // Skip Authentication Handler (for development/testing)
+            const skipAuthBtn = document.getElementById('skip-auth-btn');
+            if (skipAuthBtn) {
+                skipAuthBtn.addEventListener('click', async () => {
+                    try {
+                        // STATE MANAGEMENT FIX: Use window.dbManager for consistency
+                        const currentDbManager = window.dbManager || dbManager;
+                        
+                        // Force DB initialization in dev mode
+                        if (currentDbManager && (!currentDbManager.db || !currentDbManager.db.isOpen())) {
+                            console.log('Initializing database for Setup Mode...');
+                            await currentDbManager.initialize();
+                            console.log('✅ Database initialized for Setup Mode');
+                        }
+
+                        const authStatus = document.getElementById('auth-status');
+                        authStatus.innerHTML =
+                            '<p class="success-text">✓ Setup mode enabled (without Pi authentication)</p>' +
+                            '<p class="note-text">You can now generate a recovery phrase and complete setup.</p>';
+                        document.getElementById('setup-section').classList.remove('hidden');
+                        console.log('✅ Setup section enabled without authentication');
+                    } catch (error) {
+                        console.error('Error initializing database in Setup Mode:', error);
+                        Toast.error('Error initializing database: ' + error.message);
+                    }
+                });
+            }
+
+            // Generate Mnemonic Handler (Req #7)
+            const generateMnemonicBtn = document.getElementById('generate-mnemonic-btn');
+            if (generateMnemonicBtn) {
+                generateMnemonicBtn.addEventListener('click', async () => {
+                    try {
+                        const mnemonic = await securityManager.generateMnemonic();
+                        document.getElementById('mnemonic-input').value = mnemonic;
+                        Toast.success('New 12-word phrase generated');
+                    } catch (error) {
+                        Toast.error('Error generating mnemonic: ' + error.message);
+                    }
+                });
+            }
+
+            // Setup Complete Handler (Req #7, #9)
+            const setupCompleteBtn = document.getElementById('setup-complete-btn');
+            if (setupCompleteBtn) {
+                setupCompleteBtn.addEventListener('click', async () => {
+                    try {
+                        const mnemonic = document.getElementById('mnemonic-input').value;
+                        const pin = document.getElementById('pin-input').value;
+
+                        if (!mnemonic || !pin) {
+                            Toast.warning('Please enter both mnemonic and PIN');
+                            return;
+                        }
+
+                        // Validate mnemonic (Req #8: Anti-Phishing)
+                        securityManager.validateMnemonicInput(mnemonic);
+
+                        // Initialize security manager
+                        await securityManager.initialize(mnemonic, pin);
+
+                        // STATE MANAGEMENT FIX: Use window.dbManager for consistency
+                        const currentDbManager = window.dbManager || dbManager;
+                        
+                        // Ensure database is initialized (may already be initialized in Setup Mode)
+                        if (!currentDbManager.db || !currentDbManager.db.isOpen()) {
+                            console.log('Initializing database for Complete Setup...');
+                            await currentDbManager.initialize();
+                            console.log('✅ Database initialized');
+                        }
+
+                        // Show dashboard (Real Mode, not demo)
+                        await showDashboard(false);
+                    } catch (error) {
+                        console.error(error);
+                        Toast.error('Setup error: ' + error.message);
+                    }
+                });
+            }
+
+            // Dashboard Functions
+            async function showDashboard(isDemoMode = false) {
+                try {
+                    // Hide other sections
+                    const demoSection = document.getElementById('demo-mode-section');
+                    const authSection = document.getElementById('auth-section');
+                    const setupSection = document.getElementById('setup-section');
+
+                    if (demoSection) demoSection.style.display = 'none';
+                    if (authSection) authSection.style.display = 'none';
+                    if (setupSection) setupSection.style.display = 'none';
+
+                    // Show dashboard
+                    const dashboardSection = document.getElementById('dashboard-section');
+                    if (dashboardSection) {
+                        dashboardSection.style.display = 'block';
+                    }
+
+                    // Show appropriate banner based on mode
+                    const demoBanner = document.getElementById('demo-mode-banner');
+                    const liveIndicator = document.getElementById('live-store-indicator');
+                    const createInvoiceBtn = document.getElementById('create-invoice-btn');
+
+                    if (isDemoMode) {
+                        // Demo Mode: Show orange banner, hide live indicator
+                        if (demoBanner) demoBanner.style.display = 'block';
+                        if (liveIndicator) liveIndicator.style.display = 'none';
+
+                        // Enable Create Invoice button in demo mode (for testing)
+                        if (createInvoiceBtn) {
+                            createInvoiceBtn.disabled = false;
+                            createInvoiceBtn.style.opacity = '1';
+                            createInvoiceBtn.style.cursor = 'pointer';
+                            createInvoiceBtn.title = 'Create Demo Invoice (Data will be saved to local database)';
+                        }
+                    } else {
+                        // Real Mode: Show green indicator, hide demo banner
+                        if (demoBanner) demoBanner.style.display = 'none';
+                        if (liveIndicator) liveIndicator.style.display = 'block';
+
+                        // Enable Create Invoice button in real mode
+                        if (createInvoiceBtn) {
+                            createInvoiceBtn.disabled = false;
+                            createInvoiceBtn.style.opacity = '1';
+                            createInvoiceBtn.style.cursor = 'pointer';
+                            createInvoiceBtn.title = '';
+                        }
+                    }
+
+                    // Set shop name
+                    const shopNameEl = document.getElementById('shop-name');
+                    if (shopNameEl) {
+                        shopNameEl.textContent = isDemoMode ? 'Demo Shop' : 'Live Shop';
+                    }
+
+                    // Hide Network Status in Demo Mode (not relevant for demo)
+                    const networkStatusEl = document.getElementById('network-status');
+                    const networkStatusLabel = networkStatusEl?.parentElement;
+                    if (isDemoMode && networkStatusLabel) {
+                        networkStatusLabel.style.display = 'none';
+                    } else if (!isDemoMode && networkStatusLabel) {
+                        networkStatusLabel.style.display = 'block';
+                    }
+
+                    // Render invoices and stats
+                    await renderInvoices();
+                            if (typeof window.renderStats === 'function') {
+                                await window.renderStats();
+                            } else {
+                                console.warn('renderStats function not yet defined');
+                            }
+
+                    // Initialize invoice manager (works in both Demo Mode and Real Mode)
+                    if (invoiceManager) {
+                        try {
+                            await invoiceManager.initialize();
+                            console.log('✅ Invoice manager initialized');
+
+                            // Setup Create Invoice button (works in both modes)
+                            const createInvoiceBtn = document.getElementById('create-invoice-btn');
+                            if (createInvoiceBtn) {
+                                // Remove existing listeners
+                                const newBtn = createInvoiceBtn.cloneNode(true);
+                                createInvoiceBtn.parentNode.replaceChild(newBtn, createInvoiceBtn);
+
+                                newBtn.addEventListener('click', () => {
+                                    if (invoiceManager) {
+                                        invoiceManager.openModal(true); // Clear current invoice to start fresh
+                                    } else {
+                                        Toast.error('Invoice manager not initialized');
+                                    }
+                                });
+                            }
+
+                            // Setup Close Shift button
+                            const closeShiftBtn = document.getElementById('close-shift-btn');
+                            if (closeShiftBtn && window.ShiftManager) {
+                                const newShiftBtn = closeShiftBtn.cloneNode(true);
+                                closeShiftBtn.parentNode.replaceChild(newShiftBtn, closeShiftBtn);
+
+                                newShiftBtn.addEventListener('click', async () => {
+                                    if (!window.shiftManager) {
+                                        // STATE MANAGEMENT FIX: Use window.dbManager for consistency
+                                        const currentDbManager = window.dbManager || dbManager;
+                                        window.shiftManager = new window.ShiftManager(currentDbManager);
+                                        await window.shiftManager.initialize();
+                                    }
+                                    await window.shiftManager.closeShift();
+                                });
+                            }
+
+                            // Initialize CSV Import Manager
+                            if (window.CSVImportManager) {
+                                window.csvImportManager = new window.CSVImportManager(window.dbManager);
+
+                                // Bind Import Products Button
+                                const importBtn = document.getElementById('import-products-btn');
+                                if (importBtn) {
+                                    importBtn.addEventListener('click', () => {
+                                        window.csvImportManager.showImportModal();
+                                    });
+                                }
+                            }
+
+                            // Setup B2B Market button
+                            const b2bMarketBtn = document.getElementById('b2b-market-btn');
+                            if (b2bMarketBtn && window.B2BDirectory) {
+                                const newB2bBtn = b2bMarketBtn.cloneNode(true);
+                                b2bMarketBtn.parentNode.replaceChild(newB2bBtn, b2bMarketBtn);
+
+                                newB2bBtn.addEventListener('click', async () => {
+                                    // STATE MANAGEMENT FIX: Use window.dbManager for consistency
+                                    const currentDbManager = window.dbManager || dbManager;
+                                    if (!window.b2bDirectory) {
+                                        window.b2bDirectory = new window.B2BDirectory(currentDbManager);
+                                        await window.b2bDirectory.initialize();
+                                    }
+                                    await window.b2bDirectory.showMarket();
+                                });
+                            }
+                        } catch (error) {
+                            console.error('Error initializing invoice manager:', error);
+                            Toast.error('Error initializing invoice manager: ' + error.message);
+                        }
+                    }
+
+                    console.log('✅ Dashboard displayed successfully');
+                } catch (error) {
+                    console.error('Error showing dashboard:', error);
+                    Toast.error('Error displaying dashboard: ' + error.message);
+                }
+            }
+
+            // Make functions available globally for invoice.js
+            window.renderInvoices = async function renderInvoices() {
+                try {
+                    // STATE MANAGEMENT FIX: Use window.dbManager for consistency
+                    const currentDbManager = window.dbManager || dbManager;
+                    if (!currentDbManager || !currentDbManager.db) {
+                        console.error('Database not initialized');
+                        return;
+                    }
+
+                    // Get merchant ID from database
+                    const merchantId = await currentDbManager.getCurrentMerchantId();
+                    if (!merchantId) {
+                        console.warn('Merchant ID not found');
+                        return;
+                    }
+                    const invoices = await currentDbManager.getInvoices(merchantId);
+
+                    // Also get invoices from other demo merchants for demo mode
+                    const allInvoices = await currentDbManager.db.invoices.toArray();
+
+                    const tbody = document.getElementById('invoices-tbody');
+                    if (!tbody) {
+                        console.error('Invoices table body not found');
+                        return;
+                    }
+
+                    if (allInvoices.length === 0) {
+                        tbody.innerHTML = `
+                            <tr>
+                                <td colspan="6" style="padding: 40px; text-align: center; color: #888;">
+                                    <div style="font-size: 48px; margin-bottom: 16px;">🧾</div>
+                                    <h4 style="margin: 0 0 8px 0; color: #333;">No invoices yet</h4>
+                                    <p style="margin: 0 0 20px 0;">Create your first invoice to verify payment flow.</p>
+                                    <button onclick="document.getElementById('create-invoice-btn').click()" 
+                                            class="btn btn-sm btn-green" style="display: inline-flex;">
+                                        Start Creating
+                                    </button>
+                                </td>
+                            </tr>
+                        `;
+                        return;
+                    }
+
+                    // Sort by date (newest first)
+                    allInvoices.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+                    // Helper function to format Pi amounts with 7 decimal places
+                    function formatPiAmountDisplay(amount) {
+                        if (typeof amount !== 'number' || isNaN(amount)) return '0.0000000';
+                        return amount.toFixed(7);
+                    }
+
+                    // Helper function to sanitize strings for HTML
+                    const sanitizeHtml = (str) => {
+                        if (typeof str !== 'string') return String(str || '');
+                        return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#x27;');
+                    };
+
+                    // Render invoices
+                    tbody.innerHTML = allInvoices.map(invoice => {
+                        const date = new Date(invoice.createdAt);
+                        const formattedDate = date.toLocaleDateString('en-US', {
+                            year: 'numeric',
+                            month: 'short',
+                            day: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                        });
+
+                        // Status color: paid=green, pending=orange, draft=red, voided=gray, refunded=red
+                        const statusClass = invoice.status === 'paid' ? 'status-paid' :
+                            invoice.status === 'pending' ? 'status-pending' :
+                                invoice.status === 'draft' ? 'status-draft' :
+                                    invoice.status === 'refunded' ? 'status-refunded' : 'status-voided';
+                        const statusText = invoice.status.charAt(0).toUpperCase() + invoice.status.slice(1);
+
+                        // XSS FIX: Sanitize invoice IDs and references before displaying
+                        const safeInvoiceId = sanitizeHtml(invoice.invoiceId || '');
+                        const safeExternalRef = invoice.externalRef ? sanitizeHtml(invoice.externalRef) : null;
+
+                        // Display ID: Show external ref if available, otherwise system ID
+                        const displayId = safeExternalRef ?
+                            `<span class="text-muted">${safeInvoiceId}</span><br><small class="text-muted text-small">Ref: ${safeExternalRef}</small>` :
+                            safeInvoiceId;
+
+                        // Format amount with 7 decimal places for Pi
+                        const formattedAmount = invoice.currency === 'PI' ?
+                            formatPiAmountDisplay(invoice.amount) :
+                            invoice.amount.toFixed(2);
+
+                        // Actions based on status
+                        let actionsHtml = '';
+                        // Draft and Pending invoices can be edited, deleted, and have QR generated
+                        if (invoice.status === 'pending' || invoice.status === 'draft') {
+                            actionsHtml = `
+                                <button onclick="invoiceManager.showQRCode('${safeInvoiceId}')" 
+                                        class="invoice-action-btn invoice-btn-view" title="Show QR Code">
+                                    QR
+                                </button>
+                                <button onclick="invoiceManager.editInvoice('${safeInvoiceId}')" 
+                                        class="invoice-action-btn invoice-btn-edit" title="Edit Invoice">
+                                    Edit
+                                </button>
+                                <button onclick="invoiceManager.deleteInvoice('${safeInvoiceId}')" 
+                                        class="invoice-action-btn invoice-btn-delete" title="Delete Invoice">
+                                    Delete
+                                </button>
+                            `;
+                        } else if (invoice.status === 'paid') {
+                            actionsHtml = `
+                                <button onclick="invoiceManager.showQRCode('${safeInvoiceId}')" 
+                                        class="invoice-action-btn invoice-btn-view" title="Show QR Code">
+                                    QR
+                                </button>
+                                <button onclick="invoiceManager.voidInvoice('${safeInvoiceId}')" 
+                                        class="invoice-action-btn invoice-btn-void" title="Void Invoice">
+                                    Void
+                                </button>
+                                <button onclick="invoiceManager.refundInvoice('${safeInvoiceId}')" 
+                                        class="invoice-action-btn invoice-btn-refund" title="Refund Invoice">
+                                    Refund
+                                </button>
+                            `;
+                        }
+
+                        return `
+                            <tr class="table-row">
+                                <td class="td-left">${displayId}</td>
+                                <td class="td-right">${formattedAmount}</td>
+                                <td class="td-center">${sanitizeHtml(invoice.currency || 'PI')}</td>
+                                <td class="td-center">
+                                    <span class="status-badge ${statusClass}">${statusText}</span>
+                                </td>
+                                <td class="td-left text-muted">${formattedDate}</td>
+                                <td class="td-center">${actionsHtml}</td>
+                            </tr>
+                        `;
+                    }).join('');
+
+                    console.log(`✅ Rendered ${allInvoices.length} invoices`);
+                } catch (error) {
+                    console.error('Error rendering invoices:', error);
+                    const tbody = document.getElementById('invoices-tbody');
+                    if (tbody) {
+                        tbody.innerHTML = `
+                            <tr>
+                                <td colspan="6" class="table-empty error-text">
+                                    Error loading invoices: ${error.message}
+                                </td>
+                            </tr>
+                        `;
+                    }
+                }
+            }
+            // Add Device Handler (Export)
+            const addDeviceBtn = document.getElementById('add-device-btn');
+            if (addDeviceBtn) {
+                addDeviceBtn.addEventListener('click', async () => {
+                    const pwd = await Modal.prompt('Enter a TEMPORARY ONE-TIME password for the new device.\n(e.g., 1234)\n\nNote: You will need to enter this same password on the new device.');
+                    if (!pwd) return;
+
+                    try {
+                        // Show loading
+                        Toast.info('Generating secure shard...');
+
+                        const result = await securityManager.exportKeyShard(pwd);
+
+                        // Show QR Code
+                        const shardJson = JSON.stringify({
+                            action: 'setup',
+                            shard: result.shard,
+                            salt: result.salt
+                        });
+
+                        // Generate QR
+                        const qr = new QRious({
+                            value: shardJson,
+                            size: 250,
+                            level: 'H'
+                        });
+
+                        Modal.show({
+                            title: '📱 Scan with New Device',
+                            content: `
+                                <div style="text-align: center;">
+                                    <p class="note-text" style="margin-bottom: 15px">Scan this QR code with your new device to sync locally.</p>
+                                    <img src="${qr.toDataURL()}" style="display: block; margin: 0 auto; border: 1px solid #eee; padding: 10px; border-radius: 8px;" />
+                                    <p class="warning-text" style="margin-top: 15px; font-size: 12px; color: #f44336;">
+                                        ⚠️ Keep this screen open until scanned.<br>This code contains sensitive key data.
+                                    </p>
+                                </div>
+                            `,
+                            isHtml: true,
+                            footerButtons: [{ text: 'Done', class: 'btn-primary' }]
+                        });
+
+                        Toast.success('Device sync QR generated');
+                    } catch (error) {
+                        console.error('Add Device Error:', error);
+                        Toast.error('Failed to generate device QR: ' + error.message);
+                    }
+                });
+            }
+
+
+            // Export Data Handler (Req #2)
+            const exportDataBtn = document.getElementById('export-data-btn');
+            if (exportDataBtn) {
+                exportDataBtn.addEventListener('click', async () => {
+                    try {
+                        Toast.info('Preparing data export...');
+
+                        // STATE MANAGEMENT FIX: Use window.dbManager for consistency
+                        const currentDbManager = window.dbManager || dbManager;
+                        
+                        if (!currentDbManager || !currentDbManager.db) {
+                            throw new Error('Database not initialized');
+                        }
+
+                        // Get all data
+                        const invoices = await currentDbManager.db.invoices.toArray();
+                        const exportData = {
+                            version: '1.0.0',
+                            timestamp: new Date().toISOString(),
+                            invoices: invoices,
+                            merchantId: await currentDbManager.getCurrentMerchantId() || 'demo_merchant_001',
+                            type: 'backup'
+                        };
+
+                        // Create blob and download
+                        const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+                        const url = URL.createObjectURL(blob);
+
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = `ledger-erp-backup-${new Date().toISOString().slice(0, 10)}.json`;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        URL.revokeObjectURL(url); // Clean up
+
+                        Toast.success('Data exported successfully');
+                    } catch (error) {
+                        console.error('Export error:', error);
+                        Toast.error('Export failed: ' + error.message);
+                    }
+                });
+            }
+
+            // Create Vault Backup Handler (Req #10)
+            const createVaultBackupBtn = document.getElementById('create-vault-backup-btn');
+            if (createVaultBackupBtn && securityManager) {
+                createVaultBackupBtn.addEventListener('click', async () => {
+                    try {
+                        // Show warning modal first
+                        const proceed = await new Promise((resolve) => {
+                            Modal.show({
+                                title: '⚠️ Important: Cloud Backup',
+                                content: `
+                                    <div style="text-align: left; padding: 10px;">
+                                        <p style="color: #f44336; font-weight: bold; margin-bottom: 15px;">
+                                            ⚠️ CRITICAL WARNING:
+                                        </p>
+                                        <ul style="margin-left: 20px; line-height: 1.8;">
+                                            <li>You will need to create a <strong>Recovery Password</strong> to encrypt your backup</li>
+                                            <li><strong>SAVE THIS PASSWORD SECURELY!</strong> If you lose it, you cannot recover your data</li>
+                                            <li>This password is different from your PIN - it's only for cloud backup recovery</li>
+                                            <li>Write it down in a safe place (password manager, secure note, etc.)</li>
+                                            <li>Without this password, your data will be lost forever if your device is lost or broken</li>
+                                        </ul>
+                                        <p style="margin-top: 15px; color: #666;">
+                                            This backup will be stored encrypted on our servers. We cannot decrypt it - only you can with your recovery password.
+                                        </p>
+                                    </div>
+                                `,
+                                isHtml: true,
+                                footerButtons: [
+                                    { text: 'Cancel', class: 'btn-grey', onclick: () => { Modal.close(); resolve(false); } },
+                                    { text: 'I Understand, Continue', class: 'btn-primary', onclick: () => { Modal.close(); resolve(true); } }
+                                ]
+                            });
+                        });
+
+                        if (!proceed) return;
+
+                        // Prompt for recovery password
+                        const recoveryPassword = await Modal.prompt(
+                            'Enter a strong Recovery Password for your cloud backup:\n\n' +
+                            '⚠️ IMPORTANT: Save this password securely!\n' +
+                            'You will need it to restore your data on a new device.\n' +
+                            'If you lose this password, your data cannot be recovered.\n\n' +
+                            'Recommendation: Use a password manager or write it down in a secure location.'
+                        );
+
+                        if (!recoveryPassword || recoveryPassword.length < 8) {
+                            Toast.error('Recovery password must be at least 8 characters long');
+                            return;
+                        }
+
+                        Toast.info('Creating encrypted backup...');
+
+                        // STATE MANAGEMENT FIX: Use window.dbManager for consistency
+                        const currentDbManager = window.dbManager || dbManager;
+                        if (!currentDbManager || !currentDbManager.db) {
+                            throw new Error('Database not initialized');
+                        }
+
+                        // Get all data
+                        const allData = {
+                            invoices: await currentDbManager.db.invoices.toArray(),
+                            products: await currentDbManager.db.products.toArray(),
+                            transactions: await currentDbManager.db.transactions.toArray(),
+                            shiftReports: await currentDbManager.db.shiftReports.toArray(),
+                            refunds: await currentDbManager.db.refunds.toArray(),
+                            settings: await currentDbManager.db.settings.toArray()
+                        };
+
+                        // Create vault backup
+                        const vaultData = await securityManager.createVaultBackup(allData, recoveryPassword);
+
+                        // Upload to server
+                        const response = await fetch('/sync/vault', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify(vaultData)
+                        });
+
+                        if (!response.ok) {
+                            throw new Error('Failed to upload backup to server');
+                        }
+
+                        const result = await response.json();
+
+                        // Show success with reminder
+                        Modal.show({
+                            title: '✅ Backup Created Successfully',
+                            content: `
+                                <div style="text-align: left; padding: 10px;">
+                                    <p style="color: #4CAF50; font-weight: bold; margin-bottom: 15px;">
+                                        Your data has been backed up securely to the cloud.
+                                    </p>
+                                    <div style="background: #fff3cd; border-left: 4px solid #ffc107; padding: 10px; margin: 15px 0;">
+                                        <p style="margin: 0; font-weight: bold; color: #856404;">
+                                            ⚠️ REMEMBER:
+                                        </p>
+                                        <ul style="margin: 10px 0 0 20px; line-height: 1.8; color: #856404;">
+                                            <li>Your Recovery Password: <strong>${recoveryPassword.substring(0, 3)}***</strong></li>
+                                            <li>Save this password securely - you cannot recover your data without it</li>
+                                            <li>Test your backup by restoring it on another device</li>
+                                        </ul>
+                                    </div>
+                                    <p style="margin-top: 15px; color: #666;">
+                                        Backup ID: ${result.vault_id}<br>
+                                        Created: ${new Date().toLocaleString()}
+                                    </p>
+                                </div>
+                            `,
+                            isHtml: true,
+                            footerButtons: [{ text: 'OK', class: 'btn-primary' }]
+                        });
+
+                        Toast.success('Cloud backup created successfully');
+                    } catch (error) {
+                        console.error('Vault backup error:', error);
+                        Toast.error('Backup failed: ' + error.message);
+                    }
+                });
+            }
+
+            // Restore from Vault Handler (Req #10)
+            const restoreFromVaultBtn = document.getElementById('restore-from-vault-btn');
+            if (restoreFromVaultBtn && securityManager) {
+                restoreFromVaultBtn.addEventListener('click', async () => {
+                    try {
+                        // Check if vault exists
+                        const vaultCheck = await securityManager.checkVaultExists();
+                        if (!vaultCheck.exists) {
+                            Modal.show({
+                                title: 'No Backup Found',
+                                content: 'No cloud backup found. Please create a backup first.',
+                                footerButtons: [{ text: 'OK', class: 'btn-primary' }]
+                            });
+                            return;
+                        }
+
+                        // Warning about data loss
+                        const proceed = await new Promise((resolve) => {
+                            Modal.show({
+                                title: '⚠️ Warning: Data Restoration',
+                                content: `
+                                    <div style="text-align: left; padding: 10px;">
+                                        <p style="color: #f44336; font-weight: bold; margin-bottom: 15px;">
+                                            ⚠️ This will replace all current data!
+                                        </p>
+                                        <ul style="margin-left: 20px; line-height: 1.8;">
+                                            <li>All current invoices, products, and data will be replaced</li>
+                                            <li>Make sure you have exported your current data if needed</li>
+                                            <li>You will need your Recovery Password to restore</li>
+                                        </ul>
+                                    </div>
+                                `,
+                                isHtml: true,
+                                footerButtons: [
+                                    { text: 'Cancel', class: 'btn-grey', onclick: () => { Modal.close(); resolve(false); } },
+                                    { text: 'I Understand, Continue', class: 'btn-primary', onclick: () => { Modal.close(); resolve(true); } }
+                                ]
+                            });
+                        });
+
+                        if (!proceed) return;
+
+                        // Prompt for recovery password
+                        const recoveryPassword = await Modal.prompt(
+                            'Enter your Recovery Password to restore from cloud backup:\n\n' +
+                            'This is the password you created when making the backup.\n' +
+                            'If you forgot it, you cannot restore your data.'
+                        );
+
+                        if (!recoveryPassword) {
+                            return;
+                        }
+
+                        Toast.info('Restoring data from cloud backup...');
+
+                        // Restore from vault
+                        const restoreResult = await securityManager.restoreFromVault(recoveryPassword);
+
+                        if (!restoreResult.success || !restoreResult.data) {
+                            throw new Error('Failed to restore data from vault');
+                        }
+
+                        // STATE MANAGEMENT FIX: Use window.dbManager for consistency
+                        const currentDbManager = window.dbManager || dbManager;
+                        
+                        // Clear current database
+                        if (currentDbManager && currentDbManager.db) {
+                            await currentDbManager.db.invoices.clear();
+                            await currentDbManager.db.products.clear();
+                            await currentDbManager.db.transactions.clear();
+                            await currentDbManager.db.shiftReports.clear();
+                            await currentDbManager.db.refunds.clear();
+                        }
+
+                        // Restore data
+                        if (restoreResult.data.invoices && restoreResult.data.invoices.length > 0) {
+                            await currentDbManager.db.invoices.bulkAdd(restoreResult.data.invoices);
+                        }
+                        if (restoreResult.data.products && restoreResult.data.products.length > 0) {
+                            await currentDbManager.db.products.bulkAdd(restoreResult.data.products);
+                        }
+                        if (restoreResult.data.transactions && restoreResult.data.transactions.length > 0) {
+                            await currentDbManager.db.transactions.bulkAdd(restoreResult.data.transactions);
+                        }
+                        if (restoreResult.data.shiftReports && restoreResult.data.shiftReports.length > 0) {
+                            await currentDbManager.db.shiftReports.bulkAdd(restoreResult.data.shiftReports);
+                        }
+                        if (restoreResult.data.refunds && restoreResult.data.refunds.length > 0) {
+                            await currentDbManager.db.refunds.bulkAdd(restoreResult.data.refunds);
+                        }
+                        if (restoreResult.data.settings && restoreResult.data.settings.length > 0) {
+                            await currentDbManager.db.settings.bulkAdd(restoreResult.data.settings);
+                        }
+
+                        // Show success
+                        Modal.show({
+                            title: '✅ Data Restored Successfully',
+                            content: `
+                                <div style="text-align: left; padding: 10px;">
+                                    <p style="color: #4CAF50; font-weight: bold; margin-bottom: 15px;">
+                                        Your data has been restored from the cloud backup.
+                                    </p>
+                                    <p style="margin-top: 15px; color: #666;">
+                                        Backup Version: ${restoreResult.version}<br>
+                                        Backup Date: ${new Date(restoreResult.timestamp).toLocaleString()}<br>
+                                        <br>
+                                        The page will refresh to show your restored data.
+                                    </p>
+                                </div>
+                            `,
+                            isHtml: true,
+                            footerButtons: [
+                                {
+                                    text: 'Refresh Page',
+                                    class: 'btn-primary',
+                                    onclick: () => {
+                                        window.location.reload();
+                                    }
+                                }
+                            ]
+                        });
+
+                        Toast.success('Data restored successfully');
+                    } catch (error) {
+                        console.error('Vault restore error:', error);
+                        Toast.error('Restore failed: ' + error.message);
+                    }
+                });
+            }
+
+
+
+            // Scan Setup QR Handler (Import)
+            const scanSetupBtn = document.getElementById('scan-setup-qr-btn');
+            if (scanSetupBtn && window.hardwareManager) {
+                scanSetupBtn.addEventListener('click', async () => {
+                    // Use Modal.prompt instead of window.prompt
+                    const pwd = await Modal.prompt('Enter the ONE-TIME password from the Owner device:');
+                    if (!pwd) return;
+
+                    try {
+                        const modal = Modal.show({
+                            title: '📷 Scanning...',
+                            content: '<div id="reader" style="width: 100%"></div>',
+                            isHtml: true
+                        });
+
+                        window.hardwareManager.startBarcodeScanner((decodedText) => {
+                            try {
+                                const data = JSON.parse(decodedText);
+                                if (data.action !== 'setup' || !data.shard) throw new Error('Invalid Setup QR');
+
+                                // Stop scanner on success
+                                window.hardwareManager.stopBarcodeScanner();
+                                Modal.close();
+
+                                securityManager.importKeyShard(data.shard, pwd)
+                                    .then(mnemonic => {
+                                        document.getElementById('mnemonic-input').value = mnemonic;
+                                        Toast.success('Mnemonic Recovered!');
+                                        Modal.show({
+                                            title: 'Import Successful',
+                                            content: '✅ Credentials imported successfully. Please set a new PIN to complete setup.',
+                                            footerButtons: [{ text: 'OK', class: 'btn-primary' }]
+                                        });
+                                    })
+                                    .catch(err => {
+                                        Toast.error('Import Failed: ' + err.message);
+                                    });
+                            } catch (e) {
+                                Toast.error('Invalid QR Data: ' + e.message);
+                            }
+                        }, (err) => {
+                            // Scanner errors
+                        });
+                    } catch (error) {
+                        console.error('Scanner start error:', error);
+                    }
+                });
+            }
+
+            window.renderStats = async function renderStats() {
+                try {
+                    // STATE MANAGEMENT FIX: Use window.dbManager for consistency
+                    const currentDbManager = window.dbManager || dbManager;
+                    if (!currentDbManager || !currentDbManager.db) {
+                        console.error('Database not initialized');
+                        return;
+                    }
+
+                    // Get all invoices
+                    const allInvoices = await currentDbManager.db.invoices.toArray();
+
+                    // Calculate stats
+                    let totalSalesPi = 0;
+                    let totalCashOffline = 0;
+
+                    allInvoices.forEach(invoice => {
+                        // Only count paid invoices (exclude refunded)
+                        if (invoice.status === 'paid') {
+                            if (invoice.currency === 'PI') {
+                                totalSalesPi += invoice.amount || 0;
+                            }
+                            // Sum cash payments (stored in cashPaidFiat field)
+                            if (invoice.cashPaidFiat) {
+                                totalCashOffline += invoice.cashPaidFiat;
+                            }
+                        }
+                        // Subtract refunded amounts
+                        if (invoice.status === 'refunded') {
+                            if (invoice.currency === 'PI') {
+                                totalSalesPi -= invoice.amount || 0;
+                            }
+                            if (invoice.cashPaidFiat) {
+                                totalCashOffline -= invoice.cashPaidFiat;
+                            }
+                        }
+                    });
+
+                    // Ensure totals don't go negative
+                    totalSalesPi = Math.max(0, totalSalesPi);
+                    totalCashOffline = Math.max(0, totalCashOffline);
+
+                    // Calculate Daily Revenue (today's paid invoices)
+                    const today = new Date();
+                    today.setHours(0, 0, 0, 0);
+                    let dailyRevenue = 0;
+                    
+                    for (const invoice of allInvoices) {
+                        if (invoice.status === 'paid' && invoice.paidAt) {
+                            const paidDate = new Date(invoice.paidAt);
+                            paidDate.setHours(0, 0, 0, 0);
+                            if (paidDate.getTime() === today.getTime()) {
+                                dailyRevenue += invoice.amount || 0;
+                            }
+                        }
+                    }
+                    dailyRevenue = Math.max(0, dailyRevenue);
+
+                    // Helper function to format Pi amounts with 7 decimal places
+                    function formatPiAmountDisplay(amount) {
+                        if (typeof amount !== 'number' || isNaN(amount)) return '0.0000000';
+                        return amount.toFixed(7);
+                    }
+
+                    // Update UI
+                    const totalSalesPiEl = document.getElementById('total-sales-pi');
+                    const totalCashOfflineEl = document.getElementById('total-cash-offline');
+                    const cashCurrencySymbol = document.getElementById('cash-currency-symbol');
+                    const cashAmount = document.getElementById('cash-amount');
+                    const totalInvoicesEl = document.getElementById('total-invoices');
+                    const dailyRevenueEl = document.getElementById('daily-revenue');
+
+                    if (totalSalesPiEl) {
+                        totalSalesPiEl.textContent = formatPiAmountDisplay(totalSalesPi);
+                    }
+                    if (totalCashOfflineEl) {
+                        // Get currency symbol from settings
+                        try {
+                            const currencySettings = await currentDbManager.getCurrencySettings();
+                            const currencySymbol = currencySettings.symbol || '$';
+                            if (cashCurrencySymbol) cashCurrencySymbol.textContent = currencySymbol;
+                        } catch (error) {
+                            console.error('Error getting currency settings:', error);
+                            if (cashCurrencySymbol) cashCurrencySymbol.textContent = '$';
+                        }
+                        if (cashAmount) cashAmount.textContent = totalCashOffline.toFixed(2);
+                    }
+                    if (totalInvoicesEl) {
+                        totalInvoicesEl.textContent = allInvoices.length;
+                    }
+                    if (dailyRevenueEl) {
+                        dailyRevenueEl.textContent = `+${formatPiAmountDisplay(dailyRevenue)}`;
+                    }
+
+                    console.log('✅ Stats rendered:', { totalSalesPi, totalCashOffline, totalInvoices: allInvoices.length, dailyRevenue });
+                } catch (error) {
+                    console.error('Error rendering stats:', error);
+                }
+            }
+
+        } // End of initApp function
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,6 @@
+name = "ledgererp"
+compatibility_date = "2025-01-01"
+
+# Pages build output directory
+pages_build_output_dir = "static"
+
