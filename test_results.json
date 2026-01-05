@@ -1,0 +1,211 @@
+{
+  "static_analysis": {
+    "summary": {
+      "total": 8,
+      "passed": 7,
+      "failed": 0,
+      "warnings": 1,
+      "status": "pass"
+    },
+    "details": {
+      "demo_mode": {
+        "status": "pass",
+        "details": [
+          "[PASS] Demo Mode button found in index.html",
+          "[PASS] loadDemoData() function found in db.js"
+        ]
+      },
+      "invoice_creation": {
+        "status": "pass",
+        "details": [
+          "✅ addItem() function found",
+          "✅ calculateTotals() function found",
+          "✅ debouncedCalculateTotals() found (performance optimization)",
+          "✅ QR Code generation found"
+        ]
+      },
+      "pi_authentication": {
+        "status": "pass",
+        "details": [
+          "✅ Pi.authenticate() found",
+          "✅ Pi SDK initialize() found",
+          "✅ onIncompletePaymentFound() found (Req #2)"
+        ]
+      },
+      "bip39": {
+        "status": "pass",
+        "details": [
+          "✅ generateMnemonic() function found",
+          "✅ 12-word validation found",
+          "✅ Anti-phishing (24-word block) found"
+        ]
+      },
+      "pin": {
+        "status": "pass",
+        "details": [
+          "✅ PIN input field found in index.html",
+          "✅ PIN maxlength=6 found",
+          "✅ PIN field in auto-lock found"
+        ]
+      },
+      "responsive_design": {
+        "status": "pass",
+        "details": [
+          "✅ Found 6 media queries",
+          "✅ Mobile breakpoint found",
+          "✅ Tablet breakpoint found",
+          "✅ Safe area support found"
+        ]
+      },
+      "xss_protection": {
+        "status": "warning",
+        "details": [
+          "✅ DOMPurify found in static/js/invoice.js",
+          "✅ DOMPurify found in static/js/ui-utils.js",
+          "✅ DOMPurify found in static/js/bug-reporting.js",
+          "✅ DOMPurify found in static/js/csv-import.js",
+          "✅ DOMPurify found in static/index.html",
+          "✅ DOMPurify found in static/app.html",
+          "✅ DOMPurify is being used",
+          "⚠️ Found 34 potentially unsafe innerHTML usages",
+          "  - static/js/invoice.js:366",
+          "  - static/js/invoice.js:1094",
+          "  - static/js/invoice.js:1237",
+          "  - static/js/ui-utils.js:39",
+          "  - static/js/ui-utils.js:91"
+        ]
+      },
+      "error_handling": {
+        "status": "pass",
+        "details": [
+          "✅ ErrorHandler class found",
+          "✅ Found 17 try-catch blocks in invoice.js"
+        ]
+      }
+    }
+  },
+  "server_status": {
+    "status": "running",
+    "already_running": true
+  },
+  "browser_tests": [
+    {
+      "test": "console_errors",
+      "status": "warning",
+      "details": [
+        "[WARN] Found 16 console error(s)",
+        "  - Refused to apply style from 'http://localhost:8000/css/style.css' because its MIME type ('application/json') is not a supported stylesheet MIME type, and strict MIME checking is enabled.",
+        "  - Failed to load resource: the server responded with a status of 404 (Not Found)",
+        "  - Failed to load resource: the server responded with a status of 404 (Not Found)",
+        "  - Failed to load resource: the server responded with a status of 404 (Not Found)",
+        "  - Failed to load resource: the server responded with a status of 404 (Not Found)"
+      ],
+      "screenshots": []
+    },
+    {
+      "test": "demo_mode",
+      "status": "pass",
+      "details": [
+        "[PASS] Demo Mode button found",
+        "[PASS] Dashboard appeared after Demo Mode",
+        "[PASS] Found 8 invoice(s) in demo data"
+      ],
+      "screenshots": [
+        "test_screenshots\\demo_mode_initial.png",
+        "test_screenshots\\demo_mode_activated.png"
+      ]
+    },
+    {
+      "test": "invoice_creation",
+      "status": "fail",
+      "details": [
+        "[PASS] Create Invoice button found",
+        "[FAIL] Error: ElementHandle.fill: Timeout 30000ms exceeded.\nCall log:\n    - fill(\"Test Item\")\n  - attempting fill action\n    2 × waiting for element to be visible, enabled and editable\n      - element is not visible\n    - retrying fill action\n    - waiting 20ms\n    2 × waiting for element to be visible, enabled and editable\n      - element is not visible\n    - retrying fill action\n      - waiting 100ms\n    57 × waiting for element to be visible, enabled and editable\n       - element is not visible\n     - retrying fill action\n       - waiting 500ms\n"
+      ],
+      "screenshots": [
+        "test_screenshots\\invoice_modal_opened.png",
+        "test_screenshots\\invoice_creation_error.png"
+      ]
+    },
+    {
+      "test": "responsive_design",
+      "status": "pass",
+      "details": [
+        "[PASS] mobile_iphone_se: Font size 16px",
+        "[PASS] mobile_iphone_se: 26 visible buttons",
+        "[PASS] tablet_ipad: Font size 16px",
+        "[PASS] tablet_ipad: 26 visible buttons",
+        "[PASS] desktop: Font size 16px",
+        "[PASS] desktop: 26 visible buttons"
+      ],
+      "screenshots": [
+        "test_screenshots\\responsive_mobile_iphone_se.png",
+        "test_screenshots\\responsive_tablet_ipad.png",
+        "test_screenshots\\responsive_desktop.png"
+      ]
+    },
+    {
+      "test": "bip39_pin",
+      "status": "pass",
+      "details": [
+        "[PASS] Mnemonic input field found",
+        "[WARN] PIN maxlength is None, expected 6",
+        "[PASS] Generate mnemonic button found"
+      ],
+      "screenshots": []
+    },
+    {
+      "test": "pi_authentication",
+      "status": "pass",
+      "details": [
+        "[PASS] Pi Authentication button found",
+        "[PASS] Pi Authentication button is visible"
+      ],
+      "screenshots": [
+        "test_screenshots\\pi_auth_check.png"
+      ]
+    }
+  ],
+  "functional_tests": [
+    {
+      "test": "daily_revenue",
+      "status": "pass",
+      "details": [
+        "[PASS] Daily Revenue element found in HTML",
+        "[PASS] Daily Revenue calculation logic found"
+      ]
+    },
+    {
+      "test": "auto_lock",
+      "status": "pass",
+      "details": [
+        "[PASS] Auto-lock timeout found",
+        "[PASS] Unlock function found",
+        "[PASS] PIN verification found"
+      ]
+    },
+    {
+      "test": "dark_mode",
+      "status": "pass",
+      "details": [
+        "[PASS] Dark mode media query found",
+        "[PASS] Dark mode CSS variables found"
+      ]
+    },
+    {
+      "test": "service_worker",
+      "status": "warning",
+      "details": [
+        "[PASS] Service Worker file found",
+        "[WARN] Service Worker registration not found"
+      ]
+    }
+  ],
+  "summary": {
+    "static_analysis": "pass",
+    "server_running": true,
+    "browser_tests": "4/6",
+    "functional_tests": "3/4",
+    "overall": "pass"
+  }
+}

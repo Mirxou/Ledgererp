@@ -1,15 +1,14 @@
 /**
- * Lifecycle Management - Version Check & Force Update
+ * Lifecycle Management - Version Check
  * Req #13: Secure Updates (Audit Fix)
  * App must check min_version API header on connect
- * If outdated, LOCK UI and force Service Worker update
+ * If outdated, LOCK UI
  */
 class LifecycleManager {
     constructor() {
         this.currentVersion = '1.0.0';
         this.minVersion = null;
         this.updateRequired = false;
-        this.serviceWorkerRegistration = null;
     }
 
     /**
@@ -18,9 +17,6 @@ class LifecycleManager {
      */
     async initialize() {
         try {
-            // Register service worker first
-            await this.registerServiceWorker();
-            
             // Check version from API
             await this.checkVersion();
             
@@ -158,109 +154,20 @@ class LifecycleManager {
     }
 
     /**
-     * Req #13: Force Service Worker update
-     * Enhanced with cache clearing and verification
+     * Req #13: Force update (reload page)
      */
     async forceUpdate() {
         try {
-            // Step 1: Unregister all service workers
-            if ('serviceWorker' in navigator) {
-                const registrations = await navigator.serviceWorker.getRegistrations();
-                for (const registration of registrations) {
-                    await registration.unregister();
-                    console.log('Service worker unregistered:', registration.scope);
-                }
-            }
-            
-            // Step 2: Clear all caches (including IndexedDB if needed)
-            if ('caches' in window) {
-                const cacheNames = await caches.keys();
-                await Promise.all(
-                    cacheNames.map(cacheName => {
-                        console.log('Deleting cache:', cacheName);
-                        return caches.delete(cacheName);
-                    })
-                );
-                console.log('All caches cleared');
-            }
-            
-            // Step 3: Clear service worker cache storage
-            if ('storage' in navigator && 'estimate' in navigator.storage) {
-                try {
-                    const estimate = await navigator.storage.estimate();
-                    if (estimate.usage > 0) {
-                        // Clear storage if possible
-                        if ('clear' in navigator.storage) {
-                            await navigator.storage.clear();
-                        }
-                    }
-                } catch (e) {
-                    console.warn('Could not clear storage:', e);
-                }
-            }
-            
-            // Step 4: Force hard reload (bypass cache)
-            // Use cache-busting query parameter
-            const url = new URL(window.location.href);
-            url.searchParams.set('_update', Date.now().toString());
-            window.location.href = url.toString();
+            // Reload page to get latest version
+            window.location.reload(true);
         } catch (error) {
             console.error('Error forcing update:', error);
-            // Fallback: simple reload with cache bypass
-            window.location.reload(true);
+            window.location.reload();
         }
     }
 
     /**
-     * Register Service Worker for offline support
-     */
-    async registerServiceWorker() {
-        if ('serviceWorker' in navigator) {
-            try {
-                // Unregister ALL old service workers first (to fix cache issues)
-                const oldRegistrations = await navigator.serviceWorker.getRegistrations();
-                for (const registration of oldRegistrations) {
-                    console.log('Unregistering old service worker:', registration.scope);
-                    await registration.unregister();
-                }
-                
-                // Also unregister the controller if it exists
-                if (navigator.serviceWorker.controller) {
-                    navigator.serviceWorker.controller.postMessage({ type: 'SKIP_WAITING' });
-                }
-                
-                // Wait a bit for unregistration to complete
-                await new Promise(resolve => setTimeout(resolve, 100));
-                
-                const registration = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
-                this.serviceWorkerRegistration = registration;
-                
-                // Check for updates
-                registration.addEventListener('updatefound', () => {
-                    const newWorker = registration.installing;
-                    if (newWorker) {
-                        newWorker.addEventListener('statechange', () => {
-                            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                                // New service worker available
-                                console.log('New service worker available');
-                                this.promptUpdate();
-                            }
-                        });
-                    }
-                });
-                
-                console.log('Service worker registered:', registration.scope);
-                return registration;
-            } catch (error) {
-                console.error('Service worker registration failed:', error);
-                return null;
-            }
-        }
-        return null;
-    }
-
-    /**
-     * Prompt user to update when new service worker is available
+     * Version check and update handling
      */
     promptUpdate() {
         // Show notification (non-blocking)

@@ -1,230 +1,109 @@
 /**
- * Database Module - Dexie Schema & Persistence
- * Req #24: Persistence (navigator.storage.persist())
- * Req #25: Conflict Resolution (Version-based blob merging)
- * Req #3: Demo Mode (Mock data loading)
+ * Database Module - Pi Blockchain Storage
+ * All data stored on Pi Network (Stellar) Blockchain
+ * Uses Stellar Account Data Entries for storage
  */
-// Req #29: Dexie is loaded as script tag in index.html (UMD module)
-// Access it from window.Dexie
-const Dexie = typeof window !== 'undefined' && window.Dexie ? window.Dexie : null;
-
-if (!Dexie) {
-    console.error('Dexie not loaded. Database functionality will not work.');
-    throw new Error('Dexie library is required but could not be loaded. Make sure dexie.min.js is loaded before this module.');
-}
 
 class DatabaseManager {
     constructor() {
-        this.db = null;
-        this.isDemoMode = false;
+        this.piStorage = null;
+        this.piAdapter = null;
     }
 
     /**
-     * Req #24: Initialize database with persistence
-     * Also checks for backup reminders
+     * Initialize Pi Blockchain Storage
      */
     async initialize() {
         try {
-            // Create Dexie database
-            this.db = new Dexie('PiLedgerDB');
-
-            // Define schema
-            this.db.version(1).stores({
-                merchants: '++id, merchantId, name, walletAddress, createdAt',
-                invoices: '++id, invoiceId, merchantId, amount, currency, memo, status, createdAt, updatedAt',
-                transactions: '++id, transactionId, invoiceId, amount, currency, memo, status, verified, timestamp',
-                settings: 'key, value',
-                syncBlobs: '++id, blobId, version, encryptedData, timestamp, synced',
-                usedTransactions: '++id, transactionHash, invoiceId, timestamp', // SECURITY: Anti-Replay protection
-                shiftReports: '++id, reportId, date, totalCash, totalPi, totalInvoices, summary, createdAt', // Z-Report
-                products: '++id, productId, name, pricePi, imageBase64, category, barcode, createdAt, updatedAt', // Visual Inventory + Barcode
-                refunds: '++id, refundId, invoiceId, amount, reason, createdAt', // Refund tracking
-                auditLogs: '++id, timestamp, userRole, userId, action, entityType, entityId, details, ipAddress' // Req #35: Immutable Audit Trail
-            });
-
-            // Req #24: Request persistent storage
-            if (navigator.storage && navigator.storage.persist) {
-                const isPersistent = await navigator.storage.persist();
-                console.log(`Storage persistence granted: ${isPersistent}`);
+            // Get Pi Adapter
+            this.piAdapter = window.piAdapter;
+            if (!this.piAdapter || !this.piAdapter.user) {
+                throw new Error('Pi authentication required. Please authenticate with Pi Network first.');
             }
 
-            // Open database
-            await this.db.open();
-            console.log('Database initialized successfully');
+            // Import and initialize Pi Storage
+            const PiStorage = (await import('/static/js/pi-storage.js')).default;
+            this.piStorage = new PiStorage(this.piAdapter);
+            await this.piStorage.initialize();
 
-            // Check for backup reminder (once per week)
-            this.checkBackupReminder();
+            console.log('✅ Pi Blockchain Storage initialized successfully');
 
             return true;
         } catch (error) {
-            console.error('Error initializing database:', error);
-            throw new Error('Failed to initialize database');
+            console.error('Error initializing Pi Storage:', error);
+            throw new Error('Failed to initialize Pi Blockchain Storage');
         }
     }
 
     /**
-     * Check if user needs backup reminder (once per week)
+     * Backup reminders not needed for blockchain storage
+     * Data is automatically backed up on blockchain
      */
     async checkBackupReminder() {
-        try {
-            const lastBackupReminder = localStorage.getItem('lastBackupReminder');
-            const now = Date.now();
-            const oneWeek = 7 * 24 * 60 * 60 * 1000; // 7 days in milliseconds
-
-            // Check if reminder is needed (once per week)
-            if (!lastBackupReminder || (now - parseInt(lastBackupReminder)) > oneWeek) {
-                // Check if user has invoices (has data to backup)
-                const invoiceCount = await this.db.invoices.count();
-                
-                if (invoiceCount > 0) {
-                    // Show reminder after a short delay
-                    setTimeout(() => {
-                        if (window.Modal && window.Toast) {
-                            window.Modal.show({
-                                title: '💾 Backup Reminder',
-                                content: `
-                                    <div style="text-align: left; padding: 10px;">
-                                        <p style="margin-bottom: 15px;">
-                                            You have <strong>${invoiceCount}</strong> invoice(s) in your database.
-                                        </p>
-                                        <p style="color: #f44336; font-weight: bold; margin-bottom: 15px;">
-                                            ⚠️ Important: Create a cloud backup to protect your data!
-                                        </p>
-                                        <ul style="margin-left: 20px; line-height: 1.8;">
-                                            <li>If you lose your device, your data will be lost forever</li>
-                                            <li>Cloud backup encrypts your data securely</li>
-                                            <li>You can restore on any new device with your recovery password</li>
-                                        </ul>
-                                        <p style="margin-top: 15px; color: #666;">
-                                            Click "Create Cloud Backup" in the dashboard to backup your data now.
-                                        </p>
-                                    </div>
-                                `,
-                                isHtml: true,
-                                footerButtons: [
-                                    { 
-                                        text: 'Remind Me Later', 
-                                        class: 'btn-grey',
-                                        onclick: () => {
-                                            localStorage.setItem('lastBackupReminder', now.toString());
-                                            window.Modal.close();
-                                        }
-                                    },
-                                    { 
-                                        text: 'Create Backup Now', 
-                                        class: 'btn-primary',
-                                        onclick: () => {
-                                            localStorage.setItem('lastBackupReminder', now.toString());
-                                            window.Modal.close();
-                                            // Trigger backup button click if available
-                                            const backupBtn = document.getElementById('create-vault-backup-btn');
-                                            if (backupBtn) {
-                                                backupBtn.click();
-                                            } else {
-                                                window.Toast.info('Please use the "Create Cloud Backup" button in the dashboard');
-                                            }
-                                        }
-                                    }
-                                ]
-                            });
-                        }
-                    }, 5000); // Show after 5 seconds
-                }
-            }
-        } catch (error) {
-            console.error('Error checking backup reminder:', error);
-        }
+        // Blockchain storage: Data is always backed up on-chain
+        // No reminder needed
+        return;
     }
 
     /**
-     * Get or create current merchant ID
-     * Returns merchant ID from Pi authentication or creates one from user UID
+     * Get current merchant ID from Pi authentication
+     * HACKATHON 2025 PATTERN: Pi.uid = Merchant ID (Blind_Lounge, Starmax pattern)
+     * Returns Pi.uid as merchant ID (blockchain-based)
      */
     async getCurrentMerchantId() {
         try {
-            if (!this.db || !this.db.isOpen()) {
+            if (!this.piStorage) {
                 await this.initialize();
             }
 
-            // Check if merchant ID is stored in settings
-            const merchantIdSetting = await this.db.settings.get('current_merchant_id');
-            if (merchantIdSetting && merchantIdSetting.value) {
-                return merchantIdSetting.value;
+            // Use Pi.uid as merchant ID (blockchain account)
+            if (this.piAdapter && this.piAdapter.user && this.piAdapter.user.uid) {
+                return this.piAdapter.user.uid;
             }
 
-            // Check if user is authenticated via Pi
-            if (window.piAdapter && window.piAdapter.user && window.piAdapter.user.uid) {
-                // Generate merchant ID from Pi UID
-                const merchantId = `merchant_${window.piAdapter.user.uid}`;
-                
-                // Save to settings
-                await this.db.settings.put({
-                    key: 'current_merchant_id',
-                    value: merchantId
-                });
-
-                // Also save merchant record if not exists
-                const existingMerchant = await this.db.merchants.where('merchantId').equals(merchantId).first();
-                if (!existingMerchant) {
-                    await this.db.merchants.add({
-                        merchantId: merchantId,
-                        name: window.piAdapter.user.username || 'Merchant',
-                        walletAddress: '', // Will be set when user provides wallet
-                        createdAt: new Date().toISOString()
-                    });
-                }
-
-                return merchantId;
-            }
-
-            // Fallback to demo merchant for demo mode
-            if (this.isDemoMode) {
-                return 'demo_merchant_001';
-            }
-
-            // If no authentication, return null (should not happen in production)
-            console.warn('No merchant ID found and user not authenticated');
-            return null;
+            throw new Error('Pi authentication required. Please authenticate with Pi Network.');
         } catch (error) {
             console.error('Error getting merchant ID:', error);
-            // Fallback to demo merchant
-            return this.isDemoMode ? 'demo_merchant_001' : null;
+            throw error;
         }
     }
 
     /**
-     * Set current merchant ID (for manual setup)
+     * Merchant ID is set by Pi authentication (read-only)
      */
     async setCurrentMerchantId(merchantId) {
-        try {
-            if (!this.db || !this.db.isOpen()) {
-                await this.initialize();
-            }
-
-            await this.db.settings.put({
-                key: 'current_merchant_id',
-                value: merchantId
-            });
-
-            return true;
-        } catch (error) {
-            console.error('Error setting merchant ID:', error);
-            return false;
-        }
+        // Merchant ID comes from Pi authentication, cannot be manually set
+        console.warn('Merchant ID is managed by Pi authentication and cannot be manually set');
+        return false;
     }
 
     /**
-     * Get merchant by merchant ID
-     * Returns merchant object with walletAddress
+     * Get merchant by merchant ID from blockchain
      */
     async getMerchant(merchantId) {
         try {
-            if (!this.db || !this.db.isOpen()) {
+            if (!this.piStorage) {
                 await this.initialize();
             }
 
-            const merchant = await this.db.merchants.where('merchantId').equals(merchantId).first();
-            return merchant || null;
+            // Get merchant data from blockchain
+            const merchantData = await this.piStorage.getAccountData(`merchant:${merchantId}`);
+            
+            if (merchantData) {
+                return merchantData;
+            }
+
+            // Return basic merchant info from Pi authentication
+            if (this.piAdapter && this.piAdapter.user) {
+                return {
+                    merchantId: merchantId,
+                    name: this.piAdapter.user.username || 'Merchant',
+                    walletAddress: '', // Will be set when user provides wallet
+                    createdAt: new Date().toISOString()
+                };
+            }
+
+            return null;
         } catch (error) {
             console.error('Error getting merchant:', error);
             return null;
@@ -232,20 +111,21 @@ class DatabaseManager {
     }
 
     /**
-     * Get currency settings
+     * Get currency settings from blockchain
      */
     async getCurrencySettings() {
         try {
-            if (!this.db || !this.db.isOpen()) {
+            if (!this.piStorage) {
                 await this.initialize();
             }
 
-            const currencySetting = await this.db.settings.get('currency_symbol');
-            return {
-                symbol: currencySetting?.value || '$',
-                code: currencySetting?.code || 'USD',
-                name: currencySetting?.name || 'US Dollar'
-            };
+            const currencySetting = await this.piStorage.getAccountData('settings:currency');
+            if (currencySetting) {
+                return currencySetting;
+            }
+
+            // Default
+            return { symbol: '$', code: 'USD', name: 'US Dollar' };
         } catch (error) {
             console.error('Error getting currency settings:', error);
             return { symbol: '$', code: 'USD', name: 'US Dollar' };
@@ -253,17 +133,16 @@ class DatabaseManager {
     }
 
     /**
-     * Set currency settings
+     * Set currency settings on blockchain
      */
     async setCurrencySettings(symbol, code = 'USD', name = 'US Dollar') {
         try {
-            if (!this.db || !this.db.isOpen()) {
+            if (!this.piStorage) {
                 await this.initialize();
             }
 
-            await this.db.settings.put({
-                key: 'currency_symbol',
-                value: symbol,
+            await this.piStorage.setAccountData('settings:currency', {
+                symbol: symbol,
                 code: code,
                 name: name
             });
@@ -276,30 +155,21 @@ class DatabaseManager {
     }
 
     /**
-     * Get user role (OWNER or CASHIER)
+     * Get user role from blockchain (defaults to OWNER)
      */
     async getUserRole() {
         try {
-            if (!this.db || !this.db.isOpen()) {
+            if (!this.piStorage) {
                 await this.initialize();
             }
 
-            const roleSetting = await this.db.settings.get('user_role');
-            if (roleSetting && roleSetting.value) {
-                return roleSetting.value;
+            const roleSetting = await this.piStorage.getAccountData('settings:user_role');
+            if (roleSetting) {
+                return roleSetting.value || 'OWNER';
             }
 
-            // Default to OWNER if authenticated via Pi
-            if (window.piAdapter && window.piAdapter.user) {
-                return 'OWNER';
-            }
-
-            // Default to OWNER for demo mode
-            if (this.isDemoMode) {
-                return 'OWNER';
-            }
-
-            return 'OWNER'; // Default role
+            // Default to OWNER for authenticated users
+            return 'OWNER';
         } catch (error) {
             console.error('Error getting user role:', error);
             return 'OWNER';
@@ -307,11 +177,11 @@ class DatabaseManager {
     }
 
     /**
-     * Set user role
+     * Set user role on blockchain
      */
     async setUserRole(role) {
         try {
-            if (!this.db || !this.db.isOpen()) {
+            if (!this.piStorage) {
                 await this.initialize();
             }
 
@@ -319,11 +189,7 @@ class DatabaseManager {
                 throw new Error('Invalid role. Must be OWNER or CASHIER');
             }
 
-            await this.db.settings.put({
-                key: 'user_role',
-                value: role
-            });
-
+            await this.piStorage.setAccountData('settings:user_role', { value: role });
             return true;
         } catch (error) {
             console.error('Error setting user role:', error);
@@ -332,256 +198,40 @@ class DatabaseManager {
     }
 
     /**
-     * Req #3: Load mock data for Demo Mode
-     */
-    async loadDemoData() {
-        try {
-            // Ensure database is initialized
-            if (!this.db || !this.db.isOpen()) {
-                console.log('Database not open, initializing...');
-                await this.initialize();
-            }
-
-            this.isDemoMode = true;
-            console.log('Clearing existing data...');
-
-            // Clear existing data
-            await this.db.merchants.clear();
-            await this.db.invoices.clear();
-            await this.db.transactions.clear();
-            console.log('Existing data cleared');
-
-            // Load mock merchants
-            console.log('Adding mock merchants...');
-            await this.db.merchants.bulkAdd([
-                {
-                    merchantId: 'demo_merchant_001',
-                    name: 'Demo Store',
-                    walletAddress: 'GDEMO1234567890',
-                    createdAt: new Date().toISOString()
-                },
-                {
-                    merchantId: 'demo_merchant_002',
-                    name: 'Sample Shop',
-                    walletAddress: 'GDEMO0987654321',
-                    createdAt: new Date().toISOString()
-                }
-            ]);
-            console.log('Mock merchants added');
-
-            // Load mock invoices
-            const mockInvoices = [
-                {
-                    invoiceId: 'INV-DEMO-001',
-                    merchantId: 'demo_merchant_001',
-                    amount: 50.0,
-                    currency: 'USD',
-                    memo: 'P-DEMO001-INV001',
-                    status: 'paid',
-                    createdAt: new Date(Date.now() - 86400000).toISOString(),
-                    updatedAt: new Date(Date.now() - 86400000).toISOString()
-                },
-                {
-                    invoiceId: 'INV-DEMO-002',
-                    merchantId: 'demo_merchant_001',
-                    amount: 25.5,
-                    currency: 'PI',
-                    memo: 'P-DEMO001-INV002',
-                    status: 'pending',
-                    createdAt: new Date().toISOString(),
-                    updatedAt: new Date().toISOString()
-                },
-                {
-                    invoiceId: 'INV-DEMO-003',
-                    merchantId: 'demo_merchant_002',
-                    amount: 100.0,
-                    currency: 'USD',
-                    memo: 'P-DEMO002-INV003',
-                    status: 'paid',
-                    createdAt: new Date(Date.now() - 172800000).toISOString(),
-                    updatedAt: new Date(Date.now() - 172800000).toISOString()
-                }
-            ];
-
-            console.log('Adding mock invoices...');
-            await this.db.invoices.bulkAdd(mockInvoices);
-            console.log('Mock invoices added');
-
-            // Load mock transactions
-            console.log('Adding mock transactions...');
-            await this.db.transactions.bulkAdd([
-                {
-                    transactionId: 'TX-DEMO-001',
-                    invoiceId: 'INV-DEMO-001',
-                    amount: 50.0,
-                    currency: 'USD',
-                    memo: 'P-DEMO001-INV001',
-                    status: 'verified',
-                    verified: true,
-                    timestamp: new Date(Date.now() - 86400000).toISOString()
-                },
-                {
-                    transactionId: 'TX-DEMO-002',
-                    invoiceId: 'INV-DEMO-003',
-                    amount: 100.0,
-                    currency: 'USD',
-                    memo: 'P-DEMO002-INV003',
-                    status: 'verified',
-                    verified: true,
-                    timestamp: new Date(Date.now() - 172800000).toISOString()
-                }
-            ]);
-            console.log('Mock transactions added');
-
-            console.log('Demo data loaded successfully');
-            return true;
-        } catch (error) {
-            console.error('Error loading demo data:', error);
-            throw new Error('Failed to load demo data');
-        }
-    }
-
-    /**
-     * Req #25: Version-based blob merging for conflict resolution
-     */
-    async mergeSyncBlob(newBlob, version) {
-        try {
-            // Get existing blob with highest version
-            const existingBlobs = await this.db.syncBlobs
-                .orderBy('version')
-                .reverse()
-                .limit(1)
-                .toArray();
-
-            if (existingBlobs.length === 0) {
-                // No existing blob, store new one
-                await this.db.syncBlobs.add({
-                    blobId: `blob_${Date.now()}`,
-                    version: version,
-                    encryptedData: newBlob,
-                    timestamp: new Date().toISOString(),
-                    synced: false
-                });
-                return { merged: false, version: version };
-            }
-
-            const existingBlob = existingBlobs[0];
-
-            // Compare versions
-            if (this.compareVersions(version, existingBlob.version) > 0) {
-                // New blob is newer, replace
-                await this.db.syncBlobs.add({
-                    blobId: `blob_${Date.now()}`,
-                    version: version,
-                    encryptedData: newBlob,
-                    timestamp: new Date().toISOString(),
-                    synced: false
-                });
-                return { merged: false, version: version, replaced: true };
-            } else if (this.compareVersions(version, existingBlob.version) < 0) {
-                // Existing blob is newer, keep it
-                return { merged: false, version: existingBlob.version, kept: 'existing' };
-            } else {
-                // Same version - merge logic (in production, implement proper merge)
-                // For now, keep existing if data is identical, otherwise create conflict marker
-                if (newBlob === existingBlob.encryptedData) {
-                    return { merged: true, version: version, conflict: false };
-                } else {
-                    // Conflict detected - mark for manual resolution
-                    await this.db.syncBlobs.add({
-                        blobId: `blob_conflict_${Date.now()}`,
-                        version: version,
-                        encryptedData: newBlob,
-                        timestamp: new Date().toISOString(),
-                        synced: false,
-                        conflict: true,
-                        conflictWith: existingBlob.blobId
-                    });
-                    return { merged: false, version: version, conflict: true };
-                }
-            }
-        } catch (error) {
-            console.error('Error merging sync blob:', error);
-            throw new Error('Failed to merge sync blob');
-        }
-    }
-
-    /**
-     * Compare version strings (semantic versioning)
-     */
-    compareVersions(v1, v2) {
-        const v1Parts = v1.split('.').map(Number);
-        const v2Parts = v2.split('.').map(Number);
-
-        for (let i = 0; i < Math.max(v1Parts.length, v2Parts.length); i++) {
-            const v1Part = v1Parts[i] || 0;
-            const v2Part = v2Parts[i] || 0;
-
-            if (v1Part > v2Part) return 1;
-            if (v1Part < v2Part) return -1;
-        }
-
-        return 0;
-    }
-
-    /**
-     * Get latest sync blob version
-     */
-    async getLatestSyncBlob() {
-        try {
-            const blobs = await this.db.syncBlobs
-                .orderBy('version')
-                .reverse()
-                .limit(1)
-                .toArray();
-
-            return blobs.length > 0 ? blobs[0] : null;
-        } catch (error) {
-            console.error('Error getting latest sync blob:', error);
-            return null;
-        }
-    }
-
-    /**
-     * Store encrypted sync blob
-     */
-    async storeSyncBlob(encryptedBlob, version) {
-        try {
-            const result = await this.mergeSyncBlob(encryptedBlob, version);
-            return result;
-        } catch (error) {
-            console.error('Error storing sync blob:', error);
-            throw error;
-        }
-    }
-
-    /**
-     * Get all invoices for a merchant
+     * Get all invoices for a merchant from blockchain
      */
     async getInvoices(merchantId) {
         try {
-            return await this.db.invoices
-                .where('merchantId')
-                .equals(merchantId)
-                .toArray();
+            if (!this.piStorage) {
+                await this.initialize();
+            }
+
+            // Get all invoice entries from blockchain
+            const entries = await this.piStorage.listAccountData('invoice:');
+            
+            // Filter by merchant ID and convert to array
+            const invoices = entries
+                .map(entry => entry.value)
+                .filter(invoice => invoice.merchantId === merchantId);
+            
+            return invoices;
         } catch (error) {
             console.error('Error getting invoices:', error);
             return [];
         }
     }
 
+
     /**
-     * Create new invoice
+     * Create new invoice on blockchain
      */
     async createInvoice(invoiceData) {
         try {
-            // Ensure database is initialized and open
-            if (!this.db || !this.db.isOpen()) {
-                console.log('Database not initialized in createInvoice, initializing now...');
+            if (!this.piStorage) {
                 await this.initialize();
             }
 
-            // Save ALL invoice data including items, customerName, cashPaidFiat, etc.
+            // Prepare invoice record with all data
             const invoiceRecord = {
                 invoiceId: invoiceData.invoiceId || `INV-${Date.now()}`,
                 merchantId: invoiceData.merchantId,
@@ -591,7 +241,7 @@ class DatabaseManager {
                 status: invoiceData.status || 'pending',
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString(),
-                // Additional fields for editing
+                // Additional fields
                 customerName: invoiceData.customerName || '',
                 items: invoiceData.items || [],
                 cashPaidFiat: invoiceData.cashPaidFiat || 0,
@@ -601,11 +251,13 @@ class DatabaseManager {
                 externalRef: invoiceData.externalRef || null
             };
 
-            console.log('💾 Saving invoice with full data:', invoiceRecord);
+            console.log('💾 Saving invoice to blockchain:', invoiceRecord.invoiceId);
 
-            const invoiceId = await this.db.invoices.add(invoiceRecord);
-            console.log('✅ Invoice saved with ID:', invoiceId);
-            return invoiceId;
+            // Store on blockchain (will use large data if needed)
+            await this.piStorage.setLargeData(`invoice:${invoiceRecord.invoiceId}`, invoiceRecord);
+            
+            console.log('✅ Invoice saved to blockchain:', invoiceRecord.invoiceId);
+            return invoiceRecord.invoiceId;
         } catch (error) {
             console.error('Error creating invoice:', error);
             throw error;
@@ -613,20 +265,24 @@ class DatabaseManager {
     }
 
     /**
-     * Update invoice status
+     * Update invoice status on blockchain
      */
     async updateInvoiceStatus(invoiceId, status) {
         try {
-            const invoice = await this.db.invoices
-                .where('invoiceId')
-                .equals(invoiceId)
-                .first();
+            if (!this.piStorage) {
+                await this.initialize();
+            }
 
+            // Get existing invoice
+            const invoice = await this.piStorage.getLargeData(`invoice:${invoiceId}`);
+            
             if (invoice) {
-                await this.db.invoices.update(invoice.id, {
-                    status: status,
-                    updatedAt: new Date().toISOString()
-                });
+                // Update status
+                invoice.status = status;
+                invoice.updatedAt = new Date().toISOString();
+                
+                // Save back to blockchain
+                await this.piStorage.setLargeData(`invoice:${invoiceId}`, invoice);
                 return true;
             }
             return false;
@@ -637,11 +293,15 @@ class DatabaseManager {
     }
 
     /**
-     * Add transaction record
+     * Add transaction record on blockchain
      */
     async addTransaction(transactionData) {
         try {
-            await this.db.transactions.add({
+            if (!this.piStorage) {
+                await this.initialize();
+            }
+
+            const transactionRecord = {
                 transactionId: transactionData.transactionId || `TX-${Date.now()}`,
                 invoiceId: transactionData.invoiceId,
                 amount: transactionData.amount,
@@ -650,7 +310,10 @@ class DatabaseManager {
                 status: transactionData.status || 'pending',
                 verified: transactionData.verified || false,
                 timestamp: new Date().toISOString()
-            });
+            };
+
+            // Store on blockchain
+            await this.piStorage.setAccountData(`transaction:${transactionRecord.transactionId}`, transactionRecord);
             return true;
         } catch (error) {
             console.error('Error adding transaction:', error);
@@ -659,11 +322,15 @@ class DatabaseManager {
     }
 
     /**
-     * Get setting value
+     * Get setting value from blockchain
      */
     async getSetting(key) {
         try {
-            const setting = await this.db.settings.where('key').equals(key).first();
+            if (!this.piStorage) {
+                await this.initialize();
+            }
+
+            const setting = await this.piStorage.getAccountData(`settings:${key}`);
             return setting ? setting.value : null;
         } catch (error) {
             console.error('Error getting setting:', error);
@@ -672,11 +339,15 @@ class DatabaseManager {
     }
 
     /**
-     * Set setting value
+     * Set setting value on blockchain
      */
     async setSetting(key, value) {
         try {
-            await this.db.settings.put({ key, value });
+            if (!this.piStorage) {
+                await this.initialize();
+            }
+
+            await this.piStorage.setAccountData(`settings:${key}`, { value: value });
             return true;
         } catch (error) {
             console.error('Error setting setting:', error);
@@ -685,15 +356,25 @@ class DatabaseManager {
     }
 
     /**
-     * Export all data for backup
+     * Export all data for backup (from blockchain)
      */
     async exportData() {
         try {
+            if (!this.piStorage) {
+                await this.initialize();
+            }
+
+            // Get all data from blockchain
+            const invoices = (await this.piStorage.listAccountData('invoice:')).map(e => e.value);
+            const transactions = (await this.piStorage.listAccountData('transaction:')).map(e => e.value);
+            const products = (await this.piStorage.listAccountData('product:')).map(e => e.value);
+            const settings = (await this.piStorage.listAccountData('settings:')).map(e => e.value);
+
             const data = {
-                merchants: await this.db.merchants.toArray(),
-                invoices: await this.db.invoices.toArray(),
-                transactions: await this.db.transactions.toArray(),
-                settings: await this.db.settings.toArray(),
+                invoices: invoices,
+                transactions: transactions,
+                products: products,
+                settings: settings,
                 exportDate: new Date().toISOString(),
                 version: '1.0.0'
             };
@@ -715,15 +396,38 @@ class DatabaseManager {
     }
 
     /**
-     * Clear all data (for demo mode reset)
+     * Clear all data from blockchain (WARNING: This deletes all data!)
+     */
+    /**
+     * Clear all data from blockchain (used by wipeAllData)
      */
     async clearAllData() {
         try {
-            await this.db.merchants.clear();
-            await this.db.invoices.clear();
-            await this.db.transactions.clear();
-            await this.db.settings.clear();
-            await this.db.syncBlobs.clear();
+            if (!this.piStorage) {
+                await this.initialize();
+            }
+
+            // Get all data entries
+            const allInvoices = await this.piStorage.listAccountData('invoice:');
+            const allTransactions = await this.piStorage.listAccountData('transaction:');
+            const allProducts = await this.piStorage.listAccountData('product:');
+            const allSettings = await this.piStorage.listAccountData('settings:');
+
+            // Delete all entries
+            for (const entry of allInvoices) {
+                await this.piStorage.deleteLargeData(entry.key);
+            }
+            for (const entry of allTransactions) {
+                await this.piStorage.deleteAccountData(entry.key);
+            }
+            for (const entry of allProducts) {
+                await this.piStorage.deleteLargeData(entry.key);
+            }
+            for (const entry of allSettings) {
+                await this.piStorage.deleteAccountData(entry.key);
+            }
+
+            console.warn('⚠️ All data cleared from blockchain');
             return true;
         } catch (error) {
             console.error('Error clearing data:', error);
@@ -731,22 +435,16 @@ class DatabaseManager {
         }
     }
 
-    /**
-     * Check if in demo mode
-     */
-    isDemoModeActive() {
-        return this.isDemoMode;
-    }
 
     /**
      * Req #41: DATA HYGIENE - Archive old invoices (Auto-Archiving)
-     * Exports invoices older than specified months to JSON and deletes them from DB
+     * Exports invoices older than specified months to JSON and deletes them from blockchain
      * @param {number} monthsOld - Archive invoices older than this many months (default: 6)
      * @returns {Object} Archive data and count of archived invoices
      */
     async archiveOldData(monthsOld = 6) {
         try {
-            if (!this.db || !this.db.isOpen()) {
+            if (!this.piStorage) {
                 await this.initialize();
             }
 
@@ -756,11 +454,11 @@ class DatabaseManager {
 
             console.log(`📦 Archiving invoices older than ${monthsOld} months (before ${cutoffISO})...`);
 
-            // Get old invoices
-            const oldInvoices = await this.db.invoices
-                .where('createdAt')
-                .below(cutoffISO)
-                .toArray();
+            // Get all invoices from blockchain
+            const allInvoices = (await this.piStorage.listAccountData('invoice:')).map(e => e.value);
+            
+            // Filter old invoices
+            const oldInvoices = allInvoices.filter(inv => inv.createdAt < cutoffISO);
 
             if (oldInvoices.length === 0) {
                 return {
@@ -769,12 +467,10 @@ class DatabaseManager {
                 };
             }
 
-            // Get related transactions for these invoices
+            // Get related transactions
             const invoiceIds = oldInvoices.map(inv => inv.invoiceId);
-            const relatedTransactions = await this.db.transactions
-                .where('invoiceId')
-                .anyOf(invoiceIds)
-                .toArray();
+            const allTransactions = (await this.piStorage.listAccountData('transaction:')).map(e => e.value);
+            const relatedTransactions = allTransactions.filter(tx => invoiceIds.includes(tx.invoiceId));
 
             // Create archive object
             const archiveData = {
@@ -787,18 +483,14 @@ class DatabaseManager {
                 totalTransactions: relatedTransactions.length
             };
 
-            // Delete old invoices from database
-            await this.db.invoices
-                .where('createdAt')
-                .below(cutoffISO)
-                .delete();
+            // Delete old invoices from blockchain
+            for (const invoice of oldInvoices) {
+                await this.piStorage.deleteLargeData(`invoice:${invoice.invoiceId}`);
+            }
 
             // Delete related transactions
-            if (relatedTransactions.length > 0) {
-                await this.db.transactions
-                    .where('invoiceId')
-                    .anyOf(invoiceIds)
-                    .delete();
+            for (const tx of relatedTransactions) {
+                await this.piStorage.deleteAccountData(`transaction:${tx.transactionId}`);
             }
 
             console.log(`✅ Archived ${oldInvoices.length} invoices and ${relatedTransactions.length} transactions`);
@@ -817,13 +509,13 @@ class DatabaseManager {
 
     /**
      * Req #36: Bulk Import Products from CSV
-     * Parses CSV string and adds products to database
+     * Parses CSV string and adds products to blockchain
      * @param {string} csvText - Raw CSV content
      * @returns {Object} Result { imported: count, errors: count }
      */
     async importProductsFromCSV(csvText) {
         try {
-            if (!this.db || !this.db.isOpen()) {
+            if (!this.piStorage) {
                 await this.initialize();
             }
 
@@ -848,16 +540,14 @@ class DatabaseManager {
             const categoryIdx = headers.indexOf('category');
             const stockIdx = headers.indexOf('stock_qty');
 
-            const productsToAdd = [];
+            let importedCount = 0;
             let errorCount = 0;
 
-            // Parse rows
+            // Parse rows and save to blockchain
             for (let i = 1; i < lines.length; i++) {
                 const line = lines[i].trim();
                 if (!line) continue;
 
-                // Handle simple CSV splitting (naive implementation, assumes no commas in values for now)
-                // In production, use a proper CSV parser for robust handling
                 const cols = line.split(',').map(c => c.trim());
 
                 if (cols.length < headers.length) {
@@ -876,7 +566,7 @@ class DatabaseManager {
                         continue;
                     }
 
-                    productsToAdd.push({
+                    const productData = {
                         productId: `PROD-${Date.now()}-${i}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`,
                         name: name,
                         pricePi: pricePi,
@@ -885,20 +575,21 @@ class DatabaseManager {
                         stockQty: stockIdx > -1 ? parseInt(cols[stockIdx]) || 0 : 0,
                         createdAt: new Date().toISOString(),
                         updatedAt: new Date().toISOString()
-                    });
+                    };
+
+                    // Save to blockchain
+                    await this.saveProduct(productData);
+                    importedCount++;
                 } catch (e) {
                     console.error(`Error parsing row ${i}:`, e);
                     errorCount++;
                 }
             }
 
-            if (productsToAdd.length > 0) {
-                await this.db.products.bulkAdd(productsToAdd);
-                console.log(`✅ Successfully imported ${productsToAdd.length} products`);
-            }
+            console.log(`✅ Successfully imported ${importedCount} products`);
 
             return {
-                imported: productsToAdd.length,
+                imported: importedCount,
                 errors: errorCount
             };
 
@@ -910,23 +601,270 @@ class DatabaseManager {
 
     /**
      * Req #35: Immutable Audit Log
-     * Records sensitive actions for security and compliance
+     * Records sensitive actions for security and compliance on blockchain
      */
-    /**
-     * Check if user needs backup reminder (once per week)
-     */
-    async checkBackupReminder() {
+    async logAuditEvent(action, entityType, entityId, details, userRole, userId) {
         try {
-            const lastBackupReminder = localStorage.getItem('lastBackupReminder');
-            const now = Date.now();
-            const oneWeek = 7 * 24 * 60 * 60 * 1000; // 7 days in milliseconds
+            if (!this.piStorage) {
+                await this.initialize();
+            }
 
-            // Check if reminder is needed (once per week)
-            if (!lastBackupReminder || (now - parseInt(lastBackupReminder)) > oneWeek) {
-                // Check if user has invoices (has data to backup)
-                const invoiceCount = await this.db.invoices.count();
-                
-                if (invoiceCount > 0) {
+            const auditLog = {
+                timestamp: new Date().toISOString(),
+                action: action,
+                entityType: entityType,
+                entityId: entityId,
+                details: details,
+                userRole: userRole || 'system',
+                userId: userId || 'anonymous',
+                ipAddress: 'local'
+            };
+
+            // Store audit log on blockchain
+            const logId = `audit:${Date.now()}:${Math.random().toString(36).substring(2, 9)}`;
+            await this.piStorage.setAccountData(logId, auditLog);
+            
+            console.log(`📝 Audit Log: ${action} on ${entityType}`);
+            return true;
+        } catch (error) {
+            console.error('Failed to write audit log:', error);
+            return false;
+        }
+    }
+
+    /**
+     * Get all products from blockchain
+     */
+    async getProducts() {
+        try {
+            if (!this.piStorage) {
+                await this.initialize();
+            }
+
+            const entries = await this.piStorage.listAccountData('product:');
+            return entries.map(entry => entry.value);
+        } catch (error) {
+            console.error('Error getting products:', error);
+            return [];
+        }
+    }
+
+    /**
+     * Save product to blockchain
+     */
+    async saveProduct(productData) {
+        try {
+            if (!this.piStorage) {
+                await this.initialize();
+            }
+
+            const productId = productData.productId || `PROD-${Date.now()}`;
+            const productRecord = {
+                productId: productId,
+                name: productData.name,
+                pricePi: productData.pricePi,
+                barcode: productData.barcode || null,
+                category: productData.category || 'General',
+                stockQty: productData.stockQty || 0,
+                imageBase64: productData.imageBase64 || null,
+                createdAt: productData.createdAt || new Date().toISOString(),
+                updatedAt: new Date().toISOString()
+            };
+
+            // Store on blockchain (use large data for images)
+            await this.piStorage.setLargeData(`product:${productId}`, productRecord);
+            return productId;
+        } catch (error) {
+            console.error('Error saving product:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Delete product from blockchain
+     */
+    async deleteProduct(productId) {
+        try {
+            if (!this.piStorage) {
+                await this.initialize();
+            }
+
+            await this.piStorage.deleteLargeData(`product:${productId}`);
+            return true;
+        } catch (error) {
+            console.error('Error deleting product:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Update invoice on blockchain
+     */
+    async updateInvoice(invoiceId, updates) {
+        try {
+            if (!this.piStorage) {
+                await this.initialize();
+            }
+
+            // Get existing invoice
+            const invoice = await this.piStorage.getLargeData(`invoice:${invoiceId}`);
+            
+            if (!invoice) {
+                throw new Error('Invoice not found');
+            }
+
+            // Apply updates
+            Object.assign(invoice, updates);
+            invoice.updatedAt = new Date().toISOString();
+
+            // Save back to blockchain
+            await this.piStorage.setLargeData(`invoice:${invoiceId}`, invoice);
+            return true;
+        } catch (error) {
+            console.error('Error updating invoice:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Delete invoice from blockchain
+     */
+    async deleteInvoice(invoiceId) {
+        try {
+            if (!this.piStorage) {
+                await this.initialize();
+            }
+
+            await this.piStorage.deleteLargeData(`invoice:${invoiceId}`);
+            return true;
+        } catch (error) {
+            console.error('Error deleting invoice:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Get invoice by ID from blockchain
+     */
+    async getInvoice(invoiceId) {
+        try {
+            if (!this.piStorage) {
+                await this.initialize();
+            }
+
+            return await this.piStorage.getLargeData(`invoice:${invoiceId}`);
+        } catch (error) {
+            console.error('Error getting invoice:', error);
+            return null;
+        }
+    }
+
+    /**
+     * Save refund record on blockchain
+     */
+    async saveRefund(refundData) {
+        try {
+            if (!this.piStorage) {
+                await this.initialize();
+            }
+
+            const refundId = refundData.refundId || `REF-${Date.now()}`;
+            const refundRecord = {
+                refundId: refundId,
+                invoiceId: refundData.invoiceId,
+                amount: refundData.amount,
+                reason: refundData.reason,
+                createdAt: refundData.createdAt || new Date().toISOString()
+            };
+
+            await this.piStorage.setAccountData(`refund:${refundId}`, refundRecord);
+            return refundId;
+        } catch (error) {
+            console.error('Error saving refund:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Get all refunds from blockchain
+     */
+    async getRefunds() {
+        try {
+            if (!this.piStorage) {
+                await this.initialize();
+            }
+
+            const entries = await this.piStorage.listAccountData('refund:');
+            return entries.map(entry => entry.value);
+        } catch (error) {
+            console.error('Error getting refunds:', error);
+            return [];
+        }
+    }
+
+    /**
+     * Save shift report on blockchain
+     */
+    async saveShiftReport(reportData) {
+        try {
+            if (!this.piStorage) {
+                await this.initialize();
+            }
+
+            const reportId = reportData.reportId || `SHIFT-${Date.now()}`;
+            const reportRecord = {
+                reportId: reportId,
+                ...reportData,
+                createdAt: reportData.createdAt || new Date().toISOString()
+            };
+
+            await this.piStorage.setLargeData(`shiftReport:${reportId}`, reportRecord);
+            return reportId;
+        } catch (error) {
+            console.error('Error saving shift report:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Get all shift reports from blockchain
+     */
+    async getShiftReports() {
+        try {
+            if (!this.piStorage) {
+                await this.initialize();
+            }
+
+            const entries = await this.piStorage.listAccountData('shiftReport:');
+            return entries.map(entry => entry.value);
+        } catch (error) {
+            console.error('Error getting shift reports:', error);
+            return [];
+        }
+    }
+
+    /**
+     * Get audit logs from blockchain
+     */
+    async getAuditLogs(limit = 100) {
+        try {
+            if (!this.piStorage) {
+                await this.initialize();
+            }
+
+            const entries = await this.piStorage.listAccountData('audit:');
+            // Sort by timestamp (newest first) and limit
+            const logs = entries
+                .map(entry => entry.value)
+                .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+                .slice(0, limit);
+            
+            return logs;
+        } catch (error) {
+            console.error('Error getting audit logs:', error);
+            return [];
+        }
+    }
                     // Show reminder after a short delay
                     setTimeout(() => {
                         if (window.Modal && window.Toast) {
@@ -986,102 +924,30 @@ class DatabaseManager {
         }
     }
 
-    async logAuditEvent(action, entityType, entityId, details, userRole, userId) {
-        try {
-            if (!this.db || !this.db.isOpen()) {
-                // ERROR HANDLING IMPROVEMENT: Try to init, but don't crash if fails (audit shouldn't break app flow)
-                try { 
-                    await this.initialize(); 
-                } catch (e) {
-                    console.warn('Failed to initialize database for audit log (non-critical):', e.message);
-                }
-            }
-
-            await this.db.auditLogs.add({
-                timestamp: new Date().toISOString(),
-                action: action,
-                entityType: entityType,
-                entityId: entityId,
-                details: details, // JSON object
-                userRole: userRole || 'system',
-                userId: userId || 'anonymous',
-                ipAddress: 'local' // Client-side log
-            });
-            console.log(`📝 Audit Log: ${action} on ${entityType}`);
-            return true;
-        } catch (error) {
-            console.error('Failed to write audit log:', error);
-            // Don't throw, just log error
-            return false;
-        }
-    }
 
     /**
      * Req #37: DATA SOVEREIGNTY - Wipe all data (Delete Account)
-     * Completely removes all user data from local storage and remote vault
+     * Completely removes all user data from blockchain
      */
     async wipeAllData() {
         try {
-            console.log('🗑️ Starting complete data wipe...');
+            console.log('🗑️ Starting complete data wipe from blockchain...');
 
-            // 1. Delete all data from Dexie
-            if (this.db) {
-                await this.db.merchants.clear();
-                await this.db.invoices.clear();
-                await this.db.transactions.clear();
-                await this.db.settings.clear();
-                await this.db.syncBlobs.clear();
-                await this.db.usedTransactions.clear();
-                await this.db.shiftReports.clear();
-                await this.db.products.clear();
-                await this.db.refunds.clear();
-                await this.db.auditLogs.clear();
-
-                // Close and delete database
-                await this.db.close();
-                await Dexie.delete('PiLedgerDB');
-                console.log('✅ Local database wiped');
+            if (!this.piStorage) {
+                await this.initialize();
             }
 
-            // 2. Clear localStorage
+            // Get merchant ID
+            const merchantId = await this.getCurrentMerchantId();
+            
+            // Delete all data using clearAllData (which handles all prefixes)
+            await this.clearAllData();
+
+            // Clear localStorage and sessionStorage
             localStorage.clear();
-            console.log('✅ LocalStorage cleared');
-
-            // 3. Clear sessionStorage
             sessionStorage.clear();
-            console.log('✅ SessionStorage cleared');
 
-            // 4. Clear IndexedDB (if any remaining)
-            if ('indexedDB' in window) {
-                const databases = await indexedDB.databases();
-                for (const db of databases) {
-                    if (db.name && db.name.includes('PiLedger')) {
-                        await indexedDB.deleteDatabase(db.name);
-                    }
-                }
-                console.log('✅ IndexedDB cleared');
-            }
-
-            // 5. Remote wipe - Delete vault from server
-            try {
-                const response = await fetch('/sync/vault', {
-                    method: 'DELETE',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    }
-                });
-
-                if (response.ok) {
-                    console.log('✅ Remote vault deleted');
-                } else {
-                    console.warn('⚠️ Remote vault deletion failed (may not exist)');
-                }
-            } catch (error) {
-                console.warn('⚠️ Remote vault deletion error (may be offline):', error);
-                // Don't fail if remote deletion fails - local wipe is more important
-            }
-
-            console.log('✅ Complete data wipe finished');
+            console.log('✅ All data wiped from blockchain and local storage');
             return true;
         } catch (error) {
             console.error('❌ Error wiping data:', error);

@@ -100,9 +100,7 @@ class SSEClient {
         
         // Update invoice status in database
         if (window.dbManager && window.dbManager.db) {
-            window.dbManager.db.invoices
-                .where('invoiceId').equals(data.invoice_id)
-                .modify({ status: 'paid', updatedAt: new Date().toISOString() })
+            await window.dbManager.updateInvoiceStatus(data.invoice_id, 'paid')
                 .then(() => {
                     console.log('✅ Invoice status updated to paid');
                     

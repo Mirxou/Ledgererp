@@ -15,7 +15,7 @@ class ShiftManager {
     async initialize() {
         try {
             // Load last shift closure date from settings
-            const lastClosure = await this.dbManager.db.settings.get('lastShiftClosure');
+            const lastClosure = await this.dbManager.getSetting('lastShiftClosure');
             if (lastClosure) {
                 this.lastShiftClosure = new Date(lastClosure.value);
             }
@@ -53,10 +53,7 @@ class ShiftManager {
             const reportId = await this.saveReport(report, totals);
 
             // Update last closure date
-            await this.dbManager.db.settings.put({
-                key: 'lastShiftClosure',
-                value: new Date().toISOString()
-            });
+            await this.dbManager.setSetting('lastShiftClosure', new Date().toISOString());
             this.lastShiftClosure = new Date();
 
             // Reset daily counters (by updating stats display)
@@ -82,7 +79,8 @@ class ShiftManager {
             const now = new Date();
 
             // Get all invoices since last closure
-            const allInvoices = await this.dbManager.db.invoices.toArray();
+            const merchantId = await this.dbManager.getCurrentMerchantId();
+            const allInvoices = await this.dbManager.getInvoices(merchantId);
             const shiftInvoices = allInvoices.filter(inv => {
                 const invDate = new Date(inv.createdAt);
                 return invDate >= startDate && invDate <= now && inv.status !== 'voided' && inv.status !== 'refunded';
@@ -156,7 +154,7 @@ Report Generated: ${new Date().toISOString()}
     async saveReport(report, totals) {
         try {
             const reportId = `SHIFT-${Date.now()}`;
-            await this.dbManager.db.shiftReports.add({
+            await this.dbManager.saveShiftReport({
                 reportId: reportId,
                 date: new Date().toISOString(),
                 totalCash: totals.totalCash,
@@ -238,12 +236,11 @@ Report Generated: ${new Date().toISOString()}
      */
     async getShiftReports(limit = 10) {
         try {
-            const reports = await this.dbManager.db.shiftReports
-                .orderBy('createdAt')
-                .reverse()
-                .limit(limit)
-                .toArray();
-            return reports;
+            const reports = await this.dbManager.getShiftReports();
+            // Sort by createdAt (newest first) and limit
+            return reports
+                .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+                .slice(0, limit);
         } catch (error) {
             console.error('Error getting shift reports:', error);
             return [];

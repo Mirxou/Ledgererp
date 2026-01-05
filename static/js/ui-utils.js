@@ -35,12 +35,17 @@ class Toast {
             safeMessage = message.replace(/<[^>]*>/g, '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
         }
         
-        // Use textContent for icon and message to prevent XSS
-        toast.innerHTML = `
-            <span class="toast-icon">${icon}</span>
-            <span class="toast-message"></span>
-        `;
-        toast.querySelector('.toast-message').textContent = safeMessage;
+        // XSS FIX: Use textContent instead of innerHTML for structure
+        const iconSpan = document.createElement('span');
+        iconSpan.className = 'toast-icon';
+        iconSpan.textContent = icon; // Icon is safe (emoji or empty)
+        
+        const messageSpan = document.createElement('span');
+        messageSpan.className = 'toast-message';
+        messageSpan.textContent = safeMessage;
+        
+        toast.appendChild(iconSpan);
+        toast.appendChild(messageSpan);
 
         this.container.appendChild(toast);
 

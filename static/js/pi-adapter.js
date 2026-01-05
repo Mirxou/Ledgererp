@@ -47,10 +47,10 @@ class PiAdapter {
 
             // Initialize Pi SDK
             if (!this.sdkInitialized) {
-                // Req: Sandbox Mode for Testnet (Critical for Development)
-                await Pi.init({ version: '2.0', sandbox: true });
+                // Production mode - no sandbox
+                await Pi.init({ version: '2.0', sandbox: false });
                 this.sdkInitialized = true;
-                console.log('Pi SDK initialized successfully (Sandbox: TRUE)');
+                console.log('Pi SDK initialized successfully (Production Mode)');
             }
 
             return { success: true };
@@ -100,17 +100,28 @@ class PiAdapter {
                 throw new Error('Invalid authentication response from Pi SDK');
             }
 
+            // HACKATHON 2025 PATTERN: Store user data (Blind_Lounge pattern)
             this.user = {
-                uid: authResult.user.uid,
+                uid: authResult.user.uid, // Merchant ID = Pi.uid (Hackathon 2025 pattern)
                 username: authResult.user.username
             };
             this.accessToken = authResult.accessToken;
+
+            // HACKATHON 2025 PATTERN: KYC check (required for all Hackathon winners)
+            const kycStatus = await this.checkKYCStatus();
+            if (!kycStatus || !kycStatus.completed) {
+                throw new Error('KYC verification required. Please complete KYC in Pi Browser to use this application.');
+            }
+            
+            // HACKATHON 2025 PATTERN: Store KYC status in user object (Blind_Lounge pattern)
+            this.user.kycCompleted = kycStatus.completed;
 
             console.log('Pi authentication successful:', this.user);
             return {
                 success: true,
                 user: this.user,
-                accessToken: this.accessToken
+                accessToken: this.accessToken,
+                kycCompleted: kycStatus.completed
             };
         } catch (error) {
             console.error('Pi authentication failed:', error);
@@ -595,6 +606,41 @@ class PiAdapter {
      */
     onPayment(callback) {
         this.paymentCallbacks.set('default', callback);
+    }
+
+    /**
+     * HACKATHON 2025 PATTERN: Check KYC status (Blind_Lounge pattern)
+     * Required for all Hackathon winners - KYC check before access
+     */
+    async checkKYCStatus() {
+        try {
+            if (!this.accessToken) {
+                return { completed: false, message: 'No access token available' };
+            }
+
+            const response = await fetch('/api/pi/kyc-status', {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${this.accessToken}`,
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const data = await response.json();
+            // Backend returns {kyc_completed: true/false, kyc_status: "verified"/...}
+            return {
+                completed: data.kyc_completed || data.completed || false,
+                status: data.kyc_status || data.status || 'unknown',
+                message: data.message || 'KYC status checked'
+            };
+        } catch (error) {
+            console.error('Error checking KYC status:', error);
+            return { completed: false, message: 'Failed to check KYC status' };
+        }
     }
 
     /**

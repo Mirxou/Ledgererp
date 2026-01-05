@@ -14,16 +14,17 @@ class DataExporter {
      */
     async exportAllDataToCSV() {
         try {
-            if (!this.dbManager || !this.dbManager.db) {
-                throw new Error('Database not initialized');
+            if (!this.dbManager || !this.dbManager.piStorage) {
+                await this.dbManager.initialize();
             }
 
+            const merchantId = await this.dbManager.getCurrentMerchantId();
             const data = {
-                invoices: await this.dbManager.db.invoices.toArray(),
-                transactions: await this.dbManager.db.transactions.toArray(),
-                products: await this.dbManager.db.products.toArray(),
-                shiftReports: await this.dbManager.db.shiftReports.toArray(),
-                refunds: await this.dbManager.db.refunds.toArray(),
+                invoices: await this.dbManager.getInvoices(merchantId),
+                transactions: (await this.dbManager.piStorage.listAccountData('transaction:')).map(e => e.value),
+                products: await this.dbManager.getProducts(),
+                shiftReports: await this.dbManager.getShiftReports(),
+                refunds: await this.dbManager.getRefunds(),
                 exportDate: new Date().toISOString()
             };
 
@@ -179,32 +180,33 @@ class DataExporter {
      */
     async exportTableToCSV(tableName) {
         try {
-            if (!this.dbManager || !this.dbManager.db) {
-                throw new Error('Database not initialized');
+            if (!this.dbManager || !this.dbManager.piStorage) {
+                await this.dbManager.initialize();
             }
 
+            const merchantId = await this.dbManager.getCurrentMerchantId();
             let data = [];
             let headers = [];
 
             switch (tableName) {
                 case 'invoices':
-                    data = await this.dbManager.db.invoices.toArray();
+                    data = await this.dbManager.getInvoices(merchantId);
                     headers = this.getInvoiceHeaders();
                     break;
                 case 'transactions':
-                    data = await this.dbManager.db.transactions.toArray();
+                    data = (await this.dbManager.piStorage.listAccountData('transaction:')).map(e => e.value);
                     headers = this.getTransactionHeaders();
                     break;
                 case 'products':
-                    data = await this.dbManager.db.products.toArray();
+                    data = await this.dbManager.getProducts();
                     headers = this.getProductHeaders();
                     break;
                 case 'shiftReports':
-                    data = await this.dbManager.db.shiftReports.toArray();
+                    data = await this.dbManager.getShiftReports();
                     headers = this.getShiftReportHeaders();
                     break;
                 case 'refunds':
-                    data = await this.dbManager.db.refunds.toArray();
+                    data = await this.dbManager.getRefunds();
                     headers = this.getRefundHeaders();
                     break;
                 default:

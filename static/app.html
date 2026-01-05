@@ -21,8 +21,7 @@
     <link rel="stylesheet" href="/css/style.css">
 
     <!-- Req #15: SRI Hashes for external scripts -->
-    <!-- Req #24: Dexie - Load as script tag (UMD module, not ES module) -->
-    <!-- IMPORTANT: Load as script tag, NOT ES module import -->
+    <!-- Dexie removed - Using Pi Blockchain Storage instead -->
     <script>
         // ON-SCREEN DEBUGGER for Mobile
         (function () {
@@ -74,22 +73,7 @@
 
         console.log('Debug Console Initialized');
     </script>
-    <!-- Local Dexie with CDN fallback - load CDN directly if local fails -->
-    <script>
-        (function() {
-            const script = document.createElement('script');
-            script.src = '/libs/dexie.min.js';
-            script.defer = true;
-            script.onerror = function() {
-                console.warn('Local Dexie failed, loading from CDN...');
-                const cdnScript = document.createElement('script');
-                cdnScript.src = 'https://cdn.jsdelivr.net/npm/dexie@3.2.4/dist/dexie.min.js';
-                cdnScript.defer = true;
-                document.head.appendChild(cdnScript);
-            };
-            document.head.appendChild(script);
-        })();
-    </script>
+    <!-- Dexie removed - Using Pi Blockchain Storage (pi-storage.js) -->
     <!-- Local Html5-Qrcode -->
     <script src="/libs/html5-qrcode.min.js" defer></script>
 
@@ -191,16 +175,7 @@
             font-weight: bold;
         }
 
-        .demo-container {
-            margin-top: 20px;
-            padding: 15px;
-            background: #f0f0f0;
-            border-radius: 5px;
-        }
-
-        .demo-header {
-            margin-bottom: 10px;
-        }
+        /* Demo Mode CSS removed - Using Pi Blockchain Storage */
 
         /* PERFORMANCE: Critical CSS - Loading Spinner (shown immediately) */
         /* Req #42: Dark Mode - Loading spinner adapts to theme */
@@ -567,19 +542,6 @@
 
         <!-- Main Content -->
         <main class="app-main">
-            <!-- Req #3: Demo Mode Button -->
-            <!-- CRITICAL: Demo Mode is for testing/review purposes only -->
-            <div id="demo-mode-section" class="demo-mode-section">
-                <h2>Demo Mode</h2>
-                <p>
-                    <strong>For Reviewers:</strong> Demo Mode allows testing the application without Pi Network
-                    authentication.
-                    This is a testing feature only and does not represent the full production experience.
-                </p>
-                <button id="demo-mode-btn" class="btn btn-md btn-blue">
-                    Enter Demo Mode
-                </button>
-            </div>
 
             <!-- Req #8: Anti-Phishing Warning -->
             <div id="phishing-warning">
@@ -594,14 +556,10 @@
                     <button id="pi-auth-btn" class="btn btn-lg btn-green">
                         Login with Pi Network
                     </button>
-                    <button id="skip-auth-btn" class="btn btn-lg btn-orange">
-                        Setup Without Authentication
-                    </button>
                 </div>
                 <div id="auth-status"></div>
                 <p class="form-note">
-                    💡 <strong>For Development:</strong> Use "Setup Without Authentication" to test the setup process
-                    without Pi Network login.
+                    ⚠️ <strong>KYC Required:</strong> You must complete KYC verification in Pi Browser to use this application.
                 </p>
             </div>
 
@@ -635,13 +593,6 @@
             <!-- Dashboard Section -->
             <div id="dashboard-section">
                 <div id="dashboard-view" class="dashboard-view">
-                    <!-- Demo Mode Banner (hidden by default) -->
-                    <div id="demo-mode-banner" class="banner-demo">
-                        <span class="icon-lg mr-10">🧪</span>
-                        <span><strong>DEMO MODE</strong> - Test the application with sample data. All features are
-                            available for testing. Data is saved to your local browser database.</span>
-                        <span class="icon-lg ml-10">🧪</span>
-                    </div>
 
                     <!-- Live Store Indicator (hidden by default) -->
                     <div id="live-store-indicator" class="banner-live">
@@ -994,9 +945,9 @@
                         document.head.appendChild(script);
                     });
                     
-                    // Also try to initialize app immediately (for demo mode)
+                    // Also try to initialize app immediately
                     if (typeof initApp === 'function' && !window.appInitialized) {
-                        console.log('🔄 Attempting to initialize app immediately (demo mode)...');
+                        console.log('🔄 Attempting to initialize app immediately...');
                         setTimeout(() => {
                             initApp().catch(err => console.error('Error in initApp:', err));
                         }, 1000);
@@ -1007,65 +958,18 @@
     </script>
     <script type="module">
         // Req #29: Self-hosted modules (China Safe)
-        // CRITICAL: Wait for external libraries (Dexie, DOMPurify) to load first
+        // Wait for external libraries (DOMPurify) to load
         console.log('=== Module Script Started ===');
         console.log('Document ready state:', document.readyState);
-        console.log('Current window.Dexie:', typeof window !== 'undefined' ? typeof window.Dexie : 'N/A');
         console.log('Current window.DOMPurify:', typeof window !== 'undefined' ? typeof window.DOMPurify : 'N/A');
 
-        // Wait for Dexie to be available (DOMPurify and ethers are loaded as ES modules)
-        import { CSVImportManager } from '/js/csv-import.js';
+        // Import modules (no Dexie needed - using Pi Blockchain Storage)
+        import { CSVImportManager } from '/static/js/csv-import.js';
         import QRious from 'https://esm.sh/qrious@4.0.2';
 
         async function waitForLibraries() {
-            let attempts = 0;
-            const maxAttempts = 300; // 30 seconds max (increased for slow connections)
-
-            console.log('=== Waiting for Dexie (script tag) ===');
-            console.log('Note: DOMPurify and ethers will be loaded as ES modules');
-
-            // Try loading from CDN immediately if Dexie is not available after 3 seconds
-            setTimeout(() => {
-                if (!window.Dexie) {
-                    console.warn('Dexie still not loaded after 3s, trying CDN...');
-                    const script = document.createElement('script');
-                    script.src = 'https://cdn.jsdelivr.net/npm/dexie@3.2.4/dist/dexie.min.js';
-                    script.defer = true;
-                    document.head.appendChild(script);
-                }
-            }, 3000);
-
-            while (attempts < maxAttempts) {
-                const dexieReady = typeof window !== 'undefined' && window.Dexie;
-
-                if (dexieReady) {
-                    console.log('✅✅✅ DEXIE LOADED ✅✅✅');
-                    console.log('Dexie:', typeof window.Dexie);
-                    return true;
-                }
-
-                if (attempts % 20 === 0) {
-                    console.log(`⏳ Waiting for Dexie... (${attempts}/${maxAttempts})`);
-                    console.log('Current window.Dexie:', typeof window.Dexie);
-                }
-
-                await new Promise(resolve => setTimeout(resolve, 100));
-                attempts++;
-            }
-
-            // Final check before giving up
-            if (window.Dexie) {
-                console.log('✅✅✅ DEXIE FOUND IN FINAL CHECK ✅✅✅');
-                return true;
-            }
-
-            console.error('❌❌❌ TIMEOUT WAITING FOR DEXIE ❌❌❌');
-            // Don't throw error, try to continue anyway
-            console.warn('Continuing without Dexie - some features may not work');
-            // Hide loading spinner even if Dexie failed
-            const spinner = document.getElementById('loading-spinner');
-            if (spinner) spinner.style.display = 'none';
-            return false;
+            // No need to wait for Dexie - using Pi Blockchain Storage
+            return true;
         }
 
         // Import modules after libraries are loaded
@@ -1347,7 +1251,7 @@
                             console.log('🔇 PostMessage warnings suppressed in development mode');
                         }
                     } catch (err) {
-                        console.warn('Pi SDK initialization failed (this is OK for demo mode):', err.message);
+                        console.warn('Pi SDK initialization failed:', err.message);
                     }
                 }
 
@@ -1360,7 +1264,7 @@
                     });
                 }
 
-                // Initialize database (Req #24) - Must complete before demo mode
+                // Initialize database (Req #24)
                 // Store dbInitialized in a way that event handler can access it
                 window.dbInitialized = false;
                 if (dbManager) {
@@ -1374,64 +1278,6 @@
                     }
                 }
 
-                // Demo Mode Handler (Req #3)
-                const demoBtn = document.getElementById('demo-mode-btn');
-                if (!demoBtn) {
-                    console.error('Demo mode button not found!');
-                    alert('خطأ: لم يتم العثور على زر وضع التجريبي. Error: Demo mode button not found!');
-                    return;
-                }
-
-                console.log('Demo mode button found, attaching event listener...');
-
-                // Remove any existing listeners by cloning
-                const newDemoBtn = demoBtn.cloneNode(true);
-                demoBtn.parentNode.replaceChild(newDemoBtn, demoBtn);
-
-                newDemoBtn.addEventListener('click', async (e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-
-                    try {
-                        console.log('=== Demo mode button clicked ===');
-
-                        // Disable button to prevent double-click
-                        newDemoBtn.disabled = true;
-                        newDemoBtn.textContent = 'جارٍ التحميل... Loading...';
-
-                        // Ensure database is initialized first
-                        if (!window.dbInitialized && dbManager) {
-                            console.log('Database not initialized yet, initializing now...');
-                            await dbManager.initialize();
-                            window.dbInitialized = true;
-                            console.log('Database initialized successfully');
-                        }
-
-                        if (!dbManager) {
-                            throw new Error('Database manager not available');
-                        }
-
-                        // Load demo data
-                        console.log('Loading demo data...');
-                        await dbManager.loadDemoData();
-                        console.log('Demo data loaded successfully');
-
-                        // Show dashboard with demo data (isDemoMode = true)
-                        await showDashboard(true);
-
-                        console.log('=== Demo mode activated successfully ===');
-                    } catch (error) {
-                        console.error('Error in demo mode:', error);
-                        console.error('Error stack:', error.stack);
-                        alert('خطأ في تحميل البيانات التجريبية.\nError loading demo data: ' + error.message + '\n\nCheck console (F12) for details.');
-
-                        // Re-enable button
-                        newDemoBtn.disabled = false;
-                        newDemoBtn.textContent = 'Enter Demo Mode';
-                    }
-                });
-
-                console.log('Event listener attached to demo button');
             } catch (error) {
                 console.error('Error in initApp:', error);
                 alert('خطأ في تهيئة التطبيق. Error initializing app: ' + error.message);
@@ -1465,7 +1311,7 @@
                                 : String(result.error || '').replace(/[<>&"']/g, '');
                             authStatus.innerHTML =
                                 '<p class="error-text">✗ Authentication failed: ' + sanitizedError + '</p>' +
-                                '<p class="note-text">Note: In development (localhost), Pi authentication may not work. Use "Demo Mode" instead.</p>';
+                                '<p class="note-text">Note: Pi authentication is required. Please use Pi Browser.</p>';
                         }
                     } catch (error) {
                         // XSS FIX: Sanitize error message before displaying
@@ -1474,7 +1320,7 @@
                             : String(error.message || '').replace(/[<>&"']/g, '');
                         authStatus.innerHTML =
                             '<p class="error-text">✗ Authentication error: ' + sanitizedErrorMsg + '</p>' +
-                            '<p class="note-text">Note: In development (localhost), Pi authentication may not work. Use "Demo Mode" instead.</p>';
+                            '<p class="note-text">⚠️ KYC required: You must complete KYC verification in Pi Browser to use this application.</p>';
                     } finally {
                         piAuthBtn.disabled = false;
                         piAuthBtn.textContent = 'Login with Pi Network';
@@ -1482,30 +1328,6 @@
                 });
             }
 
-            // Skip Authentication Handler (for development/testing)
-            const skipAuthBtn = document.getElementById('skip-auth-btn');
-            if (skipAuthBtn) {
-                skipAuthBtn.addEventListener('click', async () => {
-                    try {
-                        // Force DB initialization in dev mode
-                        if (dbManager && (!dbManager.db || !dbManager.db.isOpen())) {
-                            console.log('Initializing database for Setup Mode...');
-                            await dbManager.initialize();
-                            console.log('✅ Database initialized for Setup Mode');
-                        }
-
-                        const authStatus = document.getElementById('auth-status');
-                        authStatus.innerHTML =
-                            '<p class="success-text">✓ Setup mode enabled (without Pi authentication)</p>' +
-                            '<p class="note-text">You can now generate a recovery phrase and complete setup.</p>';
-                        document.getElementById('setup-section').classList.remove('hidden');
-                        console.log('✅ Setup section enabled without authentication');
-                    } catch (error) {
-                        console.error('Error initializing database in Setup Mode:', error);
-                        Toast.error('Error initializing database: ' + error.message);
-                    }
-                });
-            }
 
             // Generate Mnemonic Handler (Req #7)
             const generateMnemonicBtn = document.getElementById('generate-mnemonic-btn');
@@ -1548,7 +1370,7 @@
                         }
 
                         // Show dashboard (Real Mode, not demo)
-                        await showDashboard(false);
+                        await showDashboard();
                     } catch (error) {
                         console.error(error);
                         Toast.error('Setup error: ' + error.message);
@@ -1557,14 +1379,12 @@
             }
 
             // Dashboard Functions
-            async function showDashboard(isDemoMode = false) {
+            async function showDashboard() {
                 try {
                     // Hide other sections
-                    const demoSection = document.getElementById('demo-mode-section');
                     const authSection = document.getElementById('auth-section');
                     const setupSection = document.getElementById('setup-section');
 
-                    if (demoSection) demoSection.style.display = 'none';
                     if (authSection) authSection.style.display = 'none';
                     if (setupSection) setupSection.style.display = 'none';
 
@@ -1574,49 +1394,31 @@
                         dashboardSection.style.display = 'block';
                     }
 
-                    // Show appropriate banner based on mode
-                    const demoBanner = document.getElementById('demo-mode-banner');
+                    // Show live indicator
                     const liveIndicator = document.getElementById('live-store-indicator');
                     const createInvoiceBtn = document.getElementById('create-invoice-btn');
 
-                    if (isDemoMode) {
-                        // Demo Mode: Show orange banner, hide live indicator
-                        if (demoBanner) demoBanner.style.display = 'block';
-                        if (liveIndicator) liveIndicator.style.display = 'none';
+                    // Real Mode: Show green indicator
+                    if (liveIndicator) liveIndicator.style.display = 'block';
 
-                        // Enable Create Invoice button in demo mode (for testing)
-                        if (createInvoiceBtn) {
-                            createInvoiceBtn.disabled = false;
-                            createInvoiceBtn.style.opacity = '1';
-                            createInvoiceBtn.style.cursor = 'pointer';
-                            createInvoiceBtn.title = 'Create Demo Invoice (Data will be saved to local database)';
-                        }
-                    } else {
-                        // Real Mode: Show green indicator, hide demo banner
-                        if (demoBanner) demoBanner.style.display = 'none';
-                        if (liveIndicator) liveIndicator.style.display = 'block';
-
-                        // Enable Create Invoice button in real mode
-                        if (createInvoiceBtn) {
-                            createInvoiceBtn.disabled = false;
-                            createInvoiceBtn.style.opacity = '1';
-                            createInvoiceBtn.style.cursor = 'pointer';
-                            createInvoiceBtn.title = '';
-                        }
+                    // Enable Create Invoice button
+                    if (createInvoiceBtn) {
+                        createInvoiceBtn.disabled = false;
+                        createInvoiceBtn.style.opacity = '1';
+                        createInvoiceBtn.style.cursor = 'pointer';
+                        createInvoiceBtn.title = '';
                     }
 
                     // Set shop name
                     const shopNameEl = document.getElementById('shop-name');
                     if (shopNameEl) {
-                        shopNameEl.textContent = isDemoMode ? 'Demo Shop' : 'Live Shop';
+                        shopNameEl.textContent = 'Live Shop';
                     }
 
-                    // Hide Network Status in Demo Mode (not relevant for demo)
+                    // Show Network Status
                     const networkStatusEl = document.getElementById('network-status');
                     const networkStatusLabel = networkStatusEl?.parentElement;
-                    if (isDemoMode && networkStatusLabel) {
-                        networkStatusLabel.style.display = 'none';
-                    } else if (!isDemoMode && networkStatusLabel) {
+                    if (networkStatusLabel) {
                         networkStatusLabel.style.display = 'block';
                     }
 
@@ -1624,7 +1426,7 @@
                     await renderInvoices();
                     await renderStats();
 
-                    // Initialize invoice manager (works in both Demo Mode and Real Mode)
+                    // Initialize invoice manager
                     if (invoiceManager) {
                         try {
                             await invoiceManager.initialize();

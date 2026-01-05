@@ -170,7 +170,7 @@ class AutoLockManager {
         }
         
         try {
-            const pinSetting = await window.dbManager.db.settings.get('pin_hash');
+            const pinSetting = await window.dbManager.getSetting('pin_hash');
             if (!pinSetting) {
                 // No PIN set - allow unlock (first time setup)
                 return true;
@@ -178,7 +178,7 @@ class AutoLockManager {
             
             // In production, use bcrypt or similar to verify PIN
             // For now, simple comparison (NOT SECURE - replace in production)
-            const storedPIN = await window.dbManager.db.settings.get('pin');
+            const storedPIN = await window.dbManager.getSetting('pin');
             return pin === storedPIN;
         } catch (error) {
             console.error('Error verifying PIN:', error);

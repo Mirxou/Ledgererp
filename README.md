@@ -24,7 +24,7 @@ Ledger ERP is a comprehensive, non-custodial ERP system engineered specifically 
 ### I. CORE COMPLIANCE & IDENTITY (Req #1-6)
 - **Req #1**: Pi.authenticate() ONLY - No custom login
 - **Req #2**: onIncompletePaymentFound implementation (SDK Resilience)
-- **Req #3**: Demo Mode for reviewers
+- **Pi Network Blockchain**: 100% Web3 application
 - **Req #4**: Legal disclaimer footer
 - **Req #5**: Fiat policy (Offline Record Only)
 - **Req #6**: Domain verification file
@@ -113,7 +113,7 @@ app/
 ### Frontend (Vanilla JS)
 ```text
 static/
-|-- index.html             # Main HTML (Demo Mode, Disclaimer, RTL)
+|-- index.html             # Main HTML (Pi Auth, Disclaimer, RTL)
 |-- js/
 |   |-- security.js        # BIP-39, Encryption, Vault, Sanitization
 |   |-- pi-adapter.js      # Pi Auth, Payments, Resilience
@@ -156,8 +156,11 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 - Frontend: http://localhost:8000/static/index.html
 - API Docs: http://localhost:8000/docs
 
-### Demo Mode
-Click "Enter Demo Mode" on the login page to load mock data without Pi authentication.
+### Pi Network Integration
+- **KYC Required**: All users must complete KYC verification in Pi Browser
+- **Blockchain Storage**: All data stored on Stellar blockchain via Pi Network
+- **No Offline Mode**: Requires internet connection (Pi Browser requirement)
+- **No Demo Mode**: Live production environment only
 
 ## Security Features
 

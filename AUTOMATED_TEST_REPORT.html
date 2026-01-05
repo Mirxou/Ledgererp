@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Automated Test Report - Pi Ledger</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .header {
+            background: linear-gradient(135deg, #673AB7 0%, #9C27B0 100%);
+            color: white;
+            padding: 30px;
+            border-radius: 10px;
+            margin-bottom: 30px;
+        }
+        .summary {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        .summary-card {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .summary-card h3 {
+            margin: 0 0 10px 0;
+            color: #333;
+        }
+        .status-pass { color: #4CAF50; font-weight: bold; }
+        .status-fail { color: #f44336; font-weight: bold; }
+        .status-warning { color: #ff9800; font-weight: bold; }
+        .section {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .section h2 {
+            border-bottom: 2px solid #673AB7;
+            padding-bottom: 10px;
+        }
+        .test-item {
+            padding: 15px;
+            margin: 10px 0;
+            border-left: 4px solid #ddd;
+            background: #f9f9f9;
+        }
+        .test-item.pass { border-left-color: #4CAF50; }
+        .test-item.fail { border-left-color: #f44336; }
+        .test-item.warning { border-left-color: #ff9800; }
+        .test-item ul {
+            margin: 10px 0;
+            padding-left: 20px;
+        }
+        .test-item li {
+            margin: 5px 0;
+        }
+        .screenshot {
+            max-width: 100%;
+            border: 1px solid #ddd;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+        .timestamp {
+            color: #666;
+            font-size: 0.9em;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Automated Test Report</h1>
+        <p class="timestamp">Generated: 2026-01-05 12:05:18</p>
+    </div>
+    
+    <div class="summary">
+        <div class="summary-card">
+            <h3>Overall Status</h3>
+            <p class="status-pass">
+                PASS
+            </p>
+        </div>
+        <div class="summary-card">
+            <h3>Static Analysis</h3>
+            <p class="status-pass">
+                PASS
+            </p>
+        </div>
+        <div class="summary-card">
+            <h3>Server Status</h3>
+            <p class="status-pass">
+                RUNNING
+            </p>
+        </div>
+        <div class="summary-card">
+            <h3>Browser Tests</h3>
+            <p>4/6</p>
+        </div>
+        <div class="summary-card">
+            <h3>Functional Tests</h3>
+            <p>3/4</p>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>Static Code Analysis</h2>
+
+        <div class="test-item pass">
+            <h3>Demo Mode</h3>
+            <ul>
+                <li>[PASS] Demo Mode button found in index.html</li>
+                <li>[PASS] loadDemoData() function found in db.js</li>
+            </ul>
+        </div>
+
+        <div class="test-item pass">
+            <h3>Invoice Creation</h3>
+            <ul>
+                <li>✅ addItem() function found</li>
+                <li>✅ calculateTotals() function found</li>
+                <li>✅ debouncedCalculateTotals() found (performance optimization)</li>
+                <li>✅ QR Code generation found</li>
+            </ul>
+        </div>
+
+        <div class="test-item pass">
+            <h3>Pi Authentication</h3>
+            <ul>
+                <li>✅ Pi.authenticate() found</li>
+                <li>✅ Pi SDK initialize() found</li>
+                <li>✅ onIncompletePaymentFound() found (Req #2)</li>
+            </ul>
+        </div>
+
+        <div class="test-item pass">
+            <h3>Bip39</h3>
+            <ul>
+                <li>✅ generateMnemonic() function found</li>
+                <li>✅ 12-word validation found</li>
+                <li>✅ Anti-phishing (24-word block) found</li>
+            </ul>
+        </div>
+
+        <div class="test-item pass">
+            <h3>Pin</h3>
+            <ul>
+                <li>✅ PIN input field found in index.html</li>
+                <li>✅ PIN maxlength=6 found</li>
+                <li>✅ PIN field in auto-lock found</li>
+            </ul>
+        </div>
+
+        <div class="test-item pass">
+            <h3>Responsive Design</h3>
+            <ul>
+                <li>✅ Found 6 media queries</li>
+                <li>✅ Mobile breakpoint found</li>
+                <li>✅ Tablet breakpoint found</li>
+                <li>✅ Safe area support found</li>
+            </ul>
+        </div>
+
+        <div class="test-item warning">
+            <h3>Xss Protection</h3>
+            <ul>
+                <li>✅ DOMPurify found in static/js/invoice.js</li>
+                <li>✅ DOMPurify found in static/js/ui-utils.js</li>
+                <li>✅ DOMPurify found in static/js/bug-reporting.js</li>
+                <li>✅ DOMPurify found in static/js/csv-import.js</li>
+                <li>✅ DOMPurify found in static/index.html</li>
+                <li>✅ DOMPurify found in static/app.html</li>
+                <li>✅ DOMPurify is being used</li>
+                <li>⚠️ Found 34 potentially unsafe innerHTML usages</li>
+                <li>  - static/js/invoice.js:366</li>
+                <li>  - static/js/invoice.js:1094</li>
+                <li>  - static/js/invoice.js:1237</li>
+                <li>  - static/js/ui-utils.js:39</li>
+                <li>  - static/js/ui-utils.js:91</li>
+            </ul>
+        </div>
+
+        <div class="test-item pass">
+            <h3>Error Handling</h3>
+            <ul>
+                <li>✅ ErrorHandler class found</li>
+                <li>✅ Found 17 try-catch blocks in invoice.js</li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>Browser Tests</h2>
+
+        <div class="test-item warning">
+            <h3>Console Errors</h3>
+            <ul>
+                <li>[WARN] Found 16 console error(s)</li>
+                <li>  - Refused to apply style from 'http://localhost:8000/css/style.css' because its MIME type ('application/json') is not a supported stylesheet MIME type, and strict MIME checking is enabled.</li>
+                <li>  - Failed to load resource: the server responded with a status of 404 (Not Found)</li>
+                <li>  - Failed to load resource: the server responded with a status of 404 (Not Found)</li>
+                <li>  - Failed to load resource: the server responded with a status of 404 (Not Found)</li>
+                <li>  - Failed to load resource: the server responded with a status of 404 (Not Found)</li>
+            </ul>
+        </div>
+
+        <div class="test-item pass">
+            <h3>Demo Mode</h3>
+            <ul>
+                <li>[PASS] Demo Mode button found</li>
+                <li>[PASS] Dashboard appeared after Demo Mode</li>
+                <li>[PASS] Found 8 invoice(s) in demo data</li>
+            </ul>
+            <h4>Screenshots:</h4>
+            <img src="test_screenshots\demo_mode_initial.png" class="screenshot" alt="Screenshot">
+            <img src="test_screenshots\demo_mode_activated.png" class="screenshot" alt="Screenshot">
+        </div>
+
+        <div class="test-item fail">
+            <h3>Invoice Creation</h3>
+            <ul>
+                <li>[PASS] Create Invoice button found</li>
+                <li>[FAIL] Error: ElementHandle.fill: Timeout 30000ms exceeded.
+Call log:
+    - fill("Test Item")
+  - attempting fill action
+    2 × waiting for element to be visible, enabled and editable
+      - element is not visible
+    - retrying fill action
+    - waiting 20ms
+    2 × waiting for element to be visible, enabled and editable
+      - element is not visible
+    - retrying fill action
+      - waiting 100ms
+    57 × waiting for element to be visible, enabled and editable
+       - element is not visible
+     - retrying fill action
+       - waiting 500ms
+</li>
+            </ul>
+            <h4>Screenshots:</h4>
+            <img src="test_screenshots\invoice_modal_opened.png" class="screenshot" alt="Screenshot">
+            <img src="test_screenshots\invoice_creation_error.png" class="screenshot" alt="Screenshot">
+        </div>
+
+        <div class="test-item pass">
+            <h3>Responsive Design</h3>
+            <ul>
+                <li>[PASS] mobile_iphone_se: Font size 16px</li>
+                <li>[PASS] mobile_iphone_se: 26 visible buttons</li>
+                <li>[PASS] tablet_ipad: Font size 16px</li>
+                <li>[PASS] tablet_ipad: 26 visible buttons</li>
+                <li>[PASS] desktop: Font size 16px</li>
+                <li>[PASS] desktop: 26 visible buttons</li>
+            </ul>
+            <h4>Screenshots:</h4>
+            <img src="test_screenshots\responsive_mobile_iphone_se.png" class="screenshot" alt="Screenshot">
+            <img src="test_screenshots\responsive_tablet_ipad.png" class="screenshot" alt="Screenshot">
+            <img src="test_screenshots\responsive_desktop.png" class="screenshot" alt="Screenshot">
+        </div>
+
+        <div class="test-item pass">
+            <h3>Bip39 Pin</h3>
+            <ul>
+                <li>[PASS] Mnemonic input field found</li>
+                <li>[WARN] PIN maxlength is None, expected 6</li>
+                <li>[PASS] Generate mnemonic button found</li>
+            </ul>
+        </div>
+
+        <div class="test-item pass">
+            <h3>Pi Authentication</h3>
+            <ul>
+                <li>[PASS] Pi Authentication button found</li>
+                <li>[PASS] Pi Authentication button is visible</li>
+            </ul>
+            <h4>Screenshots:</h4>
+            <img src="test_screenshots\pi_auth_check.png" class="screenshot" alt="Screenshot">
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>Functional Tests</h2>
+
+        <div class="test-item pass">
+            <h3>Daily Revenue</h3>
+            <ul>
+                <li>[PASS] Daily Revenue element found in HTML</li>
+                <li>[PASS] Daily Revenue calculation logic found</li>
+            </ul>
+        </div>
+
+        <div class="test-item pass">
+            <h3>Auto Lock</h3>
+            <ul>
+                <li>[PASS] Auto-lock timeout found</li>
+                <li>[PASS] Unlock function found</li>
+                <li>[PASS] PIN verification found</li>
+            </ul>
+        </div>
+
+        <div class="test-item pass">
+            <h3>Dark Mode</h3>
+            <ul>
+                <li>[PASS] Dark mode media query found</li>
+                <li>[PASS] Dark mode CSS variables found</li>
+            </ul>
+        </div>
+
+        <div class="test-item warning">
+            <h3>Service Worker</h3>
+            <ul>
+                <li>[PASS] Service Worker file found</li>
+                <li>[WARN] Service Worker registration not found</li>
+            </ul>
+        </div>
+    </div>
+
+</body>
+</html>

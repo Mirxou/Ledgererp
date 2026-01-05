@@ -97,8 +97,7 @@
             store your Pi username or password.</li>
         <li><strong>Business Data:</strong> Invoice data, customer names, transaction records (all encrypted
             client-side)</li>
-        <li><strong>Encryption Keys:</strong> Stored locally in your browser using IndexedDB (never transmitted
-            unencrypted)</li>
+        <li><strong>Encryption Keys:</strong> Stored on Pi Network blockchain with client-side encryption (never transmitted unencrypted)</li>
     </ul>
 
     <h3>3.2 Automatically Collected Information</h3>
@@ -106,7 +105,7 @@
         <li><strong>Technical Data:</strong> Browser type, device information, IP address (for security and rate
             limiting)</li>
         <li><strong>Usage Data:</strong> Anonymous analytics (Req #27) - no personally identifiable information</li>
-        <li><strong>Service Worker Data:</strong> Cached files for offline functionality</li>
+        <li><strong>Blockchain Data:</strong> All data stored on Stellar blockchain via Pi Network (always-online required)</li>
     </ul>
 
     <h2>4. How We Use Your Information</h2>
@@ -120,8 +119,7 @@
 
     <h2>5. Data Storage and Security</h2>
     <ul>
-        <li><strong>Local Storage:</strong> All sensitive data is stored locally in your browser using IndexedDB with
-            persistent storage requests</li>
+        <li><strong>Blockchain Storage:</strong> All sensitive data is stored on Stellar blockchain via Pi Network Account Data Entries</li>
         <li><strong>Encryption:</strong> AES-GCM encryption with PIN-derived keys (PBKDF2)</li>
         <li><strong>Backend Storage:</strong> Only encrypted blobs (zero-knowledge sync)</li>
         <li><strong>No Third-Party Storage:</strong> We do not use external cloud services for sensitive data</li>

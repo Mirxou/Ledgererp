@@ -1,0 +1,85 @@
+{
+  "summary": {
+    "total": 8,
+    "passed": 7,
+    "failed": 0,
+    "warnings": 1,
+    "status": "pass"
+  },
+  "details": {
+    "demo_mode": {
+      "status": "pass",
+      "details": [
+        "[PASS] Demo Mode button found in index.html",
+        "[PASS] loadDemoData() function found in db.js"
+      ]
+    },
+    "invoice_creation": {
+      "status": "pass",
+      "details": [
+        "✅ addItem() function found",
+        "✅ calculateTotals() function found",
+        "✅ debouncedCalculateTotals() found (performance optimization)",
+        "✅ QR Code generation found"
+      ]
+    },
+    "pi_authentication": {
+      "status": "pass",
+      "details": [
+        "✅ Pi.authenticate() found",
+        "✅ Pi SDK initialize() found",
+        "✅ onIncompletePaymentFound() found (Req #2)"
+      ]
+    },
+    "bip39": {
+      "status": "pass",
+      "details": [
+        "✅ generateMnemonic() function found",
+        "✅ 12-word validation found",
+        "✅ Anti-phishing (24-word block) found"
+      ]
+    },
+    "pin": {
+      "status": "pass",
+      "details": [
+        "✅ PIN input field found in index.html",
+        "✅ PIN maxlength=6 found",
+        "✅ PIN field in auto-lock found"
+      ]
+    },
+    "responsive_design": {
+      "status": "pass",
+      "details": [
+        "✅ Found 6 media queries",
+        "✅ Mobile breakpoint found",
+        "✅ Tablet breakpoint found",
+        "✅ Safe area support found"
+      ]
+    },
+    "xss_protection": {
+      "status": "warning",
+      "details": [
+        "✅ DOMPurify found in static/js/invoice.js",
+        "✅ DOMPurify found in static/js/ui-utils.js",
+        "✅ DOMPurify found in static/js/bug-reporting.js",
+        "✅ DOMPurify found in static/js/csv-import.js",
+        "✅ DOMPurify found in static/index.html",
+        "✅ DOMPurify found in static/app.html",
+        "✅ DOMPurify is being used",
+        "⚠️ Found 34 potentially unsafe innerHTML usages",
+        "  - static/js/invoice.js:366",
+        "  - static/js/invoice.js:1094",
+        "  - static/js/invoice.js:1237",
+        "  - static/js/ui-utils.js:39",
+        "  - static/js/ui-utils.js:91"
+      ]
+    },
+    "error_handling": {
+      "status": "pass",
+      "details": [
+        "✅ ErrorHandler class found",
+        "✅ Found 17 try-catch blocks in invoice.js"
+      ]
+    }
+  }
+}

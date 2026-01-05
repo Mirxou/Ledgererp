@@ -1,0 +1,35 @@
+[
+  {
+    "test": "daily_revenue",
+    "status": "pass",
+    "details": [
+      "[PASS] Daily Revenue element found in HTML",
+      "[PASS] Daily Revenue calculation logic found"
+    ]
+  },
+  {
+    "test": "auto_lock",
+    "status": "pass",
+    "details": [
+      "[PASS] Auto-lock timeout found",
+      "[PASS] Unlock function found",
+      "[PASS] PIN verification found"
+    ]
+  },
+  {
+    "test": "dark_mode",
+    "status": "pass",
+    "details": [
+      "[PASS] Dark mode media query found",
+      "[PASS] Dark mode CSS variables found"
+    ]
+  },
+  {
+    "test": "service_worker",
+    "status": "warning",
+    "details": [
+      "[PASS] Service Worker file found",
+      "[WARN] Service Worker registration not found"
+    ]
+  }
+]

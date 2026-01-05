@@ -8,8 +8,8 @@
  * Req #12: Trusted Device/Backup (Encrypted key shard export)
  */
 // استيراد مكتبات محلية (CSP-safe)
-import DOMPurifyLib from '/libs/purify.es.js';
-import { ethers } from '/libs/ethers.esm.min.js';
+import DOMPurifyLib from '/static/libs/purify.es.js';
+import { ethers } from '/static/libs/ethers.esm.min.js';
 const DOMPurify = DOMPurifyLib?.default || DOMPurifyLib || null;
 
 // قائمة كلمات احتياطية لاستخدامها إذا تعذر تحميل ethers

@@ -40,8 +40,8 @@ class ProductManager {
             // Generate product ID
             const productId = `PROD-${Date.now()}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
 
-            // Save to database
-            await this.dbManager.db.products.add({
+            // Save to blockchain
+            await this.dbManager.saveProduct({
                 productId: productId,
                 name: name,
                 pricePi: parseFloat(pricePi),
@@ -65,7 +65,7 @@ class ProductManager {
      */
     async getProducts() {
         try {
-            const products = await this.dbManager.db.products.toArray();
+            const products = await this.dbManager.getProducts();
             return products;
         } catch (error) {
             console.error('Error getting products:', error);
@@ -80,7 +80,8 @@ class ProductManager {
      */
     async getProduct(productId) {
         try {
-            const product = await this.dbManager.db.products.where('productId').equals(productId).first();
+            const products = await this.dbManager.getProducts();
+            const product = products.find(p => p.productId === productId);
             return product;
         } catch (error) {
             console.error('Error getting product:', error);
@@ -108,7 +109,13 @@ class ProductManager {
 
             updates.updatedAt = new Date().toISOString();
 
-            await this.dbManager.db.products.where('productId').equals(productId).modify(updates);
+            const product = await this.dbManager.getProducts().then(products => 
+                products.find(p => p.productId === productId)
+            );
+            if (product) {
+                Object.assign(product, updates);
+                await this.dbManager.saveProduct(product);
+            }
             console.log('✅ Product updated:', productId);
         } catch (error) {
             console.error('Error updating product:', error);
@@ -123,7 +130,7 @@ class ProductManager {
      */
     async deleteProduct(productId) {
         try {
-            await this.dbManager.db.products.where('productId').equals(productId).delete();
+            await this.dbManager.deleteProduct(productId);
             console.log('✅ Product deleted:', productId);
         } catch (error) {
             console.error('Error deleting product:', error);

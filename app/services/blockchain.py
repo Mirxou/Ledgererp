@@ -9,7 +9,7 @@ import asyncio
 import aiohttp
 import logging
 from enum import Enum
-from typing import Optional, Dict, Any, Tuple
+from typing import Optional, Dict, Any, Tuple, List
 from datetime import datetime, timedelta
 import hashlib
 
@@ -424,3 +424,160 @@ class BlockchainService:
         """Get all pending transactions"""
         return self.pending_transactions.copy()
 
+
+class StellarAccountData:
+    """
+    Manage Stellar Account Data Entries for Pi Network Blockchain Storage
+    Each merchant has a Stellar account
+    Data stored as key-value pairs on blockchain
+    """
+    
+    def __init__(self, network_passphrase: str = "Public Global Stellar Network ; September 2015"):
+        """
+        Initialize Stellar Account Data Manager
+        """
+        try:
+            from stellar_sdk import Server, Network
+            self.stellar_sdk_available = True
+            self.network_passphrase = network_passphrase
+            # Use Pi Network's Stellar Horizon server
+            self.server = Server("https://horizon.stellar.org")
+            self.network = Network(network_passphrase)
+        except ImportError:
+            logger.warning("Stellar SDK not available. Install with: pip install stellar-sdk")
+            self.stellar_sdk_available = False
+    
+    async def set_account_data(self, account_secret: str, key: str, value: str) -> Dict[str, Any]:
+        """
+        Store data on Stellar blockchain as Account Data Entry
+        Max 64 bytes per entry
+        
+        Args:
+            account_secret: Stellar account secret key
+            key: Data key (will be prefixed automatically)
+            value: Data value (will be base64 encoded)
+        
+        Returns:
+            Transaction result
+        """
+        if not self.stellar_sdk_available:
+            raise ImportError("Stellar SDK not available. Please install stellar-sdk package.")
+        
+        try:
+            from stellar_sdk import Keypair, TransactionBuilder, Operation
+            
+            account_keypair = Keypair.from_secret(account_secret)
+            account = self.server.load_account(account_keypair.public_key)
+            
+            # Ensure value fits in 64 bytes (base64 encoded)
+            value_bytes = value.encode('utf-8')
+            if len(value_bytes) > 64:
+                raise ValueError(f"Value too large: {len(value_bytes)} bytes (max 64)")
+            
+            # Build transaction
+            transaction = (
+                TransactionBuilder(
+                    source_account=account,
+                    network_passphrase=self.network_passphrase,
+                    base_fee=100
+                )
+                .append_manage_data_op(
+                    data_name=key,
+                    data_value=value_bytes
+                )
+                .set_timeout(30)
+                .build()
+            )
+            
+            transaction.sign(account_keypair)
+            response = self.server.submit_transaction(transaction)
+            
+            logger.info(f"✅ Account data stored: {key}")
+            return {
+                "success": True,
+                "transaction_hash": response.get("hash"),
+                "key": key
+            }
+        except Exception as e:
+            logger.error(f"Error storing account data: {e}")
+            raise
+    
+    async def get_account_data(self, account_id: str, key: str) -> Optional[str]:
+        """
+        Get data from Stellar Account Data
+        
+        Args:
+            account_id: Stellar account public key
+            key: Data key to retrieve
+        
+        Returns:
+            Data value (decoded) or None if not found
+        """
+        if not self.stellar_sdk_available:
+            raise ImportError("Stellar SDK not available. Please install stellar-sdk package.")
+        
+        try:
+            account = self.server.accounts().account_id(account_id).call()
+            data = account.get("data", {})
+            
+            if key not in data:
+                return None
+            
+            # Decode base64
+            import base64
+            value_bytes = base64.b64decode(data[key])
+            return value_bytes.decode('utf-8')
+        except Exception as e:
+            logger.error(f"Error getting account data: {e}")
+            return None
+    
+    async def delete_account_data(self, account_secret: str, key: str) -> Dict[str, Any]:
+        """
+        Delete account data entry (set to empty string)
+        
+        Args:
+            account_secret: Stellar account secret key
+            key: Data key to delete
+        
+        Returns:
+            Transaction result
+        """
+        return await self.set_account_data(account_secret, key, "")
+    
+    async def list_account_data(self, account_id: str, prefix: str = "") -> List[Dict[str, str]]:
+        """
+        List all account data entries with prefix
+        
+        Args:
+            account_id: Stellar account public key
+            prefix: Prefix to filter entries (e.g., "invoice:" to get all invoices)
+        
+        Returns:
+            List of {key, value} dictionaries
+        """
+        if not self.stellar_sdk_available:
+            raise ImportError("Stellar SDK not available. Please install stellar-sdk package.")
+        
+        try:
+            account = self.server.accounts().account_id(account_id).call()
+            data = account.get("data", {})
+            
+            entries = []
+            import base64
+            
+            for key, value in data.items():
+                if key.startswith(prefix):
+                    try:
+                        value_bytes = base64.b64decode(value)
+                        value_str = value_bytes.decode('utf-8')
+                        entries.append({
+                            "key": key,
+                            "value": value_str
+                        })
+                    except Exception as e:
+                        logger.warn(f"Error decoding entry {key}: {e}")
+            
+            return entries
+        except Exception as e:
+            logger.error(f"Error listing account data: {e}")
+            return []
