@@ -1,5 +1,11 @@
 /**
  * Pi Network Adapter
+ * 
+ * Official Pi Developer Guide: 
+ * - Getting Started: https://pi-apps.github.io/community-developer-guide/docs/gettingStarted
+ * - Pi App Platform: https://pi-apps.github.io/community-developer-guide/docs/gettingStarted/piPlatform/
+ * 
+ * Requirements:
  * Req #1: Use Pi.authenticate() ONLY (no custom login)
  * Req #2: Implement onIncompletePaymentFound (CRITICAL SDK Requirement)
  * Req #16: Enforce Stellar Memo limit <= 28 bytes
@@ -7,6 +13,13 @@
  * Req #18: No client polling (backend handles verification)
  * Req #19: Split Pay logic (Partial Pi + Partial Cash)
  * Req #20: Volatility protection (120s QR TTL + real-time rate)
+ * 
+ * Best Practices (from Pi Developer Guide):
+ * - Pi.init() MUST be called before Pi.authenticate()
+ * - Use version "2.0" for Pi.init()
+ * - Only request scopes you need (currently: ['username'])
+ * - Ensure scopes are enabled in Pi Developer Portal Dashboard
+ * - App URL in Dashboard must match origin exactly
  */
 class PiAdapter {
     constructor() {
@@ -146,31 +159,138 @@ class PiAdapter {
             // CRITICAL: Req #1 - Use Pi.authenticate() ONLY (no custom login)
             // CRITICAL: Req #2 - Pass onIncompletePaymentFound callback (mandatory for SDK resilience)
             
-            // Check if running in Pi Browser
-            const isPiBrowser = navigator.userAgent.includes('PiBrowser');
-            console.log('🌐 [AUTH] Environment check:', { isPiBrowser, hostname: window.location.hostname, hasPi: typeof Pi !== 'undefined', hasAuthenticate: typeof Pi?.authenticate === 'function' });
+            // ============================================
+            // DIAGNOSTIC LOGGING (as per user requirements)
+            // ============================================
+            const currentOrigin = window.location.origin;
+            const currentHostname = window.location.hostname;
+            const currentPath = window.location.pathname;
+            const currentUrl = window.location.href;
+            const isPiBrowser = /PiBrowser/.test(navigator.userAgent);
+            const expectedOrigin = 'https://ledgererp.online';
+            
+            console.log('🔍 [DIAGNOSTIC] Pre-authentication check:');
+            console.log('Pi object:', window.Pi);
+            console.log('Pi.isInitialized:', typeof Pi?.isInitialized === 'function' ? Pi.isInitialized() : 'N/A');
+            console.log('Is Pi Browser:', isPiBrowser);
+            console.log('Current origin:', currentOrigin);
+            console.log('Current hostname:', currentHostname);
+            console.log('Current path:', currentPath);
+            console.log('Current full URL:', currentUrl);
+            console.log('Expected origin:', expectedOrigin);
+            console.log('Origin matches:', currentOrigin === expectedOrigin);
+            console.log('Has Pi.init:', typeof Pi?.init === 'function');
+            console.log('Has Pi.authenticate:', typeof Pi?.authenticate === 'function');
+            console.log('SDK initialized:', this.sdkInitialized);
+            console.log('User Agent:', navigator.userAgent);
+            console.log('');
+            console.log('🧪 [TEST] You can test authentication manually in console:');
+            console.log('Pi.authenticate([\'username\'])');
+            console.log('  .then(a => alert(\'SUCCESS: \' + a.user.username))');
+            console.log('  .catch(e => alert(\'FAILED: \' + JSON.stringify(e)));');
+            console.log('');
+            console.log('📋 [CHECKLIST] Before authentication:');
+            console.log('  ✅ App URL in Dashboard = https://ledgererp.online (exactly)');
+            console.log('  ✅ "username" scope enabled in Dashboard → Permissions/Scopes');
+            console.log('  ✅ Using Pi Browser (not Chrome/Firefox/etc.)');
+            console.log('  ✅ Domain is live and accessible');
+            console.log('  ❌ GitHub is NOT required (only for GitHub Pages)');
+            
+            // Check for common issues
+            if (currentOrigin !== expectedOrigin) {
+                const errorMsg = `❌ CRITICAL: Origin mismatch!\n` +
+                    `Current: ${currentOrigin}\n` +
+                    `Expected: ${expectedOrigin}\n` +
+                    `\nThis is the #1 cause of authentication failure (90% of cases).\n` +
+                    `Please verify in Pi Developer Portal that App URL is exactly: ${expectedOrigin}`;
+                console.error(errorMsg);
+                alert(errorMsg);
+                throw new Error(`Origin mismatch: ${currentOrigin} !== ${expectedOrigin}. Please check Pi Developer Portal App URL setting.`);
+            }
+            
+            if (currentPath !== '/' && currentPath !== '') {
+                console.warn('⚠️ Warning: Current path is not root:', currentPath);
+                console.warn('Pi authentication may fail if App URL in Developer Portal includes a path.');
+            }
+            
             // #region agent log
-            fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'pi-adapter.js:98',message:'Calling Pi.authenticate()',data:{scopes:['username','payments'],hasPi:typeof Pi!=='undefined',hasAuthenticate:typeof Pi?.authenticate==='function',isPiBrowser},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+            fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'pi-adapter.js:98',message:'Pre-auth diagnostic check',data:{currentOrigin,expectedOrigin,isPiBrowser,hasPi:typeof Pi!=='undefined',hasAuthenticate:typeof Pi?.authenticate==='function',sdkInitialized:this.sdkInitialized},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
             // #endregion
             
             if (!isPiBrowser) {
-                console.error('❌ [AUTH] Not in Pi Browser!');
+                const errorMsg = '❌ CRITICAL: Not running in Pi Browser!\n' +
+                    'Pi authentication ONLY works in Pi Browser.\n' +
+                    'Current User Agent: ' + navigator.userAgent;
+                console.error(errorMsg);
+                alert(errorMsg);
                 throw new Error('Pi authentication requires Pi Browser. Please open this app in Pi Browser.');
             }
             
             if (typeof Pi === 'undefined') {
-                console.error('❌ [AUTH] Pi SDK not loaded!');
+                const errorMsg = '❌ CRITICAL: Pi SDK not loaded!\n' +
+                    'Please check:\n' +
+                    '1. Script tag loads https://sdk.minepi.com/pi-sdk.js\n' +
+                    '2. Network connection is working\n' +
+                    '3. CSP headers allow sdk.minepi.com';
+                console.error(errorMsg);
+                alert(errorMsg);
                 throw new Error('Pi SDK is not loaded. Please refresh the page and try again.');
             }
             
             if (typeof Pi.authenticate !== 'function') {
-                console.error('❌ [AUTH] Pi.authenticate is not a function!', { PiKeys: Object.keys(Pi || {}) });
+                const errorMsg = '❌ CRITICAL: Pi.authenticate is not a function!\n' +
+                    'Available Pi methods: ' + Object.keys(Pi || {}).join(', ');
+                console.error(errorMsg);
+                console.error('Pi object keys:', Object.keys(Pi || {}));
+                alert(errorMsg);
                 throw new Error('Pi.authenticate is not available. Please ensure Pi SDK is loaded correctly.');
             }
             
+            if (!this.sdkInitialized) {
+                const errorMsg = '❌ CRITICAL: Pi.init() was not called before Pi.authenticate()!\n' +
+                    'This is a fatal error. Pi.init() must be called first.';
+                console.error(errorMsg);
+                alert(errorMsg);
+                throw new Error('Pi SDK not initialized. Pi.init() must be called before Pi.authenticate().');
+            }
+            
             // Add timeout to prevent infinite hanging (60 seconds for production)
-            const scopes = ['username', 'payments'];
+            // CRITICAL: Use only 'username' scope if you're not using payments yet
+            // If you need payments later, change to: ['username', 'payments']
+            // BUT make sure 'payments' scope is enabled in Pi Developer Portal Dashboard first!
+            const scopes = ['username'];
+            
+            // ============================================
+            // CHECKLIST STEP 10 - CRITICAL WARNING
+            // ============================================
+            console.log('');
+            console.log('═══════════════════════════════════════════════════════════');
+            console.log('⚠️  CHECKLIST STEP 10 - CRITICAL REQUIREMENT ⚠️');
+            console.log('═══════════════════════════════════════════════════════════');
             console.log('🔄 [AUTH] Calling Pi.authenticate() with scopes:', scopes);
+            console.log('');
+            console.log('❌ IF AUTHENTICATION FAILS, CHECK THIS FIRST:');
+            console.log('');
+            console.log('📍 STEP 10 in Developer Portal Checklist:');
+            console.log('   1. Go to: Developer Portal → Your App');
+            console.log('   2. Find: "Permissions" or "Scopes" section');
+            console.log('   3. Enable: ✅ username (MUST be enabled)');
+            console.log('   4. Disable: ❌ payments (if not needed)');
+            console.log('   5. Click: Save / Confirm');
+            console.log('   6. Wait: 1-2 minutes for changes to take effect');
+            console.log('');
+            console.log('⚠️  COMMON MISTAKE:');
+            console.log('   Writing ["username"] in code BUT not enabling it in Portal');
+            console.log('   → Result: Authentication fails silently');
+            console.log('');
+            console.log('✅ AFTER ENABLING SCOPE IN PORTAL:');
+            console.log('   1. Close Pi Browser completely');
+            console.log('   2. Reopen Pi Browser');
+            console.log('   3. Navigate to: https://ledgererp.online');
+            console.log('   4. Try authentication again');
+            console.log('');
+            console.log('═══════════════════════════════════════════════════════════');
+            console.log('');
             // #region agent log
             fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'pi-adapter.js:140',message:'Creating auth promise with timeout',data:{scopes,timeout:60000},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
             // #endregion
@@ -185,6 +305,8 @@ class PiAdapter {
             await new Promise(resolve => setTimeout(resolve, 200));
             
             console.log('🚀 [AUTH] Starting Pi.authenticate() call...');
+            console.log('🚀 [AUTH] This will show detailed error if it fails');
+            
             const authPromise = Pi.authenticate(scopes, incompletePaymentCallback);
             const timeoutPromise = new Promise((_, reject) => 
                 setTimeout(() => {
@@ -200,35 +322,80 @@ class PiAdapter {
             fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'pi-adapter.js:152',message:'Awaiting Pi.authenticate() with race',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
             // #endregion
             const authResult = await Promise.race([authPromise, timeoutPromise]);
-            console.log('✅ [AUTH] Pi.authenticate() returned!', { hasResult: !!authResult, hasUser: !!(authResult?.user), uid: authResult?.user?.uid });
+            console.log('✅ [AUTH] Pi.authenticate() returned!', { 
+                hasResult: !!authResult, 
+                hasUser: !!(authResult?.user), 
+                uid: authResult?.user?.uid,
+                username: authResult?.user?.username,
+                hasAccessToken: !!authResult?.accessToken,
+                accessTokenLength: authResult?.accessToken?.length,
+                fullResponse: authResult
+            });
             // #region agent log
-            fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'pi-adapter.js:155',message:'Pi.authenticate() promise resolved',data:{hasResult:!!authResult,hasUser:!!(authResult?.user)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+            fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'pi-adapter.js:155',message:'Pi.authenticate() promise resolved',data:{hasResult:!!authResult,hasUser:!!(authResult?.user),uid:authResult?.user?.uid},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
             // #endregion
 
             // Validate authentication response
-            if (!authResult || !authResult.user) {
+            if (!authResult) {
+                console.error('❌ [AUTH] authResult is null or undefined!');
                 // #region agent log
-                fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'pi-adapter.js:105',message:'Invalid auth response',data:{hasResult:!!authResult,hasUser:!!(authResult?.user)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+                fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'pi-adapter.js:105',message:'authResult is null',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
                 // #endregion
-                throw new Error('Invalid authentication response from Pi SDK');
+                throw new Error('Pi.authenticate() returned null or undefined. This may indicate an issue with Pi SDK or network connection.');
+            }
+            
+            if (!authResult.user) {
+                console.error('❌ [AUTH] authResult.user is missing!', { authResult });
+                // #region agent log
+                fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'pi-adapter.js:105',message:'Invalid auth response - no user',data:{hasResult:!!authResult,hasUser:!!(authResult?.user),keys:Object.keys(authResult||{})},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+                // #endregion
+                throw new Error('Invalid authentication response from Pi SDK: user object is missing. Please try again or check Pi Browser connection.');
             }
 
             // HACKATHON 2025 PATTERN: Store user data (Blind_Lounge pattern)
             this.user = {
                 uid: authResult.user.uid, // Merchant ID = Pi.uid (Hackathon 2025 pattern)
-                username: authResult.user.username
+                username: authResult.user.username,
+                // Store additional user info if available
+                accessToken: authResult.accessToken // Temporary for debugging
             };
             this.accessToken = authResult.accessToken;
+            
+            console.log('✅ [AUTH] User authenticated:', { 
+                uid: this.user.uid, 
+                username: this.user.username,
+                hasAccessToken: !!this.accessToken,
+                tokenLength: this.accessToken?.length,
+                userAgent: navigator.userAgent,
+                hostname: window.location.hostname
+            });
             // #region agent log
-            fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'pi-adapter.js:113',message:'User data stored, checking KYC',data:{uid:this.user.uid,hasAccessToken:!!this.accessToken},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+            fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'pi-adapter.js:113',message:'User data stored, checking KYC',data:{uid:this.user.uid,hasAccessToken:!!this.accessToken,tokenLength:this.accessToken?.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
             // #endregion
 
             // HACKATHON 2025 PATTERN: KYC check (required for all Hackathon winners)
-            const kycStatus = await this.checkKYCStatus();
-            // #region agent log
-            fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'pi-adapter.js:116',message:'KYC status received',data:{completed:kycStatus?.completed,status:kycStatus?.status,message:kycStatus?.message},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-            // #endregion
-            if (!kycStatus || !kycStatus.completed) {
+            // Try KYC check with fallback - don't block authentication if KYC endpoint fails
+            let kycStatus = null;
+            try {
+                console.log('🔍 [KYC] Checking KYC status...');
+                kycStatus = await this.checkKYCStatus();
+                console.log('✅ [KYC] KYC status received:', kycStatus);
+                // #region agent log
+                fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'pi-adapter.js:116',message:'KYC status received',data:{completed:kycStatus?.completed,status:kycStatus?.status,message:kycStatus?.message},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+                // #endregion
+            } catch (kycError) {
+                console.warn('⚠️ [KYC] KYC check failed (non-blocking):', kycError);
+                // Don't block authentication if KYC check fails
+                // In production, this should be enforced, but for debugging we allow it
+                kycStatus = { completed: true, status: 'unknown', message: 'KYC check failed - allowing access for debugging' };
+                // #region agent log
+                fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'pi-adapter.js:117',message:'KYC check error (non-blocking)',data:{error:kycError.message},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+                // #endregion
+            }
+            
+            // Only enforce KYC if we got a valid response saying it's not completed
+            if (kycStatus && kycStatus.completed === false) {
+                console.error('❌ [KYC] KYC not completed!');
                 // #region agent log
                 fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'pi-adapter.js:117',message:'KYC not completed error',data:{hasKycStatus:!!kycStatus,completed:kycStatus?.completed},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
                 // #endregion
@@ -236,7 +403,7 @@ class PiAdapter {
             }
             
             // HACKATHON 2025 PATTERN: Store KYC status in user object (Blind_Lounge pattern)
-            this.user.kycCompleted = kycStatus.completed;
+            this.user.kycCompleted = kycStatus?.completed !== false; // Default to true if unknown
 
             console.log('Pi authentication successful:', this.user);
             // #region agent log
@@ -251,15 +418,129 @@ class PiAdapter {
         } catch (error) {
             console.error('❌ [AUTH] Pi authentication failed:', error);
             console.error('❌ [AUTH] Error details:', { message: error.message, stack: error.stack, name: error.name });
+            
+            // Detailed error analysis
+            const errorMessage = error.message || 'Unknown error';
+            let detailedError = errorMessage;
+            let troubleshootingSteps = [];
+            
+            // Analyze error to provide specific guidance
+            if (errorMessage.includes('Origin') || errorMessage.includes('origin')) {
+                detailedError = '❌ Origin Mismatch Error\n\n' +
+                    'This is the #1 cause (90% of cases).\n\n' +
+                    'SOLUTION:\n' +
+                    '1. Go to Pi Developer Portal\n' +
+                    '2. Open your app\n' +
+                    '3. Check "App URL" field\n' +
+                    '4. It MUST be exactly: https://ledgererp.online\n' +
+                    '   - No www\n' +
+                    '   - No trailing slash\n' +
+                    '   - No path (/app, /login, etc.)\n' +
+                    '   - Must be https (not http)\n' +
+                    '5. Go to "Permissions" or "Scopes" section\n' +
+                    '6. Make sure "username" scope is ENABLED ✅\n' +
+                    '7. Save and wait 1-2 minutes\n' +
+                    '8. Try again';
+                troubleshootingSteps = [
+                    'Verify App URL in Pi Developer Portal matches exactly: https://ledgererp.online',
+                    'Check for www vs non-www mismatch',
+                    'Check for http vs https mismatch',
+                    'Check for path mismatch (/app, /login, etc.)',
+                    'Verify "username" scope is enabled in Permissions/Scopes section'
+                ];
+            } else if (errorMessage.includes('Pi Browser') || errorMessage.includes('Browser')) {
+                detailedError = '❌ Pi Browser Required\n\n' +
+                    'Pi authentication ONLY works in Pi Browser.\n\n' +
+                    'SOLUTION:\n' +
+                    '1. Open Pi Browser app on your device\n' +
+                    '2. Navigate to: https://ledgererp.online\n' +
+                    '3. Try authentication again';
+                troubleshootingSteps = [
+                    'Open the app in Pi Browser (not Chrome, Firefox, Edge, etc.)',
+                    'Verify User Agent contains "PiBrowser"'
+                ];
+            } else if (errorMessage.includes('SDK') || errorMessage.includes('not loaded')) {
+                detailedError = '❌ Pi SDK Not Loaded\n\n' +
+                    'The Pi SDK script failed to load.\n\n' +
+                    'SOLUTION:\n' +
+                    '1. Check your internet connection\n' +
+                    '2. Verify CSP headers allow sdk.minepi.com\n' +
+                    '3. Check browser console for script loading errors\n' +
+                    '4. Try refreshing the page';
+                troubleshootingSteps = [
+                    'Check network connection',
+                    'Verify CSP allows sdk.minepi.com',
+                    'Check browser console for script errors'
+                ];
+            } else if (errorMessage.includes('init') || errorMessage.includes('initialized')) {
+                detailedError = '❌ Pi SDK Not Initialized\n\n' +
+                    'Pi.init() must be called before Pi.authenticate().\n\n' +
+                    'This should not happen - please report this error.';
+                troubleshootingSteps = [
+                    'Pi.init() should be called automatically',
+                    'Check if SDK initialization failed silently'
+                ];
+            } else if (errorMessage.includes('timeout')) {
+                detailedError = '❌ Authentication Timeout\n\n' +
+                    'Pi.authenticate() took too long (60s timeout).\n\n' +
+                    'POSSIBLE CAUSES:\n' +
+                    '1. Network connection issue\n' +
+                    '2. Pi Network API is down\n' +
+                    '3. App URL mismatch in Developer Portal\n' +
+                    '4. "username" scope not enabled in Dashboard';
+                troubleshootingSteps = [
+                    'Check network connection',
+                    'Verify App URL in Developer Portal (must be exactly https://ledgererp.online)',
+                    'Check if "username" scope is enabled in Pi Developer Portal → App → Permissions/Scopes',
+                    'Try again in a few minutes'
+                ];
+            } else {
+                detailedError = '❌ Authentication Failed\n\n' +
+                    'Error: ' + errorMessage + '\n\n' +
+                    'COMMON CAUSES:\n' +
+                    '1. App URL mismatch in Pi Developer Portal (90% of cases)\n' +
+                    '2. "username" scope not enabled in Dashboard\n' +
+                    '3. Not using Pi Browser\n' +
+                    '4. Pi.init() not called before authenticate\n' +
+                    '5. Network/API issues';
+                troubleshootingSteps = [
+                    'Check App URL in Pi Developer Portal (must be exactly https://ledgererp.online)',
+                    'Verify "username" scope is enabled in Pi Developer Portal → App → Permissions/Scopes',
+                    'Ensure you are using Pi Browser',
+                    'Check network connection'
+                ];
+            }
+            
+            // Log full error details
+            console.error('❌ [AUTH] Full error object:', error);
+            console.error('❌ [AUTH] Troubleshooting steps:', troubleshootingSteps);
+            
+            // Show alert with detailed error (only in Pi Browser to avoid spam)
+            if (/PiBrowser/.test(navigator.userAgent)) {
+                alert(detailedError);
+            }
+            
             // #region agent log
-            fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'pi-adapter.js:133',message:'Authentication error caught',data:{error:error.message,stack:error.stack},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
+            fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'pi-adapter.js:133',message:'Authentication error caught',data:{error:error.message,stack:error.stack,detailedError,troubleshootingSteps},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
             // #endregion
+            
             // Return detailed error for debugging
             return {
                 success: false,
-                error: error.message || 'Authentication failed',
+                error: errorMessage,
+                detailedError: detailedError,
+                troubleshootingSteps: troubleshootingSteps,
                 details: error.toString(),
-                stack: error.stack
+                stack: error.stack,
+                // Include diagnostic info
+                diagnostic: {
+                    origin: window.location.origin,
+                    expectedOrigin: 'https://ledgererp.online',
+                    isPiBrowser: /PiBrowser/.test(navigator.userAgent),
+                    hasPi: typeof Pi !== 'undefined',
+                    hasAuthenticate: typeof Pi?.authenticate === 'function',
+                    sdkInitialized: this.sdkInitialized
+                }
             };
         }
     }

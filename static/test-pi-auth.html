@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pi Network Authentication Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .test-box {
+            background: white;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .test-box h2 {
+            color: #7b1fa2;
+            margin-top: 0;
+        }
+        .test-box code {
+            background: #f0f0f0;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: monospace;
+        }
+        button {
+            background: #7b1fa2;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 5px;
+        }
+        button:hover {
+            background: #6a1a8f;
+        }
+        .result {
+            margin-top: 15px;
+            padding: 10px;
+            border-radius: 5px;
+            white-space: pre-wrap;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        .success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        .warning {
+            background: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeaa7;
+        }
+    </style>
+    <!-- Pi SDK -->
+    <script src="https://sdk.minepi.com/pi-sdk.js"></script>
+</head>
+<body>
+    <h1>🧪 Pi Network Authentication Test</h1>
+    
+    <div class="test-box">
+        <h2>1️⃣ معلومات النظام</h2>
+        <button onclick="checkSystemInfo()">فحص معلومات النظام</button>
+        <div id="system-info" class="result"></div>
+    </div>
+
+    <div class="test-box">
+        <h2>2️⃣ تهيئة Pi SDK</h2>
+        <button onclick="initPiSDK()">تهيئة Pi SDK</button>
+        <div id="init-result" class="result"></div>
+    </div>
+
+    <div class="test-box">
+        <h2>3️⃣ اختبار المصادقة</h2>
+        <button onclick="testAuthentication()">اختبار المصادقة</button>
+        <div id="auth-result" class="result"></div>
+    </div>
+
+    <div class="test-box">
+        <h2>4️⃣ اختبار يدوي في Console</h2>
+        <p>افتح Console (F12) واكتب:</p>
+        <code>
+            Pi.authenticate(['username'])<br>
+            &nbsp;&nbsp;.then(a => alert('SUCCESS: ' + a.user.username))<br>
+            &nbsp;&nbsp;.catch(e => alert('FAILED: ' + JSON.stringify(e)));
+        </code>
+        <p style="margin-top: 10px; color: #666;">
+            <strong>النتيجة المتوقعة:</strong><br>
+            • لا تظهر نافذة موافقة → مشكلة في Dashboard (URL أو Scopes)<br>
+            • تظهر وتغلق فورًا → Scope غير مفعّل أو Sandbox<br>
+            • تظهر وتنجح → المشكلة محلولة ✅
+        </p>
+    </div>
+
+    <div class="test-box warning">
+        <h2>⚠️ ملاحظات مهمة</h2>
+        <ul>
+            <li><strong>GitHub غير مطلوب:</strong> طالما الدومين يعمل، GitHub لا يؤثر على المصادقة</li>
+            <li><strong>App URL:</strong> يجب أن يكون حرفيًا <code>https://ledgererp.online</code> في Dashboard</li>
+            <li><strong>Scopes:</strong> تأكد أن "username" مفعّل في Dashboard → Permissions/Scopes</li>
+            <li><strong>Pi Browser:</strong> يجب استخدام Pi Browser فقط (ليس Chrome/Firefox/etc.)</li>
+        </ul>
+    </div>
+
+    <script>
+        function checkSystemInfo() {
+            const info = {
+                'Pi SDK loaded': typeof Pi !== 'undefined',
+                'Is Pi Browser': /PiBrowser/.test(navigator.userAgent),
+                'Current Origin': window.location.origin,
+                'Expected Origin': 'https://ledgererp.online',
+                'Origin Matches': window.location.origin === 'https://ledgererp.online',
+                'User Agent': navigator.userAgent,
+                'Has Pi.init': typeof Pi?.init === 'function',
+                'Has Pi.authenticate': typeof Pi?.authenticate === 'function',
+                'Pi.isInitialized': typeof Pi?.isInitialized === 'function' ? Pi.isInitialized() : 'N/A'
+            };
+
+            let html = '<strong>معلومات النظام:</strong>\n';
+            for (const [key, value] of Object.entries(info)) {
+                const status = typeof value === 'boolean' ? (value ? '✅' : '❌') : '';
+                html += `${key}: ${value} ${status}\n`;
+            }
+
+            document.getElementById('system-info').textContent = html;
+            document.getElementById('system-info').className = 'result info';
+        }
+
+        async function initPiSDK() {
+            const resultDiv = document.getElementById('init-result');
+            resultDiv.textContent = 'جاري التهيئة...';
+            resultDiv.className = 'result info';
+
+            try {
+                if (typeof Pi === 'undefined') {
+                    throw new Error('Pi SDK غير محمّل! تأكد من تحميل https://sdk.minepi.com/pi-sdk.js');
+                }
+
+                await Pi.init({ version: '2.0' });
+                resultDiv.textContent = '✅ تم تهيئة Pi SDK بنجاح!';
+                resultDiv.className = 'result success';
+            } catch (error) {
+                resultDiv.textContent = `❌ فشل التهيئة:\n${error.message}\n\n${error.stack}`;
+                resultDiv.className = 'result error';
+            }
+        }
+
+        async function testAuthentication() {
+            const resultDiv = document.getElementById('auth-result');
+            resultDiv.textContent = 'جاري اختبار المصادقة...';
+            resultDiv.className = 'result info';
+
+            try {
+                // Check prerequisites
+                if (typeof Pi === 'undefined') {
+                    throw new Error('Pi SDK غير محمّل');
+                }
+
+                if (!/PiBrowser/.test(navigator.userAgent)) {
+                    throw new Error('يجب استخدام Pi Browser فقط');
+                }
+
+                if (window.location.origin !== 'https://ledgererp.online') {
+                    throw new Error(`Origin mismatch: ${window.location.origin} !== https://ledgererp.online`);
+                }
+
+                // Initialize if not already initialized
+                try {
+                    await Pi.init({ version: '2.0' });
+                } catch (initError) {
+                    // May already be initialized
+                    console.log('Init check:', initError.message);
+                }
+
+                // Test authentication
+                resultDiv.textContent = '⏳ جاري طلب المصادقة...\n(ستظهر نافذة Pi للموافقة)';
+                resultDiv.className = 'result info';
+
+                const authResult = await Pi.authenticate(['username']);
+                
+                resultDiv.textContent = `✅ نجحت المصادقة!\n\n` +
+                    `Username: ${authResult.user?.username || 'N/A'}\n` +
+                    `UID: ${authResult.user?.uid || 'N/A'}\n` +
+                    `Access Token: ${authResult.accessToken ? 'Present' : 'Missing'}\n\n` +
+                    `Full Result:\n${JSON.stringify(authResult, null, 2)}`;
+                resultDiv.className = 'result success';
+
+            } catch (error) {
+                let errorMsg = `❌ فشل المصادقة:\n\n${error.message}\n\n`;
+                
+                // Add specific guidance based on error
+                if (error.message.includes('Origin') || error.message.includes('origin')) {
+                    errorMsg += '🔧 الحل:\n';
+                    errorMsg += '1. اذهب إلى Pi Developer Portal\n';
+                    errorMsg += '2. افتح تطبيقك\n';
+                    errorMsg += '3. تأكد أن App URL = https://ledgererp.online (حرفيًا)\n';
+                    errorMsg += '4. احفظ وانتظر 1-2 دقيقة\n';
+                } else if (error.message.includes('Browser')) {
+                    errorMsg += '🔧 الحل:\n';
+                    errorMsg += 'افتح هذا الموقع من Pi Browser فقط\n';
+                } else if (error.message.includes('scope') || error.message.includes('Scope')) {
+                    errorMsg += '🔧 الحل:\n';
+                    errorMsg += '1. اذهب إلى Pi Developer Portal\n';
+                    errorMsg += '2. افتح تطبيقك → Permissions/Scopes\n';
+                    errorMsg += '3. فعّل scope "username"\n';
+                    errorMsg += '4. احفظ وانتظر 1-2 دقيقة\n';
+                } else {
+                    errorMsg += '🔧 تحقق من:\n';
+                    errorMsg += '• App URL في Dashboard = https://ledgererp.online\n';
+                    errorMsg += '• Scope "username" مفعّل في Permissions/Scopes\n';
+                    errorMsg += '• تستخدم Pi Browser\n';
+                }
+
+                errorMsg += `\n\nStack Trace:\n${error.stack || 'N/A'}`;
+                
+                resultDiv.textContent = errorMsg;
+                resultDiv.className = 'result error';
+            }
+        }
+
+        // Auto-check on load
+        window.addEventListener('load', () => {
+            setTimeout(checkSystemInfo, 500);
+        });
+    </script>
+</body>
+</html>
+

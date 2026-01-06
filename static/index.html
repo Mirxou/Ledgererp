@@ -12,7 +12,7 @@
     <meta name="theme-color" content="#7b1fa2">
     <link rel="apple-touch-icon" href="/favicon.ico">
     <meta name="description"
-        content="Non-Custodial ERP System for Pi Network Merchants - Zero-Knowledge Financial Management">
+        content="Secure ERP for Pi merchants. Create invoices, accept Pi payments via QR codes, Zero-knowledge encryption - your data stays on your device.">
 
     <!-- Pi Network App Metadata -->
     <meta name="pi-app-id" content="pi-ledger-erp">
@@ -1544,12 +1544,24 @@
                                 console.warn('⚠️ Database manager not available to save merchant ID');
                             }
                             
+                            // Store Stellar public key if user provided one (for debugging)
+                            // User can set it in console: localStorage.setItem('stellar_public_key', 'GBKTKVQ2SX5NFUCCPOGN5BTWT3JPFX6LHPRKY4UGLEYMDPWVZCPR6UZK')
+                            const storedPublicKey = localStorage.getItem('stellar_public_key');
+                            if (storedPublicKey) {
+                                console.log('✅ Using stored Stellar public key:', storedPublicKey.substring(0, 8) + '...');
+                            }
+                            
                             // XSS FIX: Sanitize username before displaying
                             const sanitizedUsername = typeof DOMPurify !== 'undefined' 
                                 ? DOMPurify.sanitize(result.user.username || '') 
                                 : String(result.user.username || '').replace(/[<>&"']/g, '');
-                            authStatus.innerHTML =
-                                '<p class="success-text">✓ Authenticated as: ' + sanitizedUsername + '</p>';
+                            
+                            let successMsg = '<p class="success-text">✓ Authenticated as: ' + sanitizedUsername + '</p>';
+                            if (storedPublicKey) {
+                                successMsg += '<p class="note-text">ℹ️ Using Stellar public key: ' + storedPublicKey.substring(0, 12) + '...</p>';
+                            }
+                            
+                            authStatus.innerHTML = successMsg;
                             document.getElementById('setup-section').classList.remove('hidden');
                             console.log('✅ Authentication successful! Setup section is now visible.');
                         } else {
@@ -1559,11 +1571,27 @@
                                 : String(result.error || '').replace(/[<>&"']/g, '');
                             const isPiBrowser = navigator.userAgent.includes('PiBrowser');
                             const browserNote = isPiBrowser 
-                                ? '<p class="note-text">⚠️ Please ensure you have completed KYC verification in Pi Browser.</p>'
+                                ? '<p class="note-text">⚠️ Please ensure you have completed KYC verification in Pi Browser.</p>' +
+                                  '<p class="note-text">💡 TIP: If you have your Stellar public key, you can set it in browser console:<br><code>localStorage.setItem(\'stellar_public_key\', \'YOUR_PUBLIC_KEY\')</code></p>'
                                 : '<p class="error-text">⚠️ CRITICAL: Pi authentication requires Pi Browser. Please open this app in Pi Browser (not regular browser).</p>';
-                            authStatus.innerHTML =
-                                '<p class="error-text">✗ Authentication failed: ' + sanitizedError + '</p>' +
-                                browserNote;
+                            
+                            // Add detailed error info for debugging
+                            let errorDetails = '<p class="error-text">✗ Authentication failed: ' + sanitizedError + '</p>';
+                            if (result.details) {
+                                errorDetails += '<p class="note-text" style="font-size: 0.9em; margin-top: 5px;">Details: ' + String(result.details).substring(0, 200) + '</p>';
+                            }
+                            
+                            authStatus.innerHTML = errorDetails + browserNote;
+                            
+                            // Log full error to console for debugging
+                            console.error('❌ Authentication failed:', {
+                                error: result.error,
+                                details: result.details,
+                                stack: result.stack,
+                                isPiBrowser: isPiBrowser,
+                                hasPi: typeof Pi !== 'undefined',
+                                userAgent: navigator.userAgent
+                            });
                         }
                     } catch (error) {
                         // XSS FIX: Sanitize error message before displaying

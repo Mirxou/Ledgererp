@@ -903,18 +903,44 @@ async def get_kyc_status(request: Request):
 async def get_stellar_account(request: Request):
     """Get Stellar account details from Pi Network"""
     try:
+        auth_header = request.headers.get("Authorization", "")
+        if not auth_header.startswith("Bearer "):
+            raise HTTPException(status_code=401, detail="Missing or invalid authorization header")
+        
+        access_token = auth_header.replace("Bearer ", "")
         data = await request.json()
         uid = data.get("uid")
+        public_key = data.get("public_key")  # Optional: User can provide their public key
         
         if not uid:
             raise HTTPException(status_code=400, detail="Missing uid")
         
-        # TODO: Call Pi Network API to get Stellar account for Pi.uid
+        # Log for debugging
+        logger.info(f"Getting Stellar account for uid: {uid[:8]}..., public_key provided: {bool(public_key)}")
+        
+        # TODO: Call Pi Network API to get Stellar account for Pi.uid using access_token
+        # For now, if public_key is provided, validate it and use it
+        if public_key:
+            # Validate Stellar public key format (starts with G, 56 chars)
+            if public_key.startswith('G') and len(public_key) == 56:
+                logger.info(f"Using provided public key: {public_key[:8]}...")
+                return {
+                    "accountId": public_key,
+                    "publicKey": public_key,
+                    "secretKey": None,  # Never return secret key to frontend
+                    "message": "Using provided public key. Secret key must be retrieved from Pi Network API."
+                }
+            else:
+                raise HTTPException(status_code=400, detail="Invalid Stellar public key format")
+        
+        # Fallback: Generate placeholder account ID
         return {
-            "accountId": f"G{uid[:56]}",
+            "accountId": f"G{uid[:56].ljust(55, '0')}",  # Placeholder format
             "secretKey": None,
-            "message": "Stellar account retrieval - implement Pi Network API call"
+            "message": "Stellar account retrieval - implement Pi Network API call. You can provide your public_key in the request."
         }
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error getting Stellar account: {e}")
         raise HTTPException(status_code=500, detail=str(e))

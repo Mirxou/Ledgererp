@@ -1,7 +1,7 @@
 {
   "name": "Ledger ERP",
   "short_name": "LedgerERP",
-  "description": "Non-Custodial ERP System for Pi Network Merchants",
+  "description": "Secure ERP for Pi merchants. Create invoices, accept Pi payments via QR codes, Zero-knowledge encryption - your data stays on your device.",
   "version": "1.0.0",
   "manifest_version": 2,
   "icons": [
@@ -29,7 +29,7 @@
   "pi_app": {
     "app_id": "pi-ledger-erp",
     "name": "Ledger ERP",
-    "description": "Secure Non-Custodial ERP for Pi Network Merchants",
+    "description": "Secure ERP for Pi merchants. Create invoices, accept Pi payments via QR codes, Zero-knowledge encryption - your data stays on your device.",
     "category": "business",
     "version": "1.0.0",
     "developer": "mirxou",

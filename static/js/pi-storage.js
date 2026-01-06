@@ -91,28 +91,67 @@ class PiStorage {
     /**
      * Get Stellar account from Pi Network
      * This will use Pi Network's API to get the Stellar account associated with Pi.uid
+     * Can also accept a public_key parameter for direct account lookup
      */
-    async getStellarAccount(piUid) {
+    async getStellarAccount(piUid, publicKey = null) {
         try {
+            // Check if public key is stored in localStorage (user can provide it)
+            const storedPublicKey = localStorage.getItem('stellar_public_key');
+            const usePublicKey = publicKey || storedPublicKey;
+            
+            console.log('🔍 [STELLAR] Getting Stellar account:', { 
+                piUid, 
+                hasPublicKey: !!usePublicKey,
+                publicKeyPreview: usePublicKey ? `${usePublicKey.substring(0, 8)}...` : null
+            });
+            
             // Call Pi Network API to get Stellar account details
             // TODO: Implement Pi Network API call
+            const requestBody = {
+                uid: piUid
+            };
+            
+            // If public key is available, include it in the request
+            if (usePublicKey) {
+                requestBody.public_key = usePublicKey;
+                console.log('✅ [STELLAR] Using provided public key for account lookup');
+            }
+            
             const response = await fetch('/api/pi/get-stellar-account', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${this.piAdapter.accessToken}`
                 },
-                body: JSON.stringify({ uid: piUid })
+                body: JSON.stringify(requestBody)
             });
 
             if (!response.ok) {
-                throw new Error('Failed to get Stellar account from Pi Network');
+                const errorText = await response.text();
+                console.error('❌ [STELLAR] Failed to get Stellar account:', { status: response.status, error: errorText });
+                throw new Error(`Failed to get Stellar account from Pi Network: ${response.status} - ${errorText}`);
             }
 
             const data = await response.json();
+            console.log('✅ [STELLAR] Stellar account received:', { 
+                accountId: data.accountId ? `${data.accountId.substring(0, 8)}...` : null,
+                hasSecretKey: !!data.secretKey,
+                message: data.message
+            });
+            
+            // Store public key in localStorage for future use
+            if (data.accountId || data.publicKey) {
+                const pubKey = data.publicKey || data.accountId;
+                if (pubKey && pubKey.startsWith('G')) {
+                    localStorage.setItem('stellar_public_key', pubKey);
+                    console.log('💾 [STELLAR] Public key stored in localStorage');
+                }
+            }
+            
             return {
-                accountId: data.accountId,
-                secretKey: data.secretKey // This should be handled securely
+                accountId: data.accountId || data.publicKey,
+                secretKey: data.secretKey, // This should be None/null - never exposed to frontend
+                publicKey: data.publicKey || data.accountId
             };
         } catch (error) {
             console.error('Error getting Stellar account:', error);
