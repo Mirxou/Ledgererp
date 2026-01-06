@@ -11,10 +11,20 @@
 
 ## 📸 Interface Preview
 
-| Dashboard | Invoice Creation |
+| Home Screen | Invoice Creation |
 |:---:|:---:|
-| ![Dashboard](/static/screenshots/screenshot_dashboard.png) | ![Invoice](/static/screenshots/screenshot_invoice.png) |
-| *Real-time financial analytics* | *Professional invoice generator* |
+| ![Home Screen](static/screenshots/home.png) | ![Invoice](static/screenshots/invoice.png) |
+| *Welcome screen with Pi Network authentication* | *Professional invoice creation interface* |
+
+### Key Features Showcase
+
+- **🔐 Pi Network Authentication**: Secure login using Pi Browser
+- **📝 Invoice Management**: Create, manage, and track invoices in Pi cryptocurrency  
+- **💳 Payment Processing**: Accept Pi payments via QR codes
+- **🔒 Zero-Knowledge Encryption**: Your data stays encrypted on your device
+- **📱 Offline-First**: Works offline with automatic sync when online
+
+> **📸 Screenshots**: All screenshots are taken from the live production application at https://ledgererp.online
 
 ## Overview
 Ledger ERP is a comprehensive, non-custodial ERP system engineered specifically for the Pi Network ecosystem.  Built on a rigorous **47-Point Master Plan**, it delivers banking-grade security, complete data sovereignty, and seamless offline functionality for merchants worldwide.
