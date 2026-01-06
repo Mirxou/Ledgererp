@@ -37,6 +37,9 @@ class Settings(BaseSettings):
     LOCAL_NODE_URL: str = "http://localhost:31400"
     PUBLIC_API_URL: str = "https://api.minepi.com"
     MIN_VERSION: str = "1.0.0"
+    
+    # Pi Network API Configuration
+    PI_API_KEY: str = ""
 
     # API Settings
     API_V1_PREFIX: str = "/api/v1"
