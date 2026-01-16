@@ -226,19 +226,8 @@ class PiAdapter {
                 console.warn('⚠️ User Agent does not contain PiBrowser. Proceeding anyway...');
             }
 
-            /* 
-            // DISABLED STRICT CHECK due to User Agent issues on some devices
-            const urlParams = new URLSearchParams(window.location.search);
-            const ignoreBrowserCheck = urlParams.get('ignore_browser') === 'true';
-
-            if (!isPiBrowser && !ignoreBrowserCheck) {
-                const errorMsg = '❌ CRITICAL: Not running in Pi Browser!\n' +
-                    'Pi authentication ONLY works in Pi Browser.\n' +
-                    'Current User Agent: ' + navigator.userAgent;
-                alert(errorMsg);
-                // throw new Error('Pi authentication requires Pi Browser.'); // Allow it to proceed
-            }
-            */
+            // Strict check disabled.
+            // Proceeding with authentication directly.
 
             if (typeof Pi === 'undefined') {
                 const errorMsg = '❌ CRITICAL: Pi SDK not loaded!\n' +
