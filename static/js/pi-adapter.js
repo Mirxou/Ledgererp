@@ -83,6 +83,11 @@ class PiAdapter {
             // Official Authentication Call
             const authResult = await Pi.authenticate(scopes, onIncompletePaymentFound);
 
+            if (!authResult || !authResult.user) {
+                console.error('❌ Authentication returned empty result:', authResult);
+                throw new Error('Authentication failed. Please try again in Pi Browser.');
+            }
+
             this.currentUser = authResult.user;
             console.log('✅ Authentication Successful:', authResult);
 
