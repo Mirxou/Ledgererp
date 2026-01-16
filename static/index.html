@@ -656,315 +656,335 @@
                             </a>
                         </div>
                     </div>
+                    <div class="auth-box">
+                        <!-- Option 1: Pi Login -->
+                        <button id="pi-auth-btn" class="welcome-btn welcome-btn-primary w-100 mb-3">
+                            <i class="fas fa-network-wired me-2"></i> Login with Pi Network
+                        </button>
+
+                        <div style="text-align: center; margin: 15px 0; position: relative;">
+                            <hr style="border: 0; border-top: 1px solid #ddd;">
+                            <span
+                                style="position: absolute; top: -10px; left: 50%; transform: translateX(-50%); background: #fff; padding: 0 10px; color: #777; font-size: 0.9em;">OR</span>
+                        </div>
+
+                        <!-- Option 2: Guest/Manual Login -->
+                        <div class="manual-login-form">
+                            <input type="text" id="guest-username" class="form-control mb-2"
+                                placeholder="Enter Username (Guest)"
+                                style="padding: 10px; width: 100%; border: 1px solid #ccc; border-radius: 8px;">
+                            <button id="guest-login-btn" class="welcome-btn welcome-btn-secondary w-100"
+                                style="background: #6c757d; color: white;">
+                                Guest Login (No Pi required)
+                            </button>
+                        </div>
+                    </div>
+
+                    <div id="auth-status" class="mt-3"></div>
+                    <p class="form-note" style="color: #f44336; font-weight: bold;">
+                        ⚠️ <strong>KYC Required:</strong> You must complete KYC verification in Pi Browser to use this
+                        application.
+                    </p>
                 </div>
-                <div class="auth-actions">
-                    <button id="pi-auth-btn" class="btn btn-lg btn-green">
-                        Login with Pi Network
+
+                <!-- Setup Section (for new merchants) -->
+                <div id="setup-section" class="hidden">
+                    <h2>Setup Your Merchant Account</h2>
+                    <p>Generate your 12-word recovery phrase (BIP-39)</p>
+
+                    <div class="form-group">
+                        <label>Recovery Phrase (12 words):</label>
+                        <textarea id="mnemonic-input" rows="3" class="input-full"
+                            placeholder="Enter 12 words here"></textarea>
+                        <small class="form-note">This is NOT your Pi wallet seed phrase. Generate a new one for this
+                            application.</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label>PIN Code:</label>
+                        <input type="password" id="pin-input" class="input-full" placeholder="Enter 6-digit PIN">
+                    </div>
+                    <div class="setup-buttons-group">
+                        <button id="generate-mnemonic-btn" class="btn btn-primary">Generate New
+                            Phrase</button>
+                        <button id="scan-setup-qr-btn" class="btn btn-orange">📱 Scan Setup QR</button>
+                    </div>
+                    <button id="setup-complete-btn" class="btn btn-md btn-green">
+                        Complete Setup
                     </button>
                 </div>
-                <div id="auth-status"></div>
-                <p class="form-note" style="color: #f44336; font-weight: bold;">
-                    ⚠️ <strong>KYC Required:</strong> You must complete KYC verification in Pi Browser to use this
-                    application.
-                </p>
-            </div>
 
-            <!-- Setup Section (for new merchants) -->
-            <div id="setup-section" class="hidden">
-                <h2>Setup Your Merchant Account</h2>
-                <p>Generate your 12-word recovery phrase (BIP-39)</p>
+                <!-- Dashboard Section -->
+                <div id="dashboard-section">
+                    <div id="dashboard-view" class="dashboard-view">
 
-                <div class="form-group">
-                    <label>Recovery Phrase (12 words):</label>
-                    <textarea id="mnemonic-input" rows="3" class="input-full"
-                        placeholder="Enter 12 words here"></textarea>
-                    <small class="form-note">This is NOT your Pi wallet seed phrase. Generate a new one for this
-                        application.</small>
-                </div>
+                        <!-- Live Store Indicator (hidden by default) -->
+                        <div id="live-store-indicator" class="banner-live">
+                            <span class="icon-lg mr-10">🟢</span>
+                            <span>LIVE STORE - Ready for Production</span>
+                            <span class="icon-lg ml-10">🟢</span>
+                        </div>
 
-                <div class="form-group">
-                    <label>PIN Code:</label>
-                    <input type="password" id="pin-input" class="input-full" placeholder="Enter 6-digit PIN">
-                </div>
-                <div class="setup-buttons-group">
-                    <button id="generate-mnemonic-btn" class="btn btn-primary">Generate New
-                        Phrase</button>
-                    <button id="scan-setup-qr-btn" class="btn btn-orange">📱 Scan Setup QR</button>
-                </div>
-                <button id="setup-complete-btn" class="btn btn-md btn-green">
-                    Complete Setup
-                </button>
-            </div>
-
-            <!-- Dashboard Section -->
-            <div id="dashboard-section">
-                <div id="dashboard-view" class="dashboard-view">
-
-                    <!-- Live Store Indicator (hidden by default) -->
-                    <div id="live-store-indicator" class="banner-live">
-                        <span class="icon-lg mr-10">🟢</span>
-                        <span>LIVE STORE - Ready for Production</span>
-                        <span class="icon-lg ml-10">🟢</span>
-                    </div>
-
-                    <!-- Dashboard Header -->
-                    <div class="shop-header">
-                        <div>
-                            <h2 id="shop-name" class="shop-name">Shop Name</h2>
-                            <div class="shop-actions">
-                                <span>Network Status:</span>
-                                <span id="network-status" class="icon-lg">🟢</span>
+                        <!-- Dashboard Header -->
+                        <div class="shop-header">
+                            <div>
+                                <h2 id="shop-name" class="shop-name">Shop Name</h2>
+                                <div class="shop-actions">
+                                    <span>Network Status:</span>
+                                    <span id="network-status" class="icon-lg">🟢</span>
+                                </div>
+                            </div>
+                            <div class="action-buttons">
+                                <button id="b2b-market-btn" class="btn btn-sm btn-purple">
+                                    🌐 B2B Market
+                                </button>
+                                <button id="export-data-btn" class="btn btn-sm btn-grey">
+                                    📤 Export Data
+                                </button>
+                                <button id="create-vault-backup-btn" class="btn btn-sm btn-blue">
+                                    ☁️ Create Cloud Backup
+                                </button>
+                                <button id="restore-from-vault-btn" class="btn btn-sm btn-orange">
+                                    🔄 Restore from Backup
+                                </button>
+                                <button id="close-shift-btn" class="btn btn-sm btn-red">
+                                    📊 Close Shift
+                                </button>
+                                <button id="add-device-btn" class="btn btn-sm btn-add-device">
+                                    📱 Add Device
+                                </button>
+                                <button id="import-products-btn" class="btn btn-sm btn-orange">
+                                    📥 Import CSV
+                                </button>
+                                <button id="create-invoice-btn" class="btn btn-sm btn-green">
+                                    ➕ Create Invoice
+                                </button>
                             </div>
                         </div>
-                        <div class="action-buttons">
-                            <button id="b2b-market-btn" class="btn btn-sm btn-purple">
-                                🌐 B2B Market
-                            </button>
-                            <button id="export-data-btn" class="btn btn-sm btn-grey">
-                                📤 Export Data
-                            </button>
-                            <button id="create-vault-backup-btn" class="btn btn-sm btn-blue">
-                                ☁️ Create Cloud Backup
-                            </button>
-                            <button id="restore-from-vault-btn" class="btn btn-sm btn-orange">
-                                🔄 Restore from Backup
-                            </button>
-                            <button id="close-shift-btn" class="btn btn-sm btn-red">
-                                📊 Close Shift
-                            </button>
-                            <button id="add-device-btn" class="btn btn-sm btn-add-device">
-                                📱 Add Device
-                            </button>
-                            <button id="import-products-btn" class="btn btn-sm btn-orange">
-                                📥 Import CSV
-                            </button>
-                            <button id="create-invoice-btn" class="btn btn-sm btn-green">
-                                ➕ Create Invoice
-                            </button>
-                        </div>
-                    </div>
 
-                    <!-- Stats Cards -->
-                    <div class="stats-grid">
-                        <div class="stat-card">
-                            <div class="stat-label">Total Sales (Pi)</div>
-                            <div id="total-sales-pi" class="stat-value stat-value-green">0.00</div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-label">Total Cash (Offline)</div>
-                            <div id="total-cash-offline" class="stat-value stat-value-blue">
-                                <span id="cash-currency-symbol">$</span><span id="cash-amount">0.00</span>
+                        <!-- Stats Cards -->
+                        <div class="stats-grid">
+                            <div class="stat-card">
+                                <div class="stat-label">Total Sales (Pi)</div>
+                                <div id="total-sales-pi" class="stat-value stat-value-green">0.00</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-label">Total Cash (Offline)</div>
+                                <div id="total-cash-offline" class="stat-value stat-value-blue">
+                                    <span id="cash-currency-symbol">$</span><span id="cash-amount">0.00</span>
+                                </div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-label">Total Invoices</div>
+                                <div id="total-invoices" class="stat-value stat-value-orange">0</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-label">Daily Revenue</div>
+                                <div id="daily-revenue" class="stat-value stat-value-revenue">+0.00</div>
                             </div>
                         </div>
-                        <div class="stat-card">
-                            <div class="stat-label">Total Invoices</div>
-                            <div id="total-invoices" class="stat-value stat-value-orange">0</div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-label">Daily Revenue</div>
-                            <div id="daily-revenue" class="stat-value stat-value-revenue">+0.00</div>
-                        </div>
-                    </div>
 
-                    <!-- Invoice List -->
-                    <div class="content-card">
-                        <h3>Recent Invoices</h3>
-                        <div id="invoices-table-container">
-                            <table id="invoices-table" class="table-full">
-                                <thead>
-                                    <tr class="table-header">
-                                        <th class="th-left">Invoice ID / Ref</th>
-                                        <th class="th-right">Amount</th>
-                                        <th class="th-center">Currency</th>
-                                        <th class="th-center">Status</th>
-                                        <th class="th-left">Date</th>
-                                        <th class="th-center">Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="invoices-tbody">
-                                    <tr>
-                                        <td colspan="5" class="table-empty">
-                                            Loading invoices...
-                                        </td>
-                                    </tr>
-                                </tbody>
-                            </table>
+                        <!-- Invoice List -->
+                        <div class="content-card">
+                            <h3>Recent Invoices</h3>
+                            <div id="invoices-table-container">
+                                <table id="invoices-table" class="table-full">
+                                    <thead>
+                                        <tr class="table-header">
+                                            <th class="th-left">Invoice ID / Ref</th>
+                                            <th class="th-right">Amount</th>
+                                            <th class="th-center">Currency</th>
+                                            <th class="th-center">Status</th>
+                                            <th class="th-left">Date</th>
+                                            <th class="th-center">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="invoices-tbody">
+                                        <tr>
+                                            <td colspan="5" class="table-empty">
+                                                Loading invoices...
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
                     </div>
                 </div>
-            </div>
 
-            <!-- Invoice Modal -->
-            <dialog id="invoice-modal" class="modal-dialog">
-                <div class="modal-content">
-                    <div class="modal-header">
-                        <h2>Create New Invoice</h2>
-                        <button id="close-modal-btn" class="modal-close">&times;</button>
-                    </div>
+                <!-- Invoice Modal -->
+                <dialog id="invoice-modal" class="modal-dialog">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h2>Create New Invoice</h2>
+                            <button id="close-modal-btn" class="modal-close">&times;</button>
+                        </div>
 
-                    <form id="invoice-form">
-                        <!-- Exchange Rate Selector (Reference Only) -->
-                        <div class="form-highlight">
-                            <label class="form-label-block">
-                                Exchange Rate (Reference Only - للأغراض الضريبية فقط):
-                            </label>
-                            <div class="form-radio-group">
-                                <label class="form-radio-label">
-                                    <input type="radio" name="rate-type" id="rate-gcv" value="gcv" checked
-                                        class="form-radio-input">
-                                    <span>GCV ($314,159/Pi)</span>
+                        <form id="invoice-form">
+                            <!-- Exchange Rate Selector (Reference Only) -->
+                            <div class="form-highlight">
+                                <label class="form-label-block">
+                                    Exchange Rate (Reference Only - للأغراض الضريبية فقط):
                                 </label>
-                                <label class="form-radio-label">
-                                    <input type="radio" name="rate-type" id="rate-custom" value="custom"
-                                        class="form-radio-input">
-                                    <span>Custom Rate:</span>
-                                </label>
-                                <input type="number" id="custom-rate-input" placeholder="10.00" step="any"
-                                    min="0.0000001" value="10.00" disabled class="input-narrow">
-                                <span class="text-muted text-small">$/Pi</span>
-                            </div>
-                            <p class="m-0 text-small text-muted text-italic">
-                                This rate is used only for tax purposes and cash deduction calculations
-                            </p>
-                        </div>
-
-                        <!-- Customer Name -->
-                        <div class="form-group">
-                            <label class="form-label-block">Customer Name:</label>
-                            <input type="text" id="customer-name" placeholder="Enter customer name" class="input-full">
-                        </div>
-
-                        <!-- External Reference ID (Optional) -->
-                        <div class="form-group">
-                            <label class="form-label-block">
-                                External Reference / Paper ID (Optional):
-                            </label>
-                            <input type="text" id="external-ref-input"
-                                placeholder="e.g., #500 (Your paper invoice number)" class="input-full">
-                            <p class="form-note">
-                                Link this invoice to your physical paper invoice number
-                            </p>
-                        </div>
-
-                        <!-- Items List (Prices in Pi) -->
-                        <div class="form-group">
-                            <div class="items-header">
-                                <label class="items-label">
-                                    Items (Prices in Pi - π):
-                                </label>
-                                <div class="items-buttons">
-                                    <button type="button" id="scan-barcode-btn" class="btn btn-sm btn-orange">
-                                        📷 Scan Barcode
-                                    </button>
-                                    <button type="button" id="add-item-btn" class="btn btn-sm btn-blue">
-                                        + Add Item
-                                    </button>
+                                <div class="form-radio-group">
+                                    <label class="form-radio-label">
+                                        <input type="radio" name="rate-type" id="rate-gcv" value="gcv" checked
+                                            class="form-radio-input">
+                                        <span>GCV ($314,159/Pi)</span>
+                                    </label>
+                                    <label class="form-radio-label">
+                                        <input type="radio" name="rate-type" id="rate-custom" value="custom"
+                                            class="form-radio-input">
+                                        <span>Custom Rate:</span>
+                                    </label>
+                                    <input type="number" id="custom-rate-input" placeholder="10.00" step="any"
+                                        min="0.0000001" value="10.00" disabled class="input-narrow">
+                                    <span class="text-muted text-small">$/Pi</span>
                                 </div>
-                            </div>
-                            <p class="items-hint">
-                                💡 Enter item prices directly in Pi (π). Example: 0.5 π for bread, 2.0 π for coffee
-                            </p>
-                            <div id="items-list">
-                                <!-- Items will be added dynamically -->
-                            </div>
-                        </div>
-
-                        <!-- Cash Paid (Deduction) -->
-                        <div class="cash-deduction-section">
-                            <label class="form-label-block">
-                                Offline Cash Down-payment (USD/Local) - خصم الكاش:
-                            </label>
-                            <div class="cash-input-group">
-                                <input type="number" id="cash-paid-input" placeholder="0.00" step="any" min="0"
-                                    value="0" class="cash-input">
-                                <span class="currency-label">USD</span>
-                                <span class="conversion-arrow">→</span>
-                                <span id="cash-paid-pi-equivalent" class="cash-pi-value">-π0.00</span>
-                            </div>
-                            <p class="form-note">
-                                This cash amount will be converted to Pi and deducted from the total
-                            </p>
-                        </div>
-
-                        <div class="separator-line"></div>
-
-                        <!-- Summary Section - Pi-First Design -->
-                        <div class="form-group">
-                            <h3 class="summary-title">Invoice Summary</h3>
-
-                            <!-- Pi Calculation Breakdown -->
-                            <div class="pi-breakdown">
-                                <div class="breakdown-row">
-                                    <span class="breakdown-label">Total Items (Pi):</span>
-                                    <span id="total-items-pi" class="breakdown-value">π0.00</span>
-                                </div>
-                                <div class="breakdown-row">
-                                    <span class="breakdown-label">Less: Cash Paid (Pi equivalent):</span>
-                                    <span id="cash-deduction-pi"
-                                        class="breakdown-value breakdown-value-red">-π0.00</span>
-                                </div>
-                                <div class="breakdown-row breakdown-row-subtotal">
-                                    <span class="breakdown-label">Subtotal (Pi):</span>
-                                    <span id="subtotal-pi" class="breakdown-value">π0.00</span>
-                                </div>
-                                <div class="breakdown-row">
-                                    <span class="breakdown-label">Network Fee:</span>
-                                    <span class="breakdown-value">+π0.01</span>
-                                </div>
-                            </div>
-
-                            <!-- Final Total - Large and Clear -->
-                            <div class="final-total">
-                                <div class="final-total-label">
-                                    NET TO PAY (QR CODE)
-                                </div>
-                                <div id="total-pi-with-fee" class="final-total-value">
-                                    π0.01
-                                </div>
-                                <p class="final-total-note">
-                                    This is the exact amount the QR code will request
+                                <p class="m-0 text-small text-muted text-italic">
+                                    This rate is used only for tax purposes and cash deduction calculations
                                 </p>
                             </div>
 
-                            <!-- Tax/Fiscal Reference (Footer Note) -->
-                            <div class="tax-reference">
-                                <span class="tax-label">
-                                    Estimated Value: <span id="total-fiat" class="tax-value">$0.00</span>
-                                    <span class="tax-note">(For Tax/Fiscal Purposes Only - للأغراض الضريبية فقط)</span>
-                                </span>
+                            <!-- Customer Name -->
+                            <div class="form-group">
+                                <label class="form-label-block">Customer Name:</label>
+                                <input type="text" id="customer-name" placeholder="Enter customer name"
+                                    class="input-full">
                             </div>
-                        </div>
 
-                        <!-- QR Code Display -->
-                        <div id="qr-container" class="qr-container hidden">
-                            <h3>Scan QR Code to Pay</h3>
-                            <div id="qr-code" class="qr-code-wrapper">
-                                <canvas id="qr-code-canvas" class="qr-canvas"></canvas>
+                            <!-- External Reference ID (Optional) -->
+                            <div class="form-group">
+                                <label class="form-label-block">
+                                    External Reference / Paper ID (Optional):
+                                </label>
+                                <input type="text" id="external-ref-input"
+                                    placeholder="e.g., #500 (Your paper invoice number)" class="input-full">
+                                <p class="form-note">
+                                    Link this invoice to your physical paper invoice number
+                                </p>
                             </div>
-                            <p class="qr-expiry">This QR code expires in 120 minutes</p>
-                        </div>
 
-                        <!-- Action Buttons -->
-                        <div class="modal-actions">
-                            <button type="button" id="cancel-invoice-btn" class="btn btn-md btn-red">
-                                Cancel
-                            </button>
-                            <button type="button" id="btn-print-receipt" class="btn btn-md btn-grey">
-                                🖨️ Print Receipt
-                            </button>
-                            <button type="button" id="btn-save-draft" class="btn btn-md btn-blue">
-                                💾 Save Invoice
-                            </button>
-                            <button type="button" id="btn-generate-qr" class="btn btn-md btn-green">
-                                📱 Generate Payment QR
-                            </button>
-                            <button type="button" id="btn-copy-link" class="btn btn-md btn-purple">
-                                📋 Copy Link for Chat
-                            </button>
-                        </div>
-                    </form>
-                </div>
-            </dialog>
+                            <!-- Items List (Prices in Pi) -->
+                            <div class="form-group">
+                                <div class="items-header">
+                                    <label class="items-label">
+                                        Items (Prices in Pi - π):
+                                    </label>
+                                    <div class="items-buttons">
+                                        <button type="button" id="scan-barcode-btn" class="btn btn-sm btn-orange">
+                                            📷 Scan Barcode
+                                        </button>
+                                        <button type="button" id="add-item-btn" class="btn btn-sm btn-blue">
+                                            + Add Item
+                                        </button>
+                                    </div>
+                                </div>
+                                <p class="items-hint">
+                                    💡 Enter item prices directly in Pi (π). Example: 0.5 π for bread, 2.0 π for coffee
+                                </p>
+                                <div id="items-list">
+                                    <!-- Items will be added dynamically -->
+                                </div>
+                            </div>
+
+                            <!-- Cash Paid (Deduction) -->
+                            <div class="cash-deduction-section">
+                                <label class="form-label-block">
+                                    Offline Cash Down-payment (USD/Local) - خصم الكاش:
+                                </label>
+                                <div class="cash-input-group">
+                                    <input type="number" id="cash-paid-input" placeholder="0.00" step="any" min="0"
+                                        value="0" class="cash-input">
+                                    <span class="currency-label">USD</span>
+                                    <span class="conversion-arrow">→</span>
+                                    <span id="cash-paid-pi-equivalent" class="cash-pi-value">-π0.00</span>
+                                </div>
+                                <p class="form-note">
+                                    This cash amount will be converted to Pi and deducted from the total
+                                </p>
+                            </div>
+
+                            <div class="separator-line"></div>
+
+                            <!-- Summary Section - Pi-First Design -->
+                            <div class="form-group">
+                                <h3 class="summary-title">Invoice Summary</h3>
+
+                                <!-- Pi Calculation Breakdown -->
+                                <div class="pi-breakdown">
+                                    <div class="breakdown-row">
+                                        <span class="breakdown-label">Total Items (Pi):</span>
+                                        <span id="total-items-pi" class="breakdown-value">π0.00</span>
+                                    </div>
+                                    <div class="breakdown-row">
+                                        <span class="breakdown-label">Less: Cash Paid (Pi equivalent):</span>
+                                        <span id="cash-deduction-pi"
+                                            class="breakdown-value breakdown-value-red">-π0.00</span>
+                                    </div>
+                                    <div class="breakdown-row breakdown-row-subtotal">
+                                        <span class="breakdown-label">Subtotal (Pi):</span>
+                                        <span id="subtotal-pi" class="breakdown-value">π0.00</span>
+                                    </div>
+                                    <div class="breakdown-row">
+                                        <span class="breakdown-label">Network Fee:</span>
+                                        <span class="breakdown-value">+π0.01</span>
+                                    </div>
+                                </div>
+
+                                <!-- Final Total - Large and Clear -->
+                                <div class="final-total">
+                                    <div class="final-total-label">
+                                        NET TO PAY (QR CODE)
+                                    </div>
+                                    <div id="total-pi-with-fee" class="final-total-value">
+                                        π0.01
+                                    </div>
+                                    <p class="final-total-note">
+                                        This is the exact amount the QR code will request
+                                    </p>
+                                </div>
+
+                                <!-- Tax/Fiscal Reference (Footer Note) -->
+                                <div class="tax-reference">
+                                    <span class="tax-label">
+                                        Estimated Value: <span id="total-fiat" class="tax-value">$0.00</span>
+                                        <span class="tax-note">(For Tax/Fiscal Purposes Only - للأغراض الضريبية
+                                            فقط)</span>
+                                    </span>
+                                </div>
+                            </div>
+
+                            <!-- QR Code Display -->
+                            <div id="qr-container" class="qr-container hidden">
+                                <h3>Scan QR Code to Pay</h3>
+                                <div id="qr-code" class="qr-code-wrapper">
+                                    <canvas id="qr-code-canvas" class="qr-canvas"></canvas>
+                                </div>
+                                <p class="qr-expiry">This QR code expires in 120 minutes</p>
+                            </div>
+
+                            <!-- Action Buttons -->
+                            <div class="modal-actions">
+                                <button type="button" id="cancel-invoice-btn" class="btn btn-md btn-red">
+                                    Cancel
+                                </button>
+                                <button type="button" id="btn-print-receipt" class="btn btn-md btn-grey">
+                                    🖨️ Print Receipt
+                                </button>
+                                <button type="button" id="btn-save-draft" class="btn btn-md btn-blue">
+                                    💾 Save Invoice
+                                </button>
+                                <button type="button" id="btn-generate-qr" class="btn btn-md btn-green">
+                                    📱 Generate Payment QR
+                                </button>
+                                <button type="button" id="btn-copy-link" class="btn btn-md btn-purple">
+                                    📋 Copy Link for Chat
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </dialog>
         </main>
 
         <!-- Req #4: Footer Disclaimer -->
@@ -1509,140 +1529,68 @@
                 alert('خطأ في تهيئة التطبيق. Error initializing app: ' + error.message);
             }
 
-            // Pi Authentication Handler (Req #1)
+            // Pi Authentication & Guest Login Logic
             const piAuthBtn = document.getElementById('pi-auth-btn');
-            const piBrowserWarning = document.getElementById('pi-browser-warning');
+            const guestLoginBtn = document.getElementById('guest-login-btn');
+            const guestInput = document.getElementById('guest-username');
+            const authStatus = document.getElementById('auth-status');
 
-            // Check if running in Pi Browser on page load
-            if (piBrowserWarning) {
-                const isPiBrowser = navigator.userAgent.includes('PiBrowser');
-                const urlParams = new URLSearchParams(window.location.search);
-                const ignoreBrowserCheck = urlParams.get('ignore_browser') === 'true';
-
-                if (!isPiBrowser && !ignoreBrowserCheck) {
-                    piBrowserWarning.style.display = 'block';
-                    if (piAuthBtn) {
-                        piAuthBtn.disabled = true;
-                        piAuthBtn.style.opacity = '0.5';
-                        piAuthBtn.title = 'Pi Browser required';
-                    }
-                } else {
-                    piBrowserWarning.style.display = 'none';
-                }
-            }
-
+            // 1. Pi Login Handler
             if (piAuthBtn) {
                 piAuthBtn.addEventListener('click', async () => {
-                    // Check Pi Browser again before authenticating (with bypass support)
-                    const isPiBrowser = navigator.userAgent.includes('PiBrowser');
-                    const urlParams = new URLSearchParams(window.location.search);
-                    const ignoreBrowserCheck = urlParams.get('ignore_browser') === 'true';
-
-                    if (!isPiBrowser && !ignoreBrowserCheck) {
-                        const authStatus = document.getElementById('auth-status');
-                        authStatus.innerHTML = `
-                            <div class="error-text" style="text-align: right; direction: rtl;">
-                                ❌ <strong>خطأ: المتصفح غير مدعوم</strong><br>
-                                يجب استخدام تطبيق <strong>Pi Browser</strong> للمصادقة.<br><br>
-                                إذا كنت تستخدمه بالفعل، اضغط هنا:<br>
-                                <a href="?ignore_browser=true" style="display: inline-block; background: #f44336; color: white; padding: 5px 10px; border-radius: 4px; text-decoration: none; margin-top: 5px;">
-                                    تجاوز الفحص (Force Login)
-                                </a>
-                                <br>
-                                <a href="?sandbox=true&ignore_browser=true" style="display: inline-block; background: #2196F3; color: white; padding: 5px 10px; border-radius: 4px; text-decoration: none; margin-top: 5px;">
-                                    تجربة Sandbox (Testnet)
-                                </a>
-                            </div>`;
-                        return;
-                    }
-
-                    // Show loading state
-                    const authStatus = document.getElementById('auth-status');
-                    authStatus.innerHTML = '<p class="info-text">⏳ Authenticating with Pi Network...</p>';
-                    piAuthBtn.disabled = true;
-                    piAuthBtn.textContent = 'Authenticating...';
+                    authStatus.innerHTML = '<div class="spinner-border text-primary" role="status"></div> Authenticating with Pi...';
 
                     try {
-                        // #region agent log
-                        fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'index.html:1440', message: 'Button click - calling authenticate()', data: { hasPiAdapter: !!piAdapter }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'G' }) }).catch(() => { });
-                        // #endregion
-                        const result = await piAdapter.authenticate();
-                        // #region agent log
-                        fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'index.html:1443', message: 'authenticate() returned', data: { success: result?.success, error: result?.error }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'G' }) }).catch(() => { });
-                        // #endregion
-                        if (result.success) {
-                            // Save merchant ID after successful authentication
-                            // STATE MANAGEMENT FIX: Use window.dbManager for consistency
-                            const currentDbManager = window.dbManager || dbManager;
-                            if (currentDbManager && result.user && result.user.uid) {
-                                await currentDbManager.setCurrentMerchantId(result.user.uid);
-                                console.log('✅ Merchant ID saved after authentication:', result.user.uid);
-                            } else if (!currentDbManager) {
-                                console.warn('⚠️ Database manager not available to save merchant ID');
-                            }
+                        // Call simplified auth (returns null on fail, no throw)
+                        const authResult = await window.piAdapter.authenticate();
 
-                            // Store Stellar public key if user provided one (for debugging)
-                            // User can set it in console: localStorage.setItem('stellar_public_key', 'GBKTKVQ2SX5NFUCCPOGN5BTWT3JPFX6LHPRKY4UGLEYMDPWVZCPR6UZK')
-                            const storedPublicKey = localStorage.getItem('stellar_public_key');
-                            if (storedPublicKey) {
-                                console.log('✅ Using stored Stellar public key:', storedPublicKey.substring(0, 8) + '...');
-                            }
-
-                            // XSS FIX: Sanitize username before displaying
-                            const sanitizedUsername = typeof DOMPurify !== 'undefined'
-                                ? DOMPurify.sanitize(result.user.username || '')
-                                : String(result.user.username || '').replace(/[<>&"']/g, '');
-
-                            let successMsg = '<p class="success-text">✓ Authenticated as: ' + sanitizedUsername + '</p>';
-                            if (storedPublicKey) {
-                                successMsg += '<p class="note-text">ℹ️ Using Stellar public key: ' + storedPublicKey.substring(0, 12) + '...</p>';
-                            }
-
-                            authStatus.innerHTML = successMsg;
-                            document.getElementById('setup-section').classList.remove('hidden');
-                            console.log('✅ Authentication successful! Setup section is now visible.');
+                        if (authResult) {
+                            // Success
+                            authStatus.innerHTML = '<span class="text-success">✅ Success! Logging in...</span>';
+                            handleLoginSuccess(authResult.user.username, 'pi', authResult.accessToken);
                         } else {
-                            // XSS FIX: Sanitize error message before displaying
-                            const sanitizedError = typeof DOMPurify !== 'undefined'
-                                ? DOMPurify.sanitize(result.error || '')
-                                : String(result.error || '').replace(/[<>&"']/g, '');
-                            const isPiBrowser = navigator.userAgent.includes('PiBrowser');
-                            const browserNote = isPiBrowser
-                                ? '<p class="note-text">⚠️ Please ensure you have completed KYC verification in Pi Browser.</p>' +
-                                '<p class="note-text">💡 TIP: If you have your Stellar public key, you can set it in browser console:<br><code>localStorage.setItem(\'stellar_public_key\', \'YOUR_PUBLIC_KEY\')</code></p>'
-                                : '<p class="error-text">⚠️ CRITICAL: Pi authentication requires Pi Browser. Please open this app in Pi Browser (not regular browser).</p>';
-
-                            // Add detailed error info for debugging
-                            let errorDetails = '<p class="error-text">✗ Authentication failed: ' + sanitizedError + '</p>';
-                            if (result.details) {
-                                errorDetails += '<p class="note-text" style="font-size: 0.9em; margin-top: 5px;">Details: ' + String(result.details).substring(0, 200) + '</p>';
-                            }
-
-                            authStatus.innerHTML = errorDetails + browserNote;
-
-                            // Log full error to console for debugging
-                            console.error('❌ Authentication failed:', {
-                                error: result.error,
-                                details: result.details,
-                                stack: result.stack,
-                                isPiBrowser: isPiBrowser,
-                                hasPi: typeof Pi !== 'undefined',
-                                userAgent: navigator.userAgent
-                            });
+                            // Failed or Cancelled - Suggest Guest Login
+                            authStatus.innerHTML = '<span class="text-warning">⚠️ Pi Auth failed/cancelled. You can use Guest Login below.</span>';
                         }
-                    } catch (error) {
-                        // XSS FIX: Sanitize error message before displaying
-                        const sanitizedErrorMsg = typeof DOMPurify !== 'undefined'
-                            ? DOMPurify.sanitize(error.message || '')
-                            : String(error.message || '').replace(/[<>&"']/g, '');
-                        authStatus.innerHTML =
-                            '<p class="error-text">✗ Authentication error: ' + sanitizedErrorMsg + '</p>' +
-                            '<p class="note-text">⚠️ KYC required: You must complete KYC verification in Pi Browser to use this application.</p>';
-                    } finally {
-                        piAuthBtn.disabled = false;
-                        piAuthBtn.textContent = 'Login with Pi Network';
+                    } catch (err) {
+                        console.error('Pi Auth Error:', err);
+                        authStatus.innerHTML = '<span class="text-danger">❌ Error. Try Guest Login.</span>';
                     }
                 });
+            }
+
+            // 2. Guest Login Handler
+            if (guestLoginBtn && guestInput) {
+                guestLoginBtn.addEventListener('click', () => {
+                    const username = guestInput.value.trim();
+                    if (username) {
+                        handleLoginSuccess(username, 'guest', null);
+                    } else {
+                        alert('Please enter a username');
+                    }
+                });
+            }
+
+            function handleLoginSuccess(username, type, token) {
+                console.log(`Login Success: ${username} (${type})`);
+                // Store session
+                localStorage.setItem('user_username', username);
+                localStorage.setItem('auth_type', type);
+
+                // Hide welcome, Show App
+                document.getElementById('welcome-screen').style.display = 'none';
+                document.getElementById('app').style.display = 'block';
+
+                // Initialize App Managers if needed
+                if (window.appManager) {
+                    window.appManager.currentUser = { username: username };
+                    if (window.appManager.updateUI) window.appManager.updateUI();
+                }
+
+                // State Management Fix
+                if (window.notificationManager) {
+                    window.notificationManager.show('Welcome ' + username + '!', 'success');
+                }
             }
 
             // Skip Authentication Handler (for development/testing)
