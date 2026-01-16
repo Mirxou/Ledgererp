@@ -1344,311 +1344,310 @@
                 alert('خطأ في تهيئة التطبيق. Error initializing app: ' + error.message);
             }
 
-            // Pi Authentication & Guest Login Logic
+            // Standard Pi Authentication Logic
             const piAuthBtn = document.getElementById('pi-auth-btn');
-            const guestLoginBtn = document.getElementById('guest-login-btn');
-            const guestInput = document.getElementById('guest-username');
             const authStatus = document.getElementById('auth-status');
 
-            // 1. Pi Login Handler
             if (piAuthBtn) {
                 piAuthBtn.addEventListener('click', async () => {
-                    authStatus.innerHTML = '<div class="spinner-border text-primary" role="status"></div> Authenticating with Pi...';
+                    // UI reset
+                    authStatus.innerHTML = '<div class="spinner-border text-primary" role="status"></div> Connecting to Pi Network...';
+                    piAuthBtn.disabled = true;
 
                     try {
-                        // Call simplified auth (returns null on fail, no throw)
+                        // Standard Auth Call
                         const authResult = await window.piAdapter.authenticate();
 
-                        if (authResult) {
-                            // Success
-                            authStatus.innerHTML = '<span class="text-success">✅ Success! Logging in...</span>';
-                            handleLoginSuccess(authResult.user.username, 'pi', authResult.accessToken);
-                        } else {
-                            // Failed or Cancelled - Suggest Guest Login
-                            authStatus.innerHTML = '<span class="text-warning">⚠️ Pi Auth failed/cancelled. You can use Guest Login below.</span>';
-                        }
-                    } catch (err) {
-                        console.error('Pi Auth Error:', err);
-                        authStatus.innerHTML = '<span class="text-danger">❌ Error. Try Guest Login.</span>';
+                        // Success Handler
+                        authStatus.innerHTML = '<span class="text-success">✅ Authenticated! Loading...</span>';
+                        console.log('User Authenticated:', authResult.user.username);
+
+                        // Store Session (Standard)
+                        localStorage.setItem('user_username', authResult.user.username);
+                        localStorage.setItem('auth_type', 'pi');
+
+                        // Transition to App
+                        setTimeout(() => {
+                            document.getElementById('welcome-screen').style.display = 'none';
+                            document.getElementById('app').style.display = 'block';
+
+                            // Initialize App Data
+                            if (window.appManager) {
+                                window.appManager.currentUser = { username: authResult.user.username };
+                                if (window.appManager.updateUI) window.appManager.updateUI();
+                            }
+                            if (window.notificationManager) {
+                                window.notificationManager.show(`Welcome, ${authResult.user.username}!`, 'success');
+                            }
+                        }, 1000);
+
+                    } catch (error) {
+                        console.error('Authentication Error:', error);
+                        authStatus.innerHTML = `<div class="alert alert-danger">
+                            Login failed.<br>
+                            <small>${error.message || 'Please use Pi Browser'}</small>
+                        </div>`;
+                        piAuthBtn.disabled = false;
                     }
                 });
             }
 
-            // 2. Guest Login Handler
-            if (guestLoginBtn && guestInput) {
-                guestLoginBtn.addEventListener('click', () => {
-                    const username = guestInput.value.trim();
-                    if (username) {
-                        handleLoginSuccess(username, 'guest', null);
-                    } else {
-                        alert('Please enter a username');
-                    }
-                });
-            }
-
+            // Standard Login Success Handler (Internal use)
             function handleLoginSuccess(username, type, token) {
-                console.log(`Login Success: ${username} (${type})`);
-                // Store session
-                localStorage.setItem('user_username', username);
-                localStorage.setItem('auth_type', type);
+                // Kept for compatibility if called elsewhere, but logic is now inline above
+                console.log(`Standard Login: ${username}`);
+            } // End handleLoginSuccess
+            window.appManager.currentUser = { username: username };
+            if (window.appManager.updateUI) window.appManager.updateUI();
+        }
 
-                // Hide welcome, Show App
-                document.getElementById('welcome-screen').style.display = 'none';
-                document.getElementById('app').style.display = 'block';
-
-                // Initialize App Managers if needed
-                if (window.appManager) {
-                    window.appManager.currentUser = { username: username };
-                    if (window.appManager.updateUI) window.appManager.updateUI();
-                }
-
-                // State Management Fix
-                if (window.notificationManager) {
-                    window.notificationManager.show('Welcome ' + username + '!', 'success');
-                }
+        // State Management Fix
+        if (window.notificationManager) {
+            window.notificationManager.show('Welcome ' + username + '!', 'success');
+        }
             }
 
-            // Skip Authentication Handler (for development/testing)
-            if (skipAuthBtn) {
-                skipAuthBtn.addEventListener('click', async () => {
-                    try {
-                        // STATE MANAGEMENT FIX: Use window.dbManager for consistency
-                        const currentDbManager = window.dbManager || dbManager;
-
-                        // Force DB initialization in dev mode
-                        if (currentDbManager && (!currentDbManager.db || !currentDbManager.db.isOpen())) {
-                            console.log('Initializing database for Setup Mode...');
-                            await currentDbManager.initialize();
-                            console.log('✅ Database initialized for Setup Mode');
-                        }
-
-                        const authStatus = document.getElementById('auth-status');
-                        authStatus.innerHTML =
-                            '<p class="success-text">✓ Setup mode enabled (without Pi authentication)</p>' +
-                            '<p class="note-text">You can now generate a recovery phrase and complete setup.</p>';
-                        document.getElementById('setup-section').classList.remove('hidden');
-                        console.log('✅ Setup section enabled without authentication');
-                    } catch (error) {
-                        console.error('Error initializing database in Setup Mode:', error);
-                        Toast.error('Error initializing database: ' + error.message);
-                    }
-                });
-            }
-
-            // Generate Mnemonic Handler (Req #7)
-            const generateMnemonicBtn = document.getElementById('generate-mnemonic-btn');
-            if (generateMnemonicBtn) {
-                generateMnemonicBtn.addEventListener('click', async () => {
-                    try {
-                        const mnemonic = await securityManager.generateMnemonic();
-                        document.getElementById('mnemonic-input').value = mnemonic;
-                        Toast.success('New 12-word phrase generated');
-                    } catch (error) {
-                        Toast.error('Error generating mnemonic: ' + error.message);
-                    }
-                });
-            }
-
-            // Setup Complete Handler (Req #7, #9)
-            const setupCompleteBtn = document.getElementById('setup-complete-btn');
-            if (setupCompleteBtn) {
-                setupCompleteBtn.addEventListener('click', async () => {
-                    try {
-                        const mnemonic = document.getElementById('mnemonic-input').value;
-                        const pin = document.getElementById('pin-input').value;
-
-                        if (!mnemonic || !pin) {
-                            Toast.warning('Please enter both mnemonic and PIN');
-                            return;
-                        }
-
-                        // Validate mnemonic (Req #8: Anti-Phishing)
-                        securityManager.validateMnemonicInput(mnemonic);
-
-                        // Initialize security manager
-                        await securityManager.initialize(mnemonic, pin);
-
-                        // STATE MANAGEMENT FIX: Use window.dbManager for consistency
-                        const currentDbManager = window.dbManager || dbManager;
-
-                        // Ensure database is initialized (may already be initialized in Setup Mode)
-                        if (!currentDbManager.db || !currentDbManager.db.isOpen()) {
-                            console.log('Initializing database for Complete Setup...');
-                            await currentDbManager.initialize();
-                            console.log('✅ Database initialized');
-                        }
-
-                        // Show dashboard
-                        await showDashboard();
-                    } catch (error) {
-                        console.error(error);
-                        Toast.error('Setup error: ' + error.message);
-                    }
-                });
-            }
-
-            // Dashboard Functions
-            async function showDashboard() {
-                try {
-                    // Hide other sections
-                    const authSection = document.getElementById('auth-section');
-                    const setupSection = document.getElementById('setup-section');
-
-                    if (demoSection) demoSection.style.display = 'none';
-                    if (authSection) authSection.style.display = 'none';
-                    if (setupSection) setupSection.style.display = 'none';
-
-                    // Show dashboard
-                    const dashboardSection = document.getElementById('dashboard-section');
-                    if (dashboardSection) {
-                        dashboardSection.style.display = 'block';
-                    }
-
-                    // Show live indicator
-                    const liveIndicator = document.getElementById('live-store-indicator');
-                    const createInvoiceBtn = document.getElementById('create-invoice-btn');
-
-                    // Real Mode: Show green indicator
-                    if (liveIndicator) liveIndicator.style.display = 'block';
-
-                    // Enable Create Invoice button
-                    if (createInvoiceBtn) {
-                        createInvoiceBtn.disabled = false;
-                        createInvoiceBtn.style.opacity = '1';
-                        createInvoiceBtn.style.cursor = 'pointer';
-                        createInvoiceBtn.title = '';
-                    }
-
-                    // Set shop name
-                    const shopNameEl = document.getElementById('shop-name');
-                    if (shopNameEl) {
-                        shopNameEl.textContent = 'Live Shop';
-                    }
-
-                    // Show Network Status
-                    const networkStatusEl = document.getElementById('network-status');
-                    const networkStatusLabel = networkStatusEl?.parentElement;
-                    if (networkStatusLabel) {
-                        networkStatusLabel.style.display = 'block';
-                    }
-
-                    // Render invoices and stats
-                    await renderInvoices();
-                    if (typeof window.renderStats === 'function') {
-                        await window.renderStats();
-                    } else {
-                        console.warn('renderStats function not yet defined');
-                    }
-
-                    // Initialize invoice manager
-                    if (invoiceManager) {
-                        try {
-                            await invoiceManager.initialize();
-                            console.log('✅ Invoice manager initialized');
-
-                            // Setup Create Invoice button (works in both modes)
-                            const createInvoiceBtn = document.getElementById('create-invoice-btn');
-                            if (createInvoiceBtn) {
-                                // Remove existing listeners
-                                const newBtn = createInvoiceBtn.cloneNode(true);
-                                createInvoiceBtn.parentNode.replaceChild(newBtn, createInvoiceBtn);
-
-                                newBtn.addEventListener('click', () => {
-                                    if (invoiceManager) {
-                                        invoiceManager.openModal(true); // Clear current invoice to start fresh
-                                    } else {
-                                        Toast.error('Invoice manager not initialized');
-                                    }
-                                });
-                            }
-
-                            // Setup Close Shift button
-                            const closeShiftBtn = document.getElementById('close-shift-btn');
-                            if (closeShiftBtn && window.ShiftManager) {
-                                const newShiftBtn = closeShiftBtn.cloneNode(true);
-                                closeShiftBtn.parentNode.replaceChild(newShiftBtn, closeShiftBtn);
-
-                                newShiftBtn.addEventListener('click', async () => {
-                                    if (!window.shiftManager) {
-                                        // STATE MANAGEMENT FIX: Use window.dbManager for consistency
-                                        const currentDbManager = window.dbManager || dbManager;
-                                        window.shiftManager = new window.ShiftManager(currentDbManager);
-                                        await window.shiftManager.initialize();
-                                    }
-                                    await window.shiftManager.closeShift();
-                                });
-                            }
-
-                            // Initialize CSV Import Manager
-                            if (window.CSVImportManager) {
-                                window.csvImportManager = new window.CSVImportManager(window.dbManager);
-
-                                // Bind Import Products Button
-                                const importBtn = document.getElementById('import-products-btn');
-                                if (importBtn) {
-                                    importBtn.addEventListener('click', () => {
-                                        window.csvImportManager.showImportModal();
-                                    });
-                                }
-                            }
-
-                            // Setup B2B Market button
-                            const b2bMarketBtn = document.getElementById('b2b-market-btn');
-                            if (b2bMarketBtn && window.B2BDirectory) {
-                                const newB2bBtn = b2bMarketBtn.cloneNode(true);
-                                b2bMarketBtn.parentNode.replaceChild(newB2bBtn, b2bMarketBtn);
-
-                                newB2bBtn.addEventListener('click', async () => {
-                                    // STATE MANAGEMENT FIX: Use window.dbManager for consistency
-                                    const currentDbManager = window.dbManager || dbManager;
-                                    if (!window.b2bDirectory) {
-                                        window.b2bDirectory = new window.B2BDirectory(currentDbManager);
-                                        await window.b2bDirectory.initialize();
-                                    }
-                                    await window.b2bDirectory.showMarket();
-                                });
-                            }
-                        } catch (error) {
-                            console.error('Error initializing invoice manager:', error);
-                            Toast.error('Error initializing invoice manager: ' + error.message);
-                        }
-                    }
-
-                    console.log('✅ Dashboard displayed successfully');
-                } catch (error) {
-                    console.error('Error showing dashboard:', error);
-                    Toast.error('Error displaying dashboard: ' + error.message);
-                }
-            }
-
-            // Make functions available globally for invoice.js
-            window.renderInvoices = async function renderInvoices() {
+        // Skip Authentication Handler (for development/testing)
+        if (skipAuthBtn) {
+            skipAuthBtn.addEventListener('click', async () => {
                 try {
                     // STATE MANAGEMENT FIX: Use window.dbManager for consistency
                     const currentDbManager = window.dbManager || dbManager;
-                    if (!currentDbManager || !currentDbManager.db) {
-                        console.error('Database not initialized');
+
+                    // Force DB initialization in dev mode
+                    if (currentDbManager && (!currentDbManager.db || !currentDbManager.db.isOpen())) {
+                        console.log('Initializing database for Setup Mode...');
+                        await currentDbManager.initialize();
+                        console.log('✅ Database initialized for Setup Mode');
+                    }
+
+                    const authStatus = document.getElementById('auth-status');
+                    authStatus.innerHTML =
+                        '<p class="success-text">✓ Setup mode enabled (without Pi authentication)</p>' +
+                        '<p class="note-text">You can now generate a recovery phrase and complete setup.</p>';
+                    document.getElementById('setup-section').classList.remove('hidden');
+                    console.log('✅ Setup section enabled without authentication');
+                } catch (error) {
+                    console.error('Error initializing database in Setup Mode:', error);
+                    Toast.error('Error initializing database: ' + error.message);
+                }
+            });
+        }
+
+        // Generate Mnemonic Handler (Req #7)
+        const generateMnemonicBtn = document.getElementById('generate-mnemonic-btn');
+        if (generateMnemonicBtn) {
+            generateMnemonicBtn.addEventListener('click', async () => {
+                try {
+                    const mnemonic = await securityManager.generateMnemonic();
+                    document.getElementById('mnemonic-input').value = mnemonic;
+                    Toast.success('New 12-word phrase generated');
+                } catch (error) {
+                    Toast.error('Error generating mnemonic: ' + error.message);
+                }
+            });
+        }
+
+        // Setup Complete Handler (Req #7, #9)
+        const setupCompleteBtn = document.getElementById('setup-complete-btn');
+        if (setupCompleteBtn) {
+            setupCompleteBtn.addEventListener('click', async () => {
+                try {
+                    const mnemonic = document.getElementById('mnemonic-input').value;
+                    const pin = document.getElementById('pin-input').value;
+
+                    if (!mnemonic || !pin) {
+                        Toast.warning('Please enter both mnemonic and PIN');
                         return;
                     }
 
-                    // Get merchant ID from database
-                    const merchantId = await currentDbManager.getCurrentMerchantId();
-                    if (!merchantId) {
-                        console.warn('Merchant ID not found');
-                        return;
+                    // Validate mnemonic (Req #8: Anti-Phishing)
+                    securityManager.validateMnemonicInput(mnemonic);
+
+                    // Initialize security manager
+                    await securityManager.initialize(mnemonic, pin);
+
+                    // STATE MANAGEMENT FIX: Use window.dbManager for consistency
+                    const currentDbManager = window.dbManager || dbManager;
+
+                    // Ensure database is initialized (may already be initialized in Setup Mode)
+                    if (!currentDbManager.db || !currentDbManager.db.isOpen()) {
+                        console.log('Initializing database for Complete Setup...');
+                        await currentDbManager.initialize();
+                        console.log('✅ Database initialized');
                     }
-                    const invoices = await currentDbManager.getInvoices(merchantId);
 
-                    const allInvoices = await currentDbManager.db.invoices.toArray();
+                    // Show dashboard
+                    await showDashboard();
+                } catch (error) {
+                    console.error(error);
+                    Toast.error('Setup error: ' + error.message);
+                }
+            });
+        }
 
-                    const tbody = document.getElementById('invoices-tbody');
-                    if (!tbody) {
-                        console.error('Invoices table body not found');
-                        return;
+        // Dashboard Functions
+        async function showDashboard() {
+            try {
+                // Hide other sections
+                const authSection = document.getElementById('auth-section');
+                const setupSection = document.getElementById('setup-section');
+
+                if (demoSection) demoSection.style.display = 'none';
+                if (authSection) authSection.style.display = 'none';
+                if (setupSection) setupSection.style.display = 'none';
+
+                // Show dashboard
+                const dashboardSection = document.getElementById('dashboard-section');
+                if (dashboardSection) {
+                    dashboardSection.style.display = 'block';
+                }
+
+                // Show live indicator
+                const liveIndicator = document.getElementById('live-store-indicator');
+                const createInvoiceBtn = document.getElementById('create-invoice-btn');
+
+                // Real Mode: Show green indicator
+                if (liveIndicator) liveIndicator.style.display = 'block';
+
+                // Enable Create Invoice button
+                if (createInvoiceBtn) {
+                    createInvoiceBtn.disabled = false;
+                    createInvoiceBtn.style.opacity = '1';
+                    createInvoiceBtn.style.cursor = 'pointer';
+                    createInvoiceBtn.title = '';
+                }
+
+                // Set shop name
+                const shopNameEl = document.getElementById('shop-name');
+                if (shopNameEl) {
+                    shopNameEl.textContent = 'Live Shop';
+                }
+
+                // Show Network Status
+                const networkStatusEl = document.getElementById('network-status');
+                const networkStatusLabel = networkStatusEl?.parentElement;
+                if (networkStatusLabel) {
+                    networkStatusLabel.style.display = 'block';
+                }
+
+                // Render invoices and stats
+                await renderInvoices();
+                if (typeof window.renderStats === 'function') {
+                    await window.renderStats();
+                } else {
+                    console.warn('renderStats function not yet defined');
+                }
+
+                // Initialize invoice manager
+                if (invoiceManager) {
+                    try {
+                        await invoiceManager.initialize();
+                        console.log('✅ Invoice manager initialized');
+
+                        // Setup Create Invoice button (works in both modes)
+                        const createInvoiceBtn = document.getElementById('create-invoice-btn');
+                        if (createInvoiceBtn) {
+                            // Remove existing listeners
+                            const newBtn = createInvoiceBtn.cloneNode(true);
+                            createInvoiceBtn.parentNode.replaceChild(newBtn, createInvoiceBtn);
+
+                            newBtn.addEventListener('click', () => {
+                                if (invoiceManager) {
+                                    invoiceManager.openModal(true); // Clear current invoice to start fresh
+                                } else {
+                                    Toast.error('Invoice manager not initialized');
+                                }
+                            });
+                        }
+
+                        // Setup Close Shift button
+                        const closeShiftBtn = document.getElementById('close-shift-btn');
+                        if (closeShiftBtn && window.ShiftManager) {
+                            const newShiftBtn = closeShiftBtn.cloneNode(true);
+                            closeShiftBtn.parentNode.replaceChild(newShiftBtn, closeShiftBtn);
+
+                            newShiftBtn.addEventListener('click', async () => {
+                                if (!window.shiftManager) {
+                                    // STATE MANAGEMENT FIX: Use window.dbManager for consistency
+                                    const currentDbManager = window.dbManager || dbManager;
+                                    window.shiftManager = new window.ShiftManager(currentDbManager);
+                                    await window.shiftManager.initialize();
+                                }
+                                await window.shiftManager.closeShift();
+                            });
+                        }
+
+                        // Initialize CSV Import Manager
+                        if (window.CSVImportManager) {
+                            window.csvImportManager = new window.CSVImportManager(window.dbManager);
+
+                            // Bind Import Products Button
+                            const importBtn = document.getElementById('import-products-btn');
+                            if (importBtn) {
+                                importBtn.addEventListener('click', () => {
+                                    window.csvImportManager.showImportModal();
+                                });
+                            }
+                        }
+
+                        // Setup B2B Market button
+                        const b2bMarketBtn = document.getElementById('b2b-market-btn');
+                        if (b2bMarketBtn && window.B2BDirectory) {
+                            const newB2bBtn = b2bMarketBtn.cloneNode(true);
+                            b2bMarketBtn.parentNode.replaceChild(newB2bBtn, b2bMarketBtn);
+
+                            newB2bBtn.addEventListener('click', async () => {
+                                // STATE MANAGEMENT FIX: Use window.dbManager for consistency
+                                const currentDbManager = window.dbManager || dbManager;
+                                if (!window.b2bDirectory) {
+                                    window.b2bDirectory = new window.B2BDirectory(currentDbManager);
+                                    await window.b2bDirectory.initialize();
+                                }
+                                await window.b2bDirectory.showMarket();
+                            });
+                        }
+                    } catch (error) {
+                        console.error('Error initializing invoice manager:', error);
+                        Toast.error('Error initializing invoice manager: ' + error.message);
                     }
+                }
 
-                    if (allInvoices.length === 0) {
-                        tbody.innerHTML = `
+                console.log('✅ Dashboard displayed successfully');
+            } catch (error) {
+                console.error('Error showing dashboard:', error);
+                Toast.error('Error displaying dashboard: ' + error.message);
+            }
+        }
+
+        // Make functions available globally for invoice.js
+        window.renderInvoices = async function renderInvoices() {
+            try {
+                // STATE MANAGEMENT FIX: Use window.dbManager for consistency
+                const currentDbManager = window.dbManager || dbManager;
+                if (!currentDbManager || !currentDbManager.db) {
+                    console.error('Database not initialized');
+                    return;
+                }
+
+                // Get merchant ID from database
+                const merchantId = await currentDbManager.getCurrentMerchantId();
+                if (!merchantId) {
+                    console.warn('Merchant ID not found');
+                    return;
+                }
+                const invoices = await currentDbManager.getInvoices(merchantId);
+
+                const allInvoices = await currentDbManager.db.invoices.toArray();
+
+                const tbody = document.getElementById('invoices-tbody');
+                if (!tbody) {
+                    console.error('Invoices table body not found');
+                    return;
+                }
+
+                if (allInvoices.length === 0) {
+                    tbody.innerHTML = `
                             <tr>
                                 <td colspan="6" style="padding: 40px; text-align: center; color: #888;">
                                     <div style="font-size: 48px; margin-bottom: 16px;">🧾</div>
@@ -1661,61 +1660,61 @@
                                 </td>
                             </tr>
                         `;
-                        return;
-                    }
+                    return;
+                }
 
-                    // Sort by date (newest first)
-                    allInvoices.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+                // Sort by date (newest first)
+                allInvoices.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
-                    // Helper function to format Pi amounts with 7 decimal places
-                    function formatPiAmountDisplay(amount) {
-                        if (typeof amount !== 'number' || isNaN(amount)) return '0.0000000';
-                        return amount.toFixed(7);
-                    }
+                // Helper function to format Pi amounts with 7 decimal places
+                function formatPiAmountDisplay(amount) {
+                    if (typeof amount !== 'number' || isNaN(amount)) return '0.0000000';
+                    return amount.toFixed(7);
+                }
 
-                    // Helper function to sanitize strings for HTML
-                    const sanitizeHtml = (str) => {
-                        if (typeof str !== 'string') return String(str || '');
-                        return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#x27;');
-                    };
+                // Helper function to sanitize strings for HTML
+                const sanitizeHtml = (str) => {
+                    if (typeof str !== 'string') return String(str || '');
+                    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#x27;');
+                };
 
-                    // Render invoices
-                    tbody.innerHTML = allInvoices.map(invoice => {
-                        const date = new Date(invoice.createdAt);
-                        const formattedDate = date.toLocaleDateString('en-US', {
-                            year: 'numeric',
-                            month: 'short',
-                            day: 'numeric',
-                            hour: '2-digit',
-                            minute: '2-digit'
-                        });
+                // Render invoices
+                tbody.innerHTML = allInvoices.map(invoice => {
+                    const date = new Date(invoice.createdAt);
+                    const formattedDate = date.toLocaleDateString('en-US', {
+                        year: 'numeric',
+                        month: 'short',
+                        day: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                    });
 
-                        // Status color: paid=green, pending=orange, draft=red, voided=gray, refunded=red
-                        const statusClass = invoice.status === 'paid' ? 'status-paid' :
-                            invoice.status === 'pending' ? 'status-pending' :
-                                invoice.status === 'draft' ? 'status-draft' :
-                                    invoice.status === 'refunded' ? 'status-refunded' : 'status-voided';
-                        const statusText = invoice.status.charAt(0).toUpperCase() + invoice.status.slice(1);
+                    // Status color: paid=green, pending=orange, draft=red, voided=gray, refunded=red
+                    const statusClass = invoice.status === 'paid' ? 'status-paid' :
+                        invoice.status === 'pending' ? 'status-pending' :
+                            invoice.status === 'draft' ? 'status-draft' :
+                                invoice.status === 'refunded' ? 'status-refunded' : 'status-voided';
+                    const statusText = invoice.status.charAt(0).toUpperCase() + invoice.status.slice(1);
 
-                        // XSS FIX: Sanitize invoice IDs and references before displaying
-                        const safeInvoiceId = sanitizeHtml(invoice.invoiceId || '');
-                        const safeExternalRef = invoice.externalRef ? sanitizeHtml(invoice.externalRef) : null;
+                    // XSS FIX: Sanitize invoice IDs and references before displaying
+                    const safeInvoiceId = sanitizeHtml(invoice.invoiceId || '');
+                    const safeExternalRef = invoice.externalRef ? sanitizeHtml(invoice.externalRef) : null;
 
-                        // Display ID: Show external ref if available, otherwise system ID
-                        const displayId = safeExternalRef ?
-                            `<span class="text-muted">${safeInvoiceId}</span><br><small class="text-muted text-small">Ref: ${safeExternalRef}</small>` :
-                            safeInvoiceId;
+                    // Display ID: Show external ref if available, otherwise system ID
+                    const displayId = safeExternalRef ?
+                        `<span class="text-muted">${safeInvoiceId}</span><br><small class="text-muted text-small">Ref: ${safeExternalRef}</small>` :
+                        safeInvoiceId;
 
-                        // Format amount with 7 decimal places for Pi
-                        const formattedAmount = invoice.currency === 'PI' ?
-                            formatPiAmountDisplay(invoice.amount) :
-                            invoice.amount.toFixed(2);
+                    // Format amount with 7 decimal places for Pi
+                    const formattedAmount = invoice.currency === 'PI' ?
+                        formatPiAmountDisplay(invoice.amount) :
+                        invoice.amount.toFixed(2);
 
-                        // Actions based on status
-                        let actionsHtml = '';
-                        // Draft and Pending invoices can be edited, deleted, and have QR generated
-                        if (invoice.status === 'pending' || invoice.status === 'draft') {
-                            actionsHtml = `
+                    // Actions based on status
+                    let actionsHtml = '';
+                    // Draft and Pending invoices can be edited, deleted, and have QR generated
+                    if (invoice.status === 'pending' || invoice.status === 'draft') {
+                        actionsHtml = `
                                 <button onclick="invoiceManager.showQRCode('${safeInvoiceId}')" 
                                         class="invoice-action-btn invoice-btn-view" title="Show QR Code">
                                     QR
@@ -1729,9 +1728,9 @@
                                     Delete
                                 </button>
                             `;
-                        } else if (invoice.status === 'paid') {
-                            // Paid invoices: Can view QR, void, or refund (NO EDIT)
-                            actionsHtml = `
+                    } else if (invoice.status === 'paid') {
+                        // Paid invoices: Can view QR, void, or refund (NO EDIT)
+                        actionsHtml = `
                                 <button onclick="invoiceManager.showQRCode('${safeInvoiceId}')" 
                                         class="invoice-action-btn invoice-btn-view" title="Show QR Code">
                                     QR
@@ -1745,17 +1744,17 @@
                                     Refund
                                 </button>
                             `;
-                        } else {
-                            // Other statuses (voided, refunded): Only view QR, no actions
-                            actionsHtml = `
+                    } else {
+                        // Other statuses (voided, refunded): Only view QR, no actions
+                        actionsHtml = `
                                 <button onclick="invoiceManager.showQRCode('${safeInvoiceId}')" 
                                         class="invoice-action-btn invoice-btn-view" title="Show QR Code">
                                     QR
                                 </button>
                             `;
-                        }
+                    }
 
-                        return `
+                    return `
                             <tr class="table-row">
                                 <td class="td-left">${displayId}</td>
                                 <td class="td-right">${formattedAmount}</td>
@@ -1767,53 +1766,53 @@
                                 <td class="td-center">${actionsHtml}</td>
                             </tr>
                         `;
-                    }).join('');
+                }).join('');
 
-                    console.log(`✅ Rendered ${allInvoices.length} invoices`);
-                } catch (error) {
-                    console.error('Error rendering invoices:', error);
-                    const tbody = document.getElementById('invoices-tbody');
-                    if (tbody) {
-                        tbody.innerHTML = `
+                console.log(`✅ Rendered ${allInvoices.length} invoices`);
+            } catch (error) {
+                console.error('Error rendering invoices:', error);
+                const tbody = document.getElementById('invoices-tbody');
+                if (tbody) {
+                    tbody.innerHTML = `
                             <tr>
                                 <td colspan="6" class="table-empty error-text">
                                     Error loading invoices: ${error.message}
                                 </td>
                             </tr>
                         `;
-                    }
                 }
             }
-            // Add Device Handler (Export)
-            const addDeviceBtn = document.getElementById('add-device-btn');
-            if (addDeviceBtn) {
-                addDeviceBtn.addEventListener('click', async () => {
-                    const pwd = await Modal.prompt('Enter a TEMPORARY ONE-TIME password for the new device.\n(e.g., 1234)\n\nNote: You will need to enter this same password on the new device.');
-                    if (!pwd) return;
+        }
+        // Add Device Handler (Export)
+        const addDeviceBtn = document.getElementById('add-device-btn');
+        if (addDeviceBtn) {
+            addDeviceBtn.addEventListener('click', async () => {
+                const pwd = await Modal.prompt('Enter a TEMPORARY ONE-TIME password for the new device.\n(e.g., 1234)\n\nNote: You will need to enter this same password on the new device.');
+                if (!pwd) return;
 
-                    try {
-                        // Show loading
-                        Toast.info('Generating secure shard...');
+                try {
+                    // Show loading
+                    Toast.info('Generating secure shard...');
 
-                        const result = await securityManager.exportKeyShard(pwd);
+                    const result = await securityManager.exportKeyShard(pwd);
 
-                        // Show QR Code
-                        const shardJson = JSON.stringify({
-                            action: 'setup',
-                            shard: result.shard,
-                            salt: result.salt
-                        });
+                    // Show QR Code
+                    const shardJson = JSON.stringify({
+                        action: 'setup',
+                        shard: result.shard,
+                        salt: result.salt
+                    });
 
-                        // Generate QR
-                        const qr = new QRious({
-                            value: shardJson,
-                            size: 250,
-                            level: 'H'
-                        });
+                    // Generate QR
+                    const qr = new QRious({
+                        value: shardJson,
+                        size: 250,
+                        level: 'H'
+                    });
 
-                        Modal.show({
-                            title: '📱 Scan with New Device',
-                            content: `
+                    Modal.show({
+                        title: '📱 Scan with New Device',
+                        content: `
                                 <div style="text-align: center;">
                                     <p class="note-text" style="margin-bottom: 15px">Scan this QR code with your new device to sync locally.</p>
                                     <img src="${qr.toDataURL()}" style="display: block; margin: 0 auto; border: 1px solid #eee; padding: 10px; border-radius: 8px;" />
@@ -1822,73 +1821,73 @@
                                     </p>
                                 </div>
                             `,
-                            isHtml: true,
-                            footerButtons: [{ text: 'Done', class: 'btn-primary' }]
-                        });
+                        isHtml: true,
+                        footerButtons: [{ text: 'Done', class: 'btn-primary' }]
+                    });
 
-                        Toast.success('Device sync QR generated');
-                    } catch (error) {
-                        console.error('Add Device Error:', error);
-                        Toast.error('Failed to generate device QR: ' + error.message);
+                    Toast.success('Device sync QR generated');
+                } catch (error) {
+                    console.error('Add Device Error:', error);
+                    Toast.error('Failed to generate device QR: ' + error.message);
+                }
+            });
+        }
+
+
+        // Export Data Handler (Req #2)
+        const exportDataBtn = document.getElementById('export-data-btn');
+        if (exportDataBtn) {
+            exportDataBtn.addEventListener('click', async () => {
+                try {
+                    Toast.info('Preparing data export...');
+
+                    // STATE MANAGEMENT FIX: Use window.dbManager for consistency
+                    const currentDbManager = window.dbManager || dbManager;
+
+                    if (!currentDbManager || !currentDbManager.db) {
+                        throw new Error('Database not initialized');
                     }
-                });
-            }
 
+                    // Get all data
+                    const invoices = await currentDbManager.db.invoices.toArray();
+                    const exportData = {
+                        version: '1.0.0',
+                        timestamp: new Date().toISOString(),
+                        invoices: invoices,
+                        merchantId: await currentDbManager.getCurrentMerchantId() || 'demo_merchant_001',
+                        type: 'backup'
+                    };
 
-            // Export Data Handler (Req #2)
-            const exportDataBtn = document.getElementById('export-data-btn');
-            if (exportDataBtn) {
-                exportDataBtn.addEventListener('click', async () => {
-                    try {
-                        Toast.info('Preparing data export...');
+                    // Create blob and download
+                    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+                    const url = URL.createObjectURL(blob);
 
-                        // STATE MANAGEMENT FIX: Use window.dbManager for consistency
-                        const currentDbManager = window.dbManager || dbManager;
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `ledger-erp-backup-${new Date().toISOString().slice(0, 10)}.json`;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url); // Clean up
 
-                        if (!currentDbManager || !currentDbManager.db) {
-                            throw new Error('Database not initialized');
-                        }
+                    Toast.success('Data exported successfully');
+                } catch (error) {
+                    console.error('Export error:', error);
+                    Toast.error('Export failed: ' + error.message);
+                }
+            });
+        }
 
-                        // Get all data
-                        const invoices = await currentDbManager.db.invoices.toArray();
-                        const exportData = {
-                            version: '1.0.0',
-                            timestamp: new Date().toISOString(),
-                            invoices: invoices,
-                            merchantId: await currentDbManager.getCurrentMerchantId() || 'demo_merchant_001',
-                            type: 'backup'
-                        };
-
-                        // Create blob and download
-                        const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
-                        const url = URL.createObjectURL(blob);
-
-                        const a = document.createElement('a');
-                        a.href = url;
-                        a.download = `ledger-erp-backup-${new Date().toISOString().slice(0, 10)}.json`;
-                        document.body.appendChild(a);
-                        a.click();
-                        document.body.removeChild(a);
-                        URL.revokeObjectURL(url); // Clean up
-
-                        Toast.success('Data exported successfully');
-                    } catch (error) {
-                        console.error('Export error:', error);
-                        Toast.error('Export failed: ' + error.message);
-                    }
-                });
-            }
-
-            // Create Vault Backup Handler (Req #10)
-            const createVaultBackupBtn = document.getElementById('create-vault-backup-btn');
-            if (createVaultBackupBtn && securityManager) {
-                createVaultBackupBtn.addEventListener('click', async () => {
-                    try {
-                        // Show warning modal first
-                        const proceed = await new Promise((resolve) => {
-                            Modal.show({
-                                title: '⚠️ Important: Cloud Backup',
-                                content: `
+        // Create Vault Backup Handler (Req #10)
+        const createVaultBackupBtn = document.getElementById('create-vault-backup-btn');
+        if (createVaultBackupBtn && securityManager) {
+            createVaultBackupBtn.addEventListener('click', async () => {
+                try {
+                    // Show warning modal first
+                    const proceed = await new Promise((resolve) => {
+                        Modal.show({
+                            title: '⚠️ Important: Cloud Backup',
+                            content: `
                                     <div style="text-align: left; padding: 10px;">
                                         <p style="color: #f44336; font-weight: bold; margin-bottom: 15px;">
                                             ⚠️ CRITICAL WARNING:
@@ -1905,70 +1904,70 @@
                                         </p>
                                     </div>
                                 `,
-                                isHtml: true,
-                                footerButtons: [
-                                    { text: 'Cancel', class: 'btn-grey', onclick: () => { Modal.close(); resolve(false); } },
-                                    { text: 'I Understand, Continue', class: 'btn-primary', onclick: () => { Modal.close(); resolve(true); } }
-                                ]
-                            });
+                            isHtml: true,
+                            footerButtons: [
+                                { text: 'Cancel', class: 'btn-grey', onclick: () => { Modal.close(); resolve(false); } },
+                                { text: 'I Understand, Continue', class: 'btn-primary', onclick: () => { Modal.close(); resolve(true); } }
+                            ]
                         });
+                    });
 
-                        if (!proceed) return;
+                    if (!proceed) return;
 
-                        // Prompt for recovery password
-                        const recoveryPassword = await Modal.prompt(
-                            'Enter a strong Recovery Password for your cloud backup:\n\n' +
-                            '⚠️ IMPORTANT: Save this password securely!\n' +
-                            'You will need it to restore your data on a new device.\n' +
-                            'If you lose this password, your data cannot be recovered.\n\n' +
-                            'Recommendation: Use a password manager or write it down in a secure location.'
-                        );
+                    // Prompt for recovery password
+                    const recoveryPassword = await Modal.prompt(
+                        'Enter a strong Recovery Password for your cloud backup:\n\n' +
+                        '⚠️ IMPORTANT: Save this password securely!\n' +
+                        'You will need it to restore your data on a new device.\n' +
+                        'If you lose this password, your data cannot be recovered.\n\n' +
+                        'Recommendation: Use a password manager or write it down in a secure location.'
+                    );
 
-                        if (!recoveryPassword || recoveryPassword.length < 8) {
-                            Toast.error('Recovery password must be at least 8 characters long');
-                            return;
-                        }
+                    if (!recoveryPassword || recoveryPassword.length < 8) {
+                        Toast.error('Recovery password must be at least 8 characters long');
+                        return;
+                    }
 
-                        Toast.info('Creating encrypted backup...');
+                    Toast.info('Creating encrypted backup...');
 
-                        // STATE MANAGEMENT FIX: Use window.dbManager for consistency
-                        const currentDbManager = window.dbManager || dbManager;
-                        if (!currentDbManager || !currentDbManager.db) {
-                            throw new Error('Database not initialized');
-                        }
+                    // STATE MANAGEMENT FIX: Use window.dbManager for consistency
+                    const currentDbManager = window.dbManager || dbManager;
+                    if (!currentDbManager || !currentDbManager.db) {
+                        throw new Error('Database not initialized');
+                    }
 
-                        // Get all data
-                        const allData = {
-                            invoices: await currentDbManager.db.invoices.toArray(),
-                            products: await currentDbManager.db.products.toArray(),
-                            transactions: await currentDbManager.db.transactions.toArray(),
-                            shiftReports: await currentDbManager.db.shiftReports.toArray(),
-                            refunds: await currentDbManager.db.refunds.toArray(),
-                            settings: await currentDbManager.db.settings.toArray()
-                        };
+                    // Get all data
+                    const allData = {
+                        invoices: await currentDbManager.db.invoices.toArray(),
+                        products: await currentDbManager.db.products.toArray(),
+                        transactions: await currentDbManager.db.transactions.toArray(),
+                        shiftReports: await currentDbManager.db.shiftReports.toArray(),
+                        refunds: await currentDbManager.db.refunds.toArray(),
+                        settings: await currentDbManager.db.settings.toArray()
+                    };
 
-                        // Create vault backup
-                        const vaultData = await securityManager.createVaultBackup(allData, recoveryPassword);
+                    // Create vault backup
+                    const vaultData = await securityManager.createVaultBackup(allData, recoveryPassword);
 
-                        // Upload to server
-                        const response = await fetch('/sync/vault', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json'
-                            },
-                            body: JSON.stringify(vaultData)
-                        });
+                    // Upload to server
+                    const response = await fetch('/sync/vault', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(vaultData)
+                    });
 
-                        if (!response.ok) {
-                            throw new Error('Failed to upload backup to server');
-                        }
+                    if (!response.ok) {
+                        throw new Error('Failed to upload backup to server');
+                    }
 
-                        const result = await response.json();
+                    const result = await response.json();
 
-                        // Show success with reminder
-                        Modal.show({
-                            title: '✅ Backup Created Successfully',
-                            content: `
+                    // Show success with reminder
+                    Modal.show({
+                        title: '✅ Backup Created Successfully',
+                        content: `
                                 <div style="text-align: left; padding: 10px;">
                                     <p style="color: #4CAF50; font-weight: bold; margin-bottom: 15px;">
                                         Your data has been backed up securely to the cloud.
@@ -1989,39 +1988,39 @@
                                     </p>
                                 </div>
                             `,
-                            isHtml: true,
+                        isHtml: true,
+                        footerButtons: [{ text: 'OK', class: 'btn-primary' }]
+                    });
+
+                    Toast.success('Cloud backup created successfully');
+                } catch (error) {
+                    console.error('Vault backup error:', error);
+                    Toast.error('Backup failed: ' + error.message);
+                }
+            });
+        }
+
+        // Restore from Vault Handler (Req #10)
+        const restoreFromVaultBtn = document.getElementById('restore-from-vault-btn');
+        if (restoreFromVaultBtn && securityManager) {
+            restoreFromVaultBtn.addEventListener('click', async () => {
+                try {
+                    // Check if vault exists
+                    const vaultCheck = await securityManager.checkVaultExists();
+                    if (!vaultCheck.exists) {
+                        Modal.show({
+                            title: 'No Backup Found',
+                            content: 'No cloud backup found. Please create a backup first.',
                             footerButtons: [{ text: 'OK', class: 'btn-primary' }]
                         });
-
-                        Toast.success('Cloud backup created successfully');
-                    } catch (error) {
-                        console.error('Vault backup error:', error);
-                        Toast.error('Backup failed: ' + error.message);
+                        return;
                     }
-                });
-            }
 
-            // Restore from Vault Handler (Req #10)
-            const restoreFromVaultBtn = document.getElementById('restore-from-vault-btn');
-            if (restoreFromVaultBtn && securityManager) {
-                restoreFromVaultBtn.addEventListener('click', async () => {
-                    try {
-                        // Check if vault exists
-                        const vaultCheck = await securityManager.checkVaultExists();
-                        if (!vaultCheck.exists) {
-                            Modal.show({
-                                title: 'No Backup Found',
-                                content: 'No cloud backup found. Please create a backup first.',
-                                footerButtons: [{ text: 'OK', class: 'btn-primary' }]
-                            });
-                            return;
-                        }
-
-                        // Warning about data loss
-                        const proceed = await new Promise((resolve) => {
-                            Modal.show({
-                                title: '⚠️ Warning: Data Restoration',
-                                content: `
+                    // Warning about data loss
+                    const proceed = await new Promise((resolve) => {
+                        Modal.show({
+                            title: '⚠️ Warning: Data Restoration',
+                            content: `
                                     <div style="text-align: left; padding: 10px;">
                                         <p style="color: #f44336; font-weight: bold; margin-bottom: 15px;">
                                             ⚠️ This will replace all current data!
@@ -2033,72 +2032,72 @@
                                         </ul>
                                     </div>
                                 `,
-                                isHtml: true,
-                                footerButtons: [
-                                    { text: 'Cancel', class: 'btn-grey', onclick: () => { Modal.close(); resolve(false); } },
-                                    { text: 'I Understand, Continue', class: 'btn-primary', onclick: () => { Modal.close(); resolve(true); } }
-                                ]
-                            });
+                            isHtml: true,
+                            footerButtons: [
+                                { text: 'Cancel', class: 'btn-grey', onclick: () => { Modal.close(); resolve(false); } },
+                                { text: 'I Understand, Continue', class: 'btn-primary', onclick: () => { Modal.close(); resolve(true); } }
+                            ]
                         });
+                    });
 
-                        if (!proceed) return;
+                    if (!proceed) return;
 
-                        // Prompt for recovery password
-                        const recoveryPassword = await Modal.prompt(
-                            'Enter your Recovery Password to restore from cloud backup:\n\n' +
-                            'This is the password you created when making the backup.\n' +
-                            'If you forgot it, you cannot restore your data.'
-                        );
+                    // Prompt for recovery password
+                    const recoveryPassword = await Modal.prompt(
+                        'Enter your Recovery Password to restore from cloud backup:\n\n' +
+                        'This is the password you created when making the backup.\n' +
+                        'If you forgot it, you cannot restore your data.'
+                    );
 
-                        if (!recoveryPassword) {
-                            return;
-                        }
+                    if (!recoveryPassword) {
+                        return;
+                    }
 
-                        Toast.info('Restoring data from cloud backup...');
+                    Toast.info('Restoring data from cloud backup...');
 
-                        // Restore from vault
-                        const restoreResult = await securityManager.restoreFromVault(recoveryPassword);
+                    // Restore from vault
+                    const restoreResult = await securityManager.restoreFromVault(recoveryPassword);
 
-                        if (!restoreResult.success || !restoreResult.data) {
-                            throw new Error('Failed to restore data from vault');
-                        }
+                    if (!restoreResult.success || !restoreResult.data) {
+                        throw new Error('Failed to restore data from vault');
+                    }
 
-                        // STATE MANAGEMENT FIX: Use window.dbManager for consistency
-                        const currentDbManager = window.dbManager || dbManager;
+                    // STATE MANAGEMENT FIX: Use window.dbManager for consistency
+                    const currentDbManager = window.dbManager || dbManager;
 
-                        // Clear current database
-                        if (currentDbManager && currentDbManager.db) {
-                            await currentDbManager.db.invoices.clear();
-                            await currentDbManager.db.products.clear();
-                            await currentDbManager.db.transactions.clear();
-                            await currentDbManager.db.shiftReports.clear();
-                            await currentDbManager.db.refunds.clear();
-                        }
+                    // Clear current database
+                    if (currentDbManager && currentDbManager.db) {
+                        await currentDbManager.db.invoices.clear();
+                        await currentDbManager.db.products.clear();
+                        await currentDbManager.db.transactions.clear();
+                        await currentDbManager.db.shiftReports.clear();
+                        await currentDbManager.db.refunds.clear();
+                    }
 
-                        // Restore data
-                        if (restoreResult.data.invoices && restoreResult.data.invoices.length > 0) {
-                            await currentDbManager.db.invoices.bulkAdd(restoreResult.data.invoices);
-                        }
-                        if (restoreResult.data.products && restoreResult.data.products.length > 0) {
-                            await currentDbManager.db.products.bulkAdd(restoreResult.data.products);
-                        }
-                        if (restoreResult.data.transactions && restoreResult.data.transactions.length > 0) {
-                            await currentDbManager.db.transactions.bulkAdd(restoreResult.data.transactions);
-                        }
-                        if (restoreResult.data.shiftReports && restoreResult.data.shiftReports.length > 0) {
-                            await currentDbManager.db.shiftReports.bulkAdd(restoreResult.data.shiftReports);
-                        }
-                        if (restoreResult.data.refunds && restoreResult.data.refunds.length > 0) {
-                            await currentDbManager.db.refunds.bulkAdd(restoreResult.data.refunds);
-                        }
-                        if (restoreResult.data.settings && restoreResult.data.settings.length > 0) {
-                            await currentDbManager.db.settings.bulkAdd(restoreResult.data.settings);
-                        }
+                    // Restore data
+                    if (restoreResult.data.invoices && restoreResult.data.invoices.length > 0) {
+                        await currentDbManager.db.invoices.bulkAdd(restoreResult.data.invoices);
+                    }
+                    if (restoreResult.data.products && restoreResult.data.products.length > 0) {
+                        await currentDbManager.db.products.bulkAdd(restoreResult.data.products);
+                    }
+                    if (restoreResult.data.transactions && restoreResult.data.transactions.length > 0) {
+                        await currentDbManager.db.transactions.bulkAdd(restoreResult.data.transactions);
+                    }
+                    if (restoreResult.data.shiftReports && restoreResult.data.shiftReports.length > 0) {
+                        await currentDbManager.db.shiftReports.bulkAdd(restoreResult.data.shiftReports);
+                    }
+                    if (restoreResult.data.refunds && restoreResult.data.refunds.length > 0) {
+                        await currentDbManager.db.refunds.bulkAdd(restoreResult.data.refunds);
+                    }
+                    if (restoreResult.data.settings && restoreResult.data.settings.length > 0) {
+                        await currentDbManager.db.settings.bulkAdd(restoreResult.data.settings);
+                    }
 
-                        // Show success
-                        Modal.show({
-                            title: '✅ Data Restored Successfully',
-                            content: `
+                    // Show success
+                    Modal.show({
+                        title: '✅ Data Restored Successfully',
+                        content: `
                                 <div style="text-align: left; padding: 10px;">
                                     <p style="color: #4CAF50; font-weight: bold; margin-bottom: 15px;">
                                         Your data has been restored from the cloud backup.
@@ -2111,176 +2110,176 @@
                                     </p>
                                 </div>
                             `,
-                            isHtml: true,
-                            footerButtons: [
-                                {
-                                    text: 'Refresh Page',
-                                    class: 'btn-primary',
-                                    onclick: () => {
-                                        window.location.reload();
-                                    }
+                        isHtml: true,
+                        footerButtons: [
+                            {
+                                text: 'Refresh Page',
+                                class: 'btn-primary',
+                                onclick: () => {
+                                    window.location.reload();
                                 }
-                            ]
-                        });
-
-                        Toast.success('Data restored successfully');
-                    } catch (error) {
-                        console.error('Vault restore error:', error);
-                        Toast.error('Restore failed: ' + error.message);
-                    }
-                });
-            }
-
-
-
-            // Scan Setup QR Handler (Import)
-            const scanSetupBtn = document.getElementById('scan-setup-qr-btn');
-            if (scanSetupBtn && window.hardwareManager) {
-                scanSetupBtn.addEventListener('click', async () => {
-                    // Use Modal.prompt instead of window.prompt
-                    const pwd = await Modal.prompt('Enter the ONE-TIME password from the Owner device:');
-                    if (!pwd) return;
-
-                    try {
-                        const modal = Modal.show({
-                            title: '📷 Scanning...',
-                            content: '<div id="reader" style="width: 100%"></div>',
-                            isHtml: true
-                        });
-
-                        window.hardwareManager.startBarcodeScanner((decodedText) => {
-                            try {
-                                const data = JSON.parse(decodedText);
-                                if (data.action !== 'setup' || !data.shard) throw new Error('Invalid Setup QR');
-
-                                // Stop scanner on success
-                                window.hardwareManager.stopBarcodeScanner();
-                                Modal.close();
-
-                                securityManager.importKeyShard(data.shard, pwd)
-                                    .then(mnemonic => {
-                                        document.getElementById('mnemonic-input').value = mnemonic;
-                                        Toast.success('Mnemonic Recovered!');
-                                        Modal.show({
-                                            title: 'Import Successful',
-                                            content: '✅ Credentials imported successfully. Please set a new PIN to complete setup.',
-                                            footerButtons: [{ text: 'OK', class: 'btn-primary' }]
-                                        });
-                                    })
-                                    .catch(err => {
-                                        Toast.error('Import Failed: ' + err.message);
-                                    });
-                            } catch (e) {
-                                Toast.error('Invalid QR Data: ' + e.message);
                             }
-                        }, (err) => {
-                            // Scanner errors
-                        });
-                    } catch (error) {
-                        console.error('Scanner start error:', error);
-                    }
-                });
-            }
-
-            window.renderStats = async function renderStats() {
-                try {
-                    // STATE MANAGEMENT FIX: Use window.dbManager for consistency
-                    const currentDbManager = window.dbManager || dbManager;
-                    if (!currentDbManager || !currentDbManager.db) {
-                        console.error('Database not initialized');
-                        return;
-                    }
-
-                    // Get all invoices
-                    const allInvoices = await currentDbManager.db.invoices.toArray();
-
-                    // Calculate stats
-                    let totalSalesPi = 0;
-                    let totalCashOffline = 0;
-
-                    allInvoices.forEach(invoice => {
-                        // Only count paid invoices (exclude refunded)
-                        if (invoice.status === 'paid') {
-                            if (invoice.currency === 'PI') {
-                                totalSalesPi += invoice.amount || 0;
-                            }
-                            // Sum cash payments (stored in cashPaidFiat field)
-                            if (invoice.cashPaidFiat) {
-                                totalCashOffline += invoice.cashPaidFiat;
-                            }
-                        }
-                        // Subtract refunded amounts
-                        if (invoice.status === 'refunded') {
-                            if (invoice.currency === 'PI') {
-                                totalSalesPi -= invoice.amount || 0;
-                            }
-                            if (invoice.cashPaidFiat) {
-                                totalCashOffline -= invoice.cashPaidFiat;
-                            }
-                        }
+                        ]
                     });
 
-                    // Ensure totals don't go negative
-                    totalSalesPi = Math.max(0, totalSalesPi);
-                    totalCashOffline = Math.max(0, totalCashOffline);
-
-                    // Calculate Daily Revenue (today's paid invoices)
-                    const today = new Date();
-                    today.setHours(0, 0, 0, 0);
-                    let dailyRevenue = 0;
-
-                    for (const invoice of allInvoices) {
-                        if (invoice.status === 'paid' && invoice.paidAt) {
-                            const paidDate = new Date(invoice.paidAt);
-                            paidDate.setHours(0, 0, 0, 0);
-                            if (paidDate.getTime() === today.getTime()) {
-                                dailyRevenue += invoice.amount || 0;
-                            }
-                        }
-                    }
-                    dailyRevenue = Math.max(0, dailyRevenue);
-
-                    // Helper function to format Pi amounts with 7 decimal places
-                    function formatPiAmountDisplay(amount) {
-                        if (typeof amount !== 'number' || isNaN(amount)) return '0.0000000';
-                        return amount.toFixed(7);
-                    }
-
-                    // Update UI
-                    const totalSalesPiEl = document.getElementById('total-sales-pi');
-                    const totalCashOfflineEl = document.getElementById('total-cash-offline');
-                    const cashCurrencySymbol = document.getElementById('cash-currency-symbol');
-                    const cashAmount = document.getElementById('cash-amount');
-                    const totalInvoicesEl = document.getElementById('total-invoices');
-                    const dailyRevenueEl = document.getElementById('daily-revenue');
-
-                    if (totalSalesPiEl) {
-                        totalSalesPiEl.textContent = formatPiAmountDisplay(totalSalesPi);
-                    }
-                    if (totalCashOfflineEl) {
-                        // Get currency symbol from settings
-                        try {
-                            const currencySettings = await currentDbManager.getCurrencySettings();
-                            const currencySymbol = currencySettings.symbol || '$';
-                            if (cashCurrencySymbol) cashCurrencySymbol.textContent = currencySymbol;
-                        } catch (error) {
-                            console.error('Error getting currency settings:', error);
-                            if (cashCurrencySymbol) cashCurrencySymbol.textContent = '$';
-                        }
-                        if (cashAmount) cashAmount.textContent = totalCashOffline.toFixed(2);
-                    }
-                    if (totalInvoicesEl) {
-                        totalInvoicesEl.textContent = allInvoices.length;
-                    }
-                    if (dailyRevenueEl) {
-                        dailyRevenueEl.textContent = `+${formatPiAmountDisplay(dailyRevenue)}`;
-                    }
-
-                    console.log('✅ Stats rendered:', { totalSalesPi, totalCashOffline, totalInvoices: allInvoices.length, dailyRevenue });
+                    Toast.success('Data restored successfully');
                 } catch (error) {
-                    console.error('Error rendering stats:', error);
+                    console.error('Vault restore error:', error);
+                    Toast.error('Restore failed: ' + error.message);
                 }
+            });
+        }
+
+
+
+        // Scan Setup QR Handler (Import)
+        const scanSetupBtn = document.getElementById('scan-setup-qr-btn');
+        if (scanSetupBtn && window.hardwareManager) {
+            scanSetupBtn.addEventListener('click', async () => {
+                // Use Modal.prompt instead of window.prompt
+                const pwd = await Modal.prompt('Enter the ONE-TIME password from the Owner device:');
+                if (!pwd) return;
+
+                try {
+                    const modal = Modal.show({
+                        title: '📷 Scanning...',
+                        content: '<div id="reader" style="width: 100%"></div>',
+                        isHtml: true
+                    });
+
+                    window.hardwareManager.startBarcodeScanner((decodedText) => {
+                        try {
+                            const data = JSON.parse(decodedText);
+                            if (data.action !== 'setup' || !data.shard) throw new Error('Invalid Setup QR');
+
+                            // Stop scanner on success
+                            window.hardwareManager.stopBarcodeScanner();
+                            Modal.close();
+
+                            securityManager.importKeyShard(data.shard, pwd)
+                                .then(mnemonic => {
+                                    document.getElementById('mnemonic-input').value = mnemonic;
+                                    Toast.success('Mnemonic Recovered!');
+                                    Modal.show({
+                                        title: 'Import Successful',
+                                        content: '✅ Credentials imported successfully. Please set a new PIN to complete setup.',
+                                        footerButtons: [{ text: 'OK', class: 'btn-primary' }]
+                                    });
+                                })
+                                .catch(err => {
+                                    Toast.error('Import Failed: ' + err.message);
+                                });
+                        } catch (e) {
+                            Toast.error('Invalid QR Data: ' + e.message);
+                        }
+                    }, (err) => {
+                        // Scanner errors
+                    });
+                } catch (error) {
+                    console.error('Scanner start error:', error);
+                }
+            });
+        }
+
+        window.renderStats = async function renderStats() {
+            try {
+                // STATE MANAGEMENT FIX: Use window.dbManager for consistency
+                const currentDbManager = window.dbManager || dbManager;
+                if (!currentDbManager || !currentDbManager.db) {
+                    console.error('Database not initialized');
+                    return;
+                }
+
+                // Get all invoices
+                const allInvoices = await currentDbManager.db.invoices.toArray();
+
+                // Calculate stats
+                let totalSalesPi = 0;
+                let totalCashOffline = 0;
+
+                allInvoices.forEach(invoice => {
+                    // Only count paid invoices (exclude refunded)
+                    if (invoice.status === 'paid') {
+                        if (invoice.currency === 'PI') {
+                            totalSalesPi += invoice.amount || 0;
+                        }
+                        // Sum cash payments (stored in cashPaidFiat field)
+                        if (invoice.cashPaidFiat) {
+                            totalCashOffline += invoice.cashPaidFiat;
+                        }
+                    }
+                    // Subtract refunded amounts
+                    if (invoice.status === 'refunded') {
+                        if (invoice.currency === 'PI') {
+                            totalSalesPi -= invoice.amount || 0;
+                        }
+                        if (invoice.cashPaidFiat) {
+                            totalCashOffline -= invoice.cashPaidFiat;
+                        }
+                    }
+                });
+
+                // Ensure totals don't go negative
+                totalSalesPi = Math.max(0, totalSalesPi);
+                totalCashOffline = Math.max(0, totalCashOffline);
+
+                // Calculate Daily Revenue (today's paid invoices)
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                let dailyRevenue = 0;
+
+                for (const invoice of allInvoices) {
+                    if (invoice.status === 'paid' && invoice.paidAt) {
+                        const paidDate = new Date(invoice.paidAt);
+                        paidDate.setHours(0, 0, 0, 0);
+                        if (paidDate.getTime() === today.getTime()) {
+                            dailyRevenue += invoice.amount || 0;
+                        }
+                    }
+                }
+                dailyRevenue = Math.max(0, dailyRevenue);
+
+                // Helper function to format Pi amounts with 7 decimal places
+                function formatPiAmountDisplay(amount) {
+                    if (typeof amount !== 'number' || isNaN(amount)) return '0.0000000';
+                    return amount.toFixed(7);
+                }
+
+                // Update UI
+                const totalSalesPiEl = document.getElementById('total-sales-pi');
+                const totalCashOfflineEl = document.getElementById('total-cash-offline');
+                const cashCurrencySymbol = document.getElementById('cash-currency-symbol');
+                const cashAmount = document.getElementById('cash-amount');
+                const totalInvoicesEl = document.getElementById('total-invoices');
+                const dailyRevenueEl = document.getElementById('daily-revenue');
+
+                if (totalSalesPiEl) {
+                    totalSalesPiEl.textContent = formatPiAmountDisplay(totalSalesPi);
+                }
+                if (totalCashOfflineEl) {
+                    // Get currency symbol from settings
+                    try {
+                        const currencySettings = await currentDbManager.getCurrencySettings();
+                        const currencySymbol = currencySettings.symbol || '$';
+                        if (cashCurrencySymbol) cashCurrencySymbol.textContent = currencySymbol;
+                    } catch (error) {
+                        console.error('Error getting currency settings:', error);
+                        if (cashCurrencySymbol) cashCurrencySymbol.textContent = '$';
+                    }
+                    if (cashAmount) cashAmount.textContent = totalCashOffline.toFixed(2);
+                }
+                if (totalInvoicesEl) {
+                    totalInvoicesEl.textContent = allInvoices.length;
+                }
+                if (dailyRevenueEl) {
+                    dailyRevenueEl.textContent = `+${formatPiAmountDisplay(dailyRevenue)}`;
+                }
+
+                console.log('✅ Stats rendered:', { totalSalesPi, totalCashOffline, totalInvoices: allInvoices.length, dailyRevenue });
+            } catch (error) {
+                console.error('Error rendering stats:', error);
             }
+        }
 
         } // End of initApp function
     </script>
