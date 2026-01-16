@@ -218,7 +218,7 @@ class PiAdapter {
             // #endregion
 
             // Start authentication
-            console.log('🔄 [AUTH] Starting Pi authentication flow...');
+            console.log('🔄 [AUTH] Starting Pi authentication flow (v2.2 - Strict Check Removed)...');
 
             // Check for Pi Browser (Soft Check - Log only)
             // const isPiBrowser = navigator.userAgent.includes('PiBrowser'); // Already defined above
