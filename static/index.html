@@ -1358,6 +1358,16 @@
                         // Standard Auth Call
                         const authResult = await window.piAdapter.authenticate();
 
+                        // Debug: Log full result
+                        console.log('Auth Result:', authResult);
+
+                        if (!authResult) {
+                            throw new Error('Auth result is null/undefined');
+                        }
+                        if (!authResult.user) {
+                            throw new Error('Auth result missing user: ' + JSON.stringify(authResult));
+                        }
+
                         // Success Handler
                         authStatus.innerHTML = '<span class="text-success">✅ Authenticated! Loading...</span>';
                         console.log('User Authenticated:', authResult.user.username);
