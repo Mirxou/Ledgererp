@@ -45,7 +45,7 @@ class PiAdapter {
             await this.init();
         }
 
-        const scopes = ['username']; // Start with minimum required payment scopes if needed
+        const scopes = ['username', 'payments']; // Standard pattern: Request both main scopes
 
         // Define onIncompletePaymentFound (Required for all apps)
         const onIncompletePaymentFound = async (payment) => {
