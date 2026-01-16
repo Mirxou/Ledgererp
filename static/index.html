@@ -19,165 +19,20 @@
     <meta name="pi-app-version" content="1.0.0">
     <link rel="stylesheet" href="/css/style.css">
 
-    <!-- Req #15: SRI Hashes for external scripts -->
+    <!-- Standard Pi Network SDK -->
+    <script src="https://sdk.minepi.com/pi-sdk.js"></script>
     <script>
-        // Production Console Wrapper - Disable logs in production
-        (function () {
-            // Detect production environment
-            const isProduction = window.location.hostname !== 'localhost' &&
-                window.location.hostname !== '127.0.0.1' &&
-                !window.location.hostname.includes('ngrok') &&
-                !window.location.hostname.includes('localhost');
-
-            // Store original console methods
-            const originalLog = console.log;
-            const originalError = console.error;
-            const originalWarn = console.warn;
-            const originalInfo = console.info;
-            const originalDebug = console.debug;
-
-            // In production, disable console.log but keep console.error and console.warn for critical errors
-            if (isProduction) {
-                console.log = function () {
-                    // Silently ignore in production
-                };
-                console.info = function () {
-                    // Silently ignore in production
-                };
-                console.debug = function () {
-                    // Silently ignore in production
-                };
-                // Keep error and warn for debugging critical issues
-                console.error = originalError;
-                console.warn = originalWarn;
-            } else {
-                // Development mode: ON-SCREEN DEBUGGER for Mobile
-                const debugContainer = document.createElement('div');
-                debugContainer.id = 'debug-console';
-                debugContainer.style.cssText = 'position:fixed;bottom:0;left:0;width:100%;height:150px;background:rgba(0,0,0,0.9);color:#0f0;font-family:monospace;font-size:10px;overflow-y:scroll;z-index:99999;padding:5px;pointer-events:none;opacity:0.8;';
-                document.head.appendChild(debugContainer);
-
-                window.addEventListener('DOMContentLoaded', () => {
-                    document.body.appendChild(debugContainer);
-                });
-
-                function logToScreen(msg, type) {
-                    const line = document.createElement('div');
-                    line.style.color = type === 'error' ? '#ff5555' : (type === 'warn' ? '#ffb86c' : '#50fa7b');
-                    line.style.borderBottom = '1px solid #333';
-                    line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
-                    if (debugContainer) {
-                        debugContainer.appendChild(line);
-                        debugContainer.scrollTop = debugContainer.scrollHeight;
-                    }
-                }
-
-                console.log = function (...args) {
-                    originalLog.apply(console, args);
-                    logToScreen(args.map(a => typeof a === 'object' ? JSON.stringify(a) : a).join(' '), 'log');
-                };
-
-                console.error = function (...args) {
-                    originalError.apply(console, args);
-                    logToScreen(args.map(a => typeof a === 'object' ? JSON.stringify(a) : a).join(' '), 'error');
-                };
-
-                console.warn = function (...args) {
-                    originalWarn.apply(console, args);
-                    logToScreen(args.map(a => typeof a === 'object' ? JSON.stringify(a) : a).join(' '), 'warn');
-                };
-
-                window.onerror = function (msg, url, line) {
-                    logToScreen(`Uncaught Error: ${msg} @ ${url}:${line}`, 'error');
-                };
-
-                console.log('Debug Console Initialized (Development Mode)');
-            }
-        })();
-    </script>
-    <!-- Stellar SDK for Blockchain Storage -->
-    <script src="https://cdn.jsdelivr.net/npm/stellar-sdk@11.2.2/dist/stellar-sdk.min.js"></script>
-    <!-- Local Html5-Qrcode -->
-    <script src="/static/libs/html5-qrcode.min.js" defer></script>
-
-    <!-- Pi SDK - Load from official CDN for production, local fallback for development -->
-    <script>
-        (function () {
-            const isPiBrowser = navigator.userAgent.includes('PiBrowser');
-            const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-
-            // In Pi Browser on production domain, use official CDN
-            // In localhost, try local file first, then CDN
-            if (isPiBrowser && !isLocalhost) {
-                // Production: Use official Pi SDK CDN
-                const script = document.createElement('script');
-                script.src = 'https://sdk.minepi.com/pi-sdk.js';
-                script.async = true;
-                script.onload = function () {
-                    console.log('✅ Pi SDK loaded from official CDN');
-                    // #region agent log
-                    fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'index.html:105', message: 'Pi SDK loaded from CDN', data: { source: 'https://sdk.minepi.com/pi-sdk.js', isPiBrowser: true }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'H' }) }).catch(() => { });
-                    // #endregion
-                };
-                script.onerror = function () {
-                    console.error('❌ Failed to load Pi SDK from CDN');
-                    // #region agent log
-                    fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'index.html:112', message: 'Pi SDK CDN load failed', data: { source: 'https://sdk.minepi.com/pi-sdk.js' }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'H' }) }).catch(() => { });
-                    // #endregion
-                };
-                document.head.appendChild(script);
-            } else {
-                // Development: Try local file, fallback to CDN
-                const script = document.createElement('script');
-                script.src = '/static/libs/pi-sdk.js';
-                script.async = true;
-                script.onload = function () {
-                    console.log('✅ Pi SDK loaded from local file');
-                    // #region agent log
-                    fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'index.html:122', message: 'Pi SDK loaded from local', data: { source: '/static/libs/pi-sdk.js' }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'H' }) }).catch(() => { });
-                    // #endregion
-                };
-                script.onerror = function () {
-                    console.warn('⚠️ Local Pi SDK failed, trying CDN...');
-                    const cdnScript = document.createElement('script');
-                    cdnScript.src = 'https://sdk.minepi.com/pi-sdk.js';
-                    cdnScript.async = true;
-                    cdnScript.onload = function () {
-                        console.log('✅ Pi SDK loaded from CDN (fallback)');
-                    };
-                    document.head.appendChild(cdnScript);
-                };
-                document.head.appendChild(script);
-            }
-
-            // Verify Pi SDK is loaded after a delay
-            window.addEventListener('load', function () {
-                // In Production (Pi Browser), wait longer for CDN to load
-                const waitTime = (isPiBrowser && !isLocalhost) ? 3000 : 2000;
-                setTimeout(() => {
-                    if (typeof Pi === 'undefined') {
-                        console.error('❌ Pi SDK not loaded after timeout!', { isPiBrowser, isLocalhost, waitTime });
-                        // #region agent log
-                        fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'index.html:140', message: 'Pi SDK still undefined after load', data: { isPiBrowser, isLocalhost }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'H' }) }).catch(() => { });
-                        // #endregion
-                        if (isPiBrowser) {
-                            console.error('CRITICAL: Pi SDK failed to load in Pi Browser! Please check your internet connection.');
-                            // Don't show alert in production - just log
-                        }
-                    } else {
-                        console.log('✅ Pi SDK verified and ready', {
-                            hasPi: typeof Pi !== 'undefined',
-                            hasAuthenticate: typeof Pi?.authenticate === 'function',
-                            hasInit: typeof Pi?.init === 'function',
-                            PiVersion: Pi?.version || 'unknown'
-                        });
-                        // #region agent log
-                        fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'index.html:147', message: 'Pi SDK verified ready', data: { hasPi: typeof Pi !== 'undefined', hasAuthenticate: typeof Pi?.authenticate === 'function' }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'H' }) }).catch(() => { });
-                        // #endregion
-                    }
-                }, waitTime);
-            });
-        })();
+        // Initialize Pi SDK immediately (Best Practice)
+        try {
+            // Auto-detect sandbox mode for development convenience
+            // (Official docs use explicit true/false, but this is safe standard practice)
+            const isSandbox = window.location.search.includes('sandbox=true');
+            Pi.init({ version: "2.0", sandbox: isSandbox });
+            console.log('Pi SDK Initialized (Global)');
+        } catch (e) {
+            // SDK might not be loaded yet if network fails, handled in adapter
+            console.warn('Pi SDK init deferred:', e);
+        }
     </script>
 
     <!-- Note: DOMPurify and ethers are now loaded as ES modules via esm.sh in security.js -->
