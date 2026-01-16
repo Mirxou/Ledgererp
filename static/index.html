@@ -630,59 +630,18 @@
             <!-- Authentication Section -->
             <div id="auth-section">
                 <h2>Authentication</h2>
-                <div id="pi-browser-warning"
-                    style="display: none; background: #fff3cd; border: 2px solid #ffc107; padding: 15px; border-radius: 8px; margin-bottom: 20px; text-align: right; direction: rtl;">
-                    <p style="color: #856404; font-weight: bold; margin: 0;">
-                        ⚠️ تنبيه هام: يجب استخدام متصفح Pi!
-                    </p>
-                    <p style="color: #856404; margin: 10px 0 0 0;">
-                        المصادقة تعمل فقط داخل تطبيق Pi Browser (الأيقونة البنفسجية).
-                        <br>
-                        Pi authentication only works in Pi Browser.
-                    </p>
-
-                    <div style="margin-top: 15px; border-top: 1px dashed #856404; padding-top: 10px;">
-                        <p style="margin: 0; font-size: 0.9em;">
-                            هل تواجه مشكلة "Mainnet/Transfer"؟
-                        </p>
-                        <div style="display: flex; gap: 10px; margin-top: 5px;">
-                            <a href="?ignore_browser=true" class="btn btn-sm btn-orange"
-                                style="flex: 1; text-decoration: none; color: white;">
-                                تجاوز الفحص (Login)
-                            </a>
-                            <a href="?sandbox=true&ignore_browser=true" class="btn btn-sm btn-blue"
-                                style="flex: 1; text-decoration: none; color: white;">
-                                وضع المطور (Sandbox)
-                            </a>
-                        </div>
-                    </div>
-                </div>
 
                 <div class="auth-box">
-                    <!-- Option 1: Pi Login -->
-                    <button id="pi-auth-btn" class="welcome-btn welcome-btn-primary w-100 mb-3">
+                    <button id="pi-auth-btn" class="welcome-btn welcome-btn-primary w-100">
                         <i class="fas fa-network-wired me-2"></i> Login with Pi Network
                     </button>
 
-                    <div style="text-align: center; margin: 15px 0; position: relative;">
-                        <hr style="border: 0; border-top: 1px solid #ddd;">
-                        <span
-                            style="position: absolute; top: -10px; left: 50%; transform: translateX(-50%); background: #fff; padding: 0 10px; color: #777; font-size: 0.9em;">OR</span>
-                    </div>
-
-                    <!-- Option 2: Guest/Manual Login -->
-                    <div class="manual-login-form">
-                        <input type="text" id="guest-username" class="form-control mb-2"
-                            placeholder="Enter Username (Guest)"
-                            style="padding: 10px; width: 100%; border: 1px solid #ccc; border-radius: 8px;">
-                        <button id="guest-login-btn" class="welcome-btn welcome-btn-secondary w-100"
-                            style="background: #6c757d; color: white;">
-                            Guest Login (No Pi required)
-                        </button>
-                    </div>
+                    <div id="auth-status" class="mt-3 text-center"></div>
                 </div>
 
-                <div id="auth-status" class="mt-3"></div>
+                <p class="form-note mt-3 text-center">
+                    <small>By logging in, you agree to our Terms of Service.</small>
+                </p>
                 <p class="form-note" style="color: #f44336; font-weight: bold;">
                     ⚠️ <strong>KYC Required:</strong> You must complete KYC verification in Pi Browser to use this
                     application.
