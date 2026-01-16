@@ -115,7 +115,6 @@ class PiAdapter {
      * CRITICAL: This is the only authentication method allowed by Pi App Studio
      */
     async authenticate() {
-        alert('DEBUG: authenticate() called! Starting auth process...');
         console.log('🔐 [AUTH] authenticate() called', { sdkInitialized: this.sdkInitialized, hasPi: typeof Pi !== 'undefined', userAgent: navigator.userAgent });
         // #region agent log
         fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'pi-adapter.js:67', message: 'authenticate() called', data: { sdkInitialized: this.sdkInitialized, hasPi: typeof Pi !== 'undefined' }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'A' }) }).catch(() => { });
@@ -218,20 +217,28 @@ class PiAdapter {
             fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'pi-adapter.js:98', message: 'Pre-auth diagnostic check', data: { currentOrigin, expectedOrigin, isPiBrowser, hasPi: typeof Pi !== 'undefined', hasAuthenticate: typeof Pi?.authenticate === 'function', sdkInitialized: this.sdkInitialized }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'C' }) }).catch(() => { });
             // #endregion
 
-            // Allow bypass for testing or if UA detection is failing
+            // Start authentication
+            console.log('🔄 [AUTH] Starting Pi authentication flow...');
+
+            // Check for Pi Browser (Soft Check - Log only)
+            // const isPiBrowser = navigator.userAgent.includes('PiBrowser'); // Already defined above
+            if (!isPiBrowser) {
+                console.warn('⚠️ User Agent does not contain PiBrowser. Proceeding anyway...');
+            }
+
+            /* 
+            // DISABLED STRICT CHECK due to User Agent issues on some devices
             const urlParams = new URLSearchParams(window.location.search);
             const ignoreBrowserCheck = urlParams.get('ignore_browser') === 'true';
 
             if (!isPiBrowser && !ignoreBrowserCheck) {
-                const errorMsg = '❌ خطأ: يجب استخدام Pi Browser!\n' +
-                    'Details:\n' +
-                    '1. المصادقة تعمل فقط في Pi Browser.\n' +
-                    '2. لإجبار الدخول، أضف ?ignore_browser=true للرابط.\n\n' +
+                const errorMsg = '❌ CRITICAL: Not running in Pi Browser!\n' +
+                    'Pi authentication ONLY works in Pi Browser.\n' +
                     'Current User Agent: ' + navigator.userAgent;
-                console.error(errorMsg);
                 alert(errorMsg);
-                throw new Error('Pi authentication requires Pi Browser. Please open this app in Pi Browser.');
+                // throw new Error('Pi authentication requires Pi Browser.'); // Allow it to proceed
             }
+            */
 
             if (typeof Pi === 'undefined') {
                 const errorMsg = '❌ CRITICAL: Pi SDK not loaded!\n' +

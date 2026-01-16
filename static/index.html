@@ -1533,7 +1533,6 @@
 
             if (piAuthBtn) {
                 piAuthBtn.addEventListener('click', async () => {
-                    alert('DEBUG: Login button clicked!');
                     // Check Pi Browser again before authenticating (with bypass support)
                     const isPiBrowser = navigator.userAgent.includes('PiBrowser');
                     const urlParams = new URLSearchParams(window.location.search);
