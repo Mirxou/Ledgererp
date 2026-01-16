@@ -115,6 +115,7 @@ class PiAdapter {
      * CRITICAL: This is the only authentication method allowed by Pi App Studio
      */
     async authenticate() {
+        alert('DEBUG: authenticate() called! Starting auth process...');
         console.log('🔐 [AUTH] authenticate() called', { sdkInitialized: this.sdkInitialized, hasPi: typeof Pi !== 'undefined', userAgent: navigator.userAgent });
         // #region agent log
         fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'pi-adapter.js:67', message: 'authenticate() called', data: { sdkInitialized: this.sdkInitialized, hasPi: typeof Pi !== 'undefined' }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'A' }) }).catch(() => { });

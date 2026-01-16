@@ -1516,7 +1516,10 @@
             // Check if running in Pi Browser on page load
             if (piBrowserWarning) {
                 const isPiBrowser = navigator.userAgent.includes('PiBrowser');
-                if (!isPiBrowser) {
+                const urlParams = new URLSearchParams(window.location.search);
+                const ignoreBrowserCheck = urlParams.get('ignore_browser') === 'true';
+
+                if (!isPiBrowser && !ignoreBrowserCheck) {
                     piBrowserWarning.style.display = 'block';
                     if (piAuthBtn) {
                         piAuthBtn.disabled = true;
@@ -1530,6 +1533,7 @@
 
             if (piAuthBtn) {
                 piAuthBtn.addEventListener('click', async () => {
+                    alert('DEBUG: Login button clicked!');
                     // Check Pi Browser again before authenticating (with bypass support)
                     const isPiBrowser = navigator.userAgent.includes('PiBrowser');
                     const urlParams = new URLSearchParams(window.location.search);
