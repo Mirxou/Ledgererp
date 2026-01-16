@@ -4,10 +4,14 @@
 # JavaScript files
 /js/*
   Content-Type: application/javascript; charset=utf-8
+  Cache-Control: public, max-age=31536000, immutable
 
 # CSS files
+
+
 /css/*
   Content-Type: text/css; charset=utf-8
+  Cache-Control: public, max-age=31536000, immutable
 
 # JSON files
 /*.json
@@ -20,28 +24,41 @@
 # Image files
 /*.png
   Content-Type: image/png
+  Cache-Control: public, max-age=31536000, immutable
 /*.jpg
   Content-Type: image/jpeg
+  Cache-Control: public, max-age=31536000, immutable
 /*.jpeg
   Content-Type: image/jpeg
+  Cache-Control: public, max-age=31536000, immutable
 /*.svg
   Content-Type: image/svg+xml
+  Cache-Control: public, max-age=31536000, immutable
 /*.ico
   Content-Type: image/x-icon
+  Cache-Control: public, max-age=31536000, immutable
 
 # Font files
 /*.woff
   Content-Type: font/woff
+  Cache-Control: public, max-age=31536000, immutable
 /*.woff2
   Content-Type: font/woff2
+  Cache-Control: public, max-age=31536000, immutable
 /*.ttf
   Content-Type: font/ttf
+  Cache-Control: public, max-age=31536000, immutable
 
 # Library files
 /libs/*
   Content-Type: application/javascript; charset=utf-8
+  Cache-Control: public, max-age=31536000, immutable
 
 # Well-known files
 /.well-known/*
   Content-Type: text/plain; charset=utf-8
 
+# Pi Network validation key
+/validation-key.txt
+  Content-Type: text/plain; charset=utf-8
+  Cache-Control: public, max-age=3600

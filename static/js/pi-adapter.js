@@ -52,13 +52,13 @@ class PiAdapter {
      */
     async initialize() {
         // #region agent log
-        fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'pi-adapter.js:40',message:'initialize() called',data:{sdkInitialized:this.sdkInitialized,hasPi:typeof Pi!=='undefined',userAgent:navigator.userAgent.includes('PiBrowser')},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+        fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'pi-adapter.js:40', message: 'initialize() called', data: { sdkInitialized: this.sdkInitialized, hasPi: typeof Pi !== 'undefined', userAgent: navigator.userAgent.includes('PiBrowser') }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'B' }) }).catch(() => { });
         // #endregion
         try {
             // Check if Pi SDK is available
             if (typeof Pi === 'undefined') {
                 // #region agent log
-                fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'pi-adapter.js:45',message:'Pi SDK undefined in initialize()',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+                fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'pi-adapter.js:45', message: 'Pi SDK undefined in initialize()', data: {}, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'B' }) }).catch(() => { });
                 // #endregion
                 console.warn('Pi SDK not loaded. Pi authentication will not be available.');
                 return { success: false, error: 'Pi SDK not loaded' };
@@ -66,19 +66,21 @@ class PiAdapter {
 
             // Initialize Pi SDK
             if (!this.sdkInitialized) {
-                console.log('🔄 [INIT] Initializing Pi SDK...');
+                // Check for sandbox mode in URL
+                const urlParams = new URLSearchParams(window.location.search);
+                const isSandbox = urlParams.get('sandbox') === 'true';
+
+                console.log(`🔄 [INIT] Initializing Pi SDK (Sandbox: ${isSandbox})...`);
                 // #region agent log
-                fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'pi-adapter.js:52',message:'Calling Pi.init()',data:{version:'2.0',sandbox:false,hasPi:typeof Pi!=='undefined',hasInit:typeof Pi?.init==='function'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+                fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'pi-adapter.js:52', message: 'Calling Pi.init()', data: { version: '2.0', sandbox: isSandbox, hasPi: typeof Pi !== 'undefined', hasInit: typeof Pi?.init === 'function' }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'B' }) }).catch(() => { });
                 // #endregion
-                
-                // CRITICAL: In Production (Pi Browser), Pi.init() should NOT use sandbox
+
                 // Wait a bit to ensure SDK is fully loaded
                 await new Promise(resolve => setTimeout(resolve, 100));
-                
-                // Production mode - no sandbox (required for real Pi Browser)
+
                 try {
-                    await Pi.init({ version: '2.0', sandbox: false });
-                    console.log('✅ [INIT] Pi.init() completed successfully');
+                    await Pi.init({ version: '2.0', sandbox: isSandbox });
+                    console.log(`✅ [INIT] Pi.init() completed successfully (Sandbox: ${isSandbox})`);
                 } catch (initError) {
                     console.error('❌ [INIT] Pi.init() failed:', initError);
                     // Try without explicit sandbox parameter (some SDK versions handle it automatically)
@@ -90,19 +92,19 @@ class PiAdapter {
                         throw retryError;
                     }
                 }
-                
+
                 this.sdkInitialized = true;
                 // #region agent log
-                fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'pi-adapter.js:55',message:'Pi.init() completed',data:{sdkInitialized:this.sdkInitialized},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+                fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'pi-adapter.js:55', message: 'Pi.init() completed', data: { sdkInitialized: this.sdkInitialized, isSandbox }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'B' }) }).catch(() => { });
                 // #endregion
-                console.log('✅ [INIT] Pi SDK initialized successfully (Production Mode)');
+                console.log(`✅ [INIT] Pi SDK initialized successfully (Sandbox: ${isSandbox})`);
             }
 
             return { success: true };
         } catch (error) {
             console.error('Pi SDK initialization failed:', error);
             // #region agent log
-            fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'pi-adapter.js:60',message:'Pi.init() error',data:{error:error.message,stack:error.stack},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+            fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'pi-adapter.js:60', message: 'Pi.init() error', data: { error: error.message, stack: error.stack }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'B' }) }).catch(() => { });
             // #endregion
             return { success: false, error: error.message };
         }
@@ -115,14 +117,14 @@ class PiAdapter {
     async authenticate() {
         console.log('🔐 [AUTH] authenticate() called', { sdkInitialized: this.sdkInitialized, hasPi: typeof Pi !== 'undefined', userAgent: navigator.userAgent });
         // #region agent log
-        fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'pi-adapter.js:67',message:'authenticate() called',data:{sdkInitialized:this.sdkInitialized,hasPi:typeof Pi!=='undefined'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+        fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'pi-adapter.js:67', message: 'authenticate() called', data: { sdkInitialized: this.sdkInitialized, hasPi: typeof Pi !== 'undefined' }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'A' }) }).catch(() => { });
         // #endregion
         try {
             // Check if Pi SDK is available
             if (typeof Pi === 'undefined') {
                 console.error('❌ [AUTH] Pi SDK undefined!');
                 // #region agent log
-                fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'pi-adapter.js:72',message:'Pi SDK undefined error',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+                fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'pi-adapter.js:72', message: 'Pi SDK undefined error', data: {}, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'A' }) }).catch(() => { });
                 // #endregion
                 throw new Error('Pi SDK not loaded. Make sure to include Pi SDK script from https://sdk.minepi.com/pi-sdk.js');
             }
@@ -131,7 +133,7 @@ class PiAdapter {
             // Initialize SDK if not already initialized
             if (!this.sdkInitialized) {
                 // #region agent log
-                fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'pi-adapter.js:79',message:'Initializing SDK',data:{hasPi:typeof Pi!=='undefined'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+                fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'pi-adapter.js:79', message: 'Initializing SDK', data: { hasPi: typeof Pi !== 'undefined' }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'B' }) }).catch(() => { });
                 // #endregion
                 // Req: Retry logic if Pi is undefined
                 if (typeof Pi === 'undefined') {
@@ -142,14 +144,14 @@ class PiAdapter {
                 // Final check
                 if (typeof Pi === 'undefined') {
                     // #region agent log
-                    fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'pi-adapter.js:87',message:'Pi SDK failed to load after wait',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+                    fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'pi-adapter.js:87', message: 'Pi SDK failed to load after wait', data: {}, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'B' }) }).catch(() => { });
                     // #endregion
                     throw new Error('Pi SDK failed to load. Please check your internet connection or reload.');
                 }
 
                 const initResult = await this.initialize();
                 // #region agent log
-                fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'pi-adapter.js:92',message:'SDK initialize result',data:{success:initResult.success,error:initResult.error},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+                fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'pi-adapter.js:92', message: 'SDK initialize result', data: { success: initResult.success, error: initResult.error }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'B' }) }).catch(() => { });
                 // #endregion
                 if (!initResult.success) {
                     throw new Error('Failed to initialize Pi SDK: ' + initResult.error);
@@ -158,7 +160,7 @@ class PiAdapter {
 
             // CRITICAL: Req #1 - Use Pi.authenticate() ONLY (no custom login)
             // CRITICAL: Req #2 - Pass onIncompletePaymentFound callback (mandatory for SDK resilience)
-            
+
             // ============================================
             // DIAGNOSTIC LOGGING (as per user requirements)
             // ============================================
@@ -168,7 +170,7 @@ class PiAdapter {
             const currentUrl = window.location.href;
             const isPiBrowser = /PiBrowser/.test(navigator.userAgent);
             const expectedOrigin = 'https://ledgererp.online';
-            
+
             console.log('🔍 [DIAGNOSTIC] Pre-authentication check:');
             console.log('Pi object:', window.Pi);
             console.log('Pi.isInitialized:', typeof Pi?.isInitialized === 'function' ? Pi.isInitialized() : 'N/A');
@@ -183,49 +185,53 @@ class PiAdapter {
             console.log('Has Pi.authenticate:', typeof Pi?.authenticate === 'function');
             console.log('SDK initialized:', this.sdkInitialized);
             console.log('User Agent:', navigator.userAgent);
-            console.log('');
-            console.log('🧪 [TEST] You can test authentication manually in console:');
-            console.log('Pi.authenticate([\'username\'])');
-            console.log('  .then(a => alert(\'SUCCESS: \' + a.user.username))');
-            console.log('  .catch(e => alert(\'FAILED: \' + JSON.stringify(e)));');
-            console.log('');
-            console.log('📋 [CHECKLIST] Before authentication:');
-            console.log('  ✅ App URL in Dashboard = https://ledgererp.online (exactly)');
-            console.log('  ✅ "username" scope enabled in Dashboard → Permissions/Scopes');
-            console.log('  ✅ Using Pi Browser (not Chrome/Firefox/etc.)');
-            console.log('  ✅ Domain is live and accessible');
-            console.log('  ❌ GitHub is NOT required (only for GitHub Pages)');
-            
+
             // Check for common issues
+            // FIX: Allow ngrok for development testing
+            const isNgrok = currentHostname.includes('ngrok-free.app') || currentHostname.includes('ngrok.io');
+            const isLocalhost = currentHostname.includes('localhost') || currentHostname.includes('127.0.0.1');
+
             if (currentOrigin !== expectedOrigin) {
-                const errorMsg = `❌ CRITICAL: Origin mismatch!\n` +
-                    `Current: ${currentOrigin}\n` +
-                    `Expected: ${expectedOrigin}\n` +
-                    `\nThis is the #1 cause of authentication failure (90% of cases).\n` +
-                    `Please verify in Pi Developer Portal that App URL is exactly: ${expectedOrigin}`;
-                console.error(errorMsg);
-                alert(errorMsg);
-                throw new Error(`Origin mismatch: ${currentOrigin} !== ${expectedOrigin}. Please check Pi Developer Portal App URL setting.`);
+                if (isNgrok || isLocalhost) {
+                    console.warn('⚠️ [DEV MODE] Origin mismatch detected but ALLOWED for testing.');
+                    console.warn(`Original: ${expectedOrigin}, Current: ${currentOrigin}`);
+                    console.warn('NOTE: In Pi Developer Portal, your App URL must match this current ngrok URL!');
+                } else {
+                    const errorMsg = `❌ CRITICAL: Origin mismatch!\n` +
+                        `Current: ${currentOrigin}\n` +
+                        `Expected: ${expectedOrigin}\n` +
+                        `\nThis is the #1 cause of authentication failure (90% of cases).\n` +
+                        `Please verify in Pi Developer Portal that App URL is exactly: ${expectedOrigin}`;
+                    console.error(errorMsg);
+                    alert(errorMsg);
+                    throw new Error(`Origin mismatch: ${currentOrigin} !== ${expectedOrigin}. Please check Pi Developer Portal App URL setting.`);
+                }
             }
-            
+
             if (currentPath !== '/' && currentPath !== '') {
                 console.warn('⚠️ Warning: Current path is not root:', currentPath);
                 console.warn('Pi authentication may fail if App URL in Developer Portal includes a path.');
             }
-            
+
             // #region agent log
-            fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'pi-adapter.js:98',message:'Pre-auth diagnostic check',data:{currentOrigin,expectedOrigin,isPiBrowser,hasPi:typeof Pi!=='undefined',hasAuthenticate:typeof Pi?.authenticate==='function',sdkInitialized:this.sdkInitialized},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+            fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'pi-adapter.js:98', message: 'Pre-auth diagnostic check', data: { currentOrigin, expectedOrigin, isPiBrowser, hasPi: typeof Pi !== 'undefined', hasAuthenticate: typeof Pi?.authenticate === 'function', sdkInitialized: this.sdkInitialized }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'C' }) }).catch(() => { });
             // #endregion
-            
-            if (!isPiBrowser) {
-                const errorMsg = '❌ CRITICAL: Not running in Pi Browser!\n' +
-                    'Pi authentication ONLY works in Pi Browser.\n' +
+
+            // Allow bypass for testing or if UA detection is failing
+            const urlParams = new URLSearchParams(window.location.search);
+            const ignoreBrowserCheck = urlParams.get('ignore_browser') === 'true';
+
+            if (!isPiBrowser && !ignoreBrowserCheck) {
+                const errorMsg = '❌ خطأ: يجب استخدام Pi Browser!\n' +
+                    'Details:\n' +
+                    '1. المصادقة تعمل فقط في Pi Browser.\n' +
+                    '2. لإجبار الدخول، أضف ?ignore_browser=true للرابط.\n\n' +
                     'Current User Agent: ' + navigator.userAgent;
                 console.error(errorMsg);
                 alert(errorMsg);
                 throw new Error('Pi authentication requires Pi Browser. Please open this app in Pi Browser.');
             }
-            
+
             if (typeof Pi === 'undefined') {
                 const errorMsg = '❌ CRITICAL: Pi SDK not loaded!\n' +
                     'Please check:\n' +
@@ -236,7 +242,7 @@ class PiAdapter {
                 alert(errorMsg);
                 throw new Error('Pi SDK is not loaded. Please refresh the page and try again.');
             }
-            
+
             if (typeof Pi.authenticate !== 'function') {
                 const errorMsg = '❌ CRITICAL: Pi.authenticate is not a function!\n' +
                     'Available Pi methods: ' + Object.keys(Pi || {}).join(', ');
@@ -245,7 +251,7 @@ class PiAdapter {
                 alert(errorMsg);
                 throw new Error('Pi.authenticate is not available. Please ensure Pi SDK is loaded correctly.');
             }
-            
+
             if (!this.sdkInitialized) {
                 const errorMsg = '❌ CRITICAL: Pi.init() was not called before Pi.authenticate()!\n' +
                     'This is a fatal error. Pi.init() must be called first.';
@@ -253,13 +259,13 @@ class PiAdapter {
                 alert(errorMsg);
                 throw new Error('Pi SDK not initialized. Pi.init() must be called before Pi.authenticate().');
             }
-            
+
             // Add timeout to prevent infinite hanging (60 seconds for production)
             // CRITICAL: Use only 'username' scope if you're not using payments yet
             // If you need payments later, change to: ['username', 'payments']
             // BUT make sure 'payments' scope is enabled in Pi Developer Portal Dashboard first!
             const scopes = ['username'];
-            
+
             // ============================================
             // CHECKLIST STEP 10 - CRITICAL WARNING
             // ============================================
@@ -292,39 +298,39 @@ class PiAdapter {
             console.log('═══════════════════════════════════════════════════════════');
             console.log('');
             // #region agent log
-            fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'pi-adapter.js:140',message:'Creating auth promise with timeout',data:{scopes,timeout:60000},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+            fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'pi-adapter.js:140', message: 'Creating auth promise with timeout', data: { scopes, timeout: 60000 }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'C' }) }).catch(() => { });
             // #endregion
-            
+
             // CRITICAL: onIncompletePaymentFound MUST be a function (can be async or sync)
             // In Production, Pi SDK expects this callback to handle incomplete payments
             const incompletePaymentCallback = this.onIncompletePaymentFound.bind(this);
             console.log('🔗 [AUTH] onIncompletePaymentFound callback bound:', { type: typeof incompletePaymentCallback, isAsync: incompletePaymentCallback.constructor.name === 'AsyncFunction' });
-            
+
             // CRITICAL: Ensure Pi SDK is ready before calling authenticate
             // Wait a small delay to ensure SDK is fully initialized
             await new Promise(resolve => setTimeout(resolve, 200));
-            
+
             console.log('🚀 [AUTH] Starting Pi.authenticate() call...');
             console.log('🚀 [AUTH] This will show detailed error if it fails');
-            
+
             const authPromise = Pi.authenticate(scopes, incompletePaymentCallback);
-            const timeoutPromise = new Promise((_, reject) => 
+            const timeoutPromise = new Promise((_, reject) =>
                 setTimeout(() => {
                     // #region agent log
-                    fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'pi-adapter.js:145',message:'Authentication timeout triggered',data:{timeout:60000},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+                    fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'pi-adapter.js:145', message: 'Authentication timeout triggered', data: { timeout: 60000 }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'C' }) }).catch(() => { });
                     // #endregion
                     reject(new Error('Authentication timeout: Pi.authenticate() took too long (60s). Please check your connection and try again.'));
                 }, 60000)
             );
-            
+
             console.log('⏳ [AUTH] Awaiting Pi.authenticate() with 60s timeout...');
             // #region agent log
-            fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'pi-adapter.js:152',message:'Awaiting Pi.authenticate() with race',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+            fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'pi-adapter.js:152', message: 'Awaiting Pi.authenticate() with race', data: {}, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'C' }) }).catch(() => { });
             // #endregion
             const authResult = await Promise.race([authPromise, timeoutPromise]);
-            console.log('✅ [AUTH] Pi.authenticate() returned!', { 
-                hasResult: !!authResult, 
-                hasUser: !!(authResult?.user), 
+            console.log('✅ [AUTH] Pi.authenticate() returned!', {
+                hasResult: !!authResult,
+                hasUser: !!(authResult?.user),
                 uid: authResult?.user?.uid,
                 username: authResult?.user?.username,
                 hasAccessToken: !!authResult?.accessToken,
@@ -332,22 +338,22 @@ class PiAdapter {
                 fullResponse: authResult
             });
             // #region agent log
-            fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'pi-adapter.js:155',message:'Pi.authenticate() promise resolved',data:{hasResult:!!authResult,hasUser:!!(authResult?.user),uid:authResult?.user?.uid},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+            fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'pi-adapter.js:155', message: 'Pi.authenticate() promise resolved', data: { hasResult: !!authResult, hasUser: !!(authResult?.user), uid: authResult?.user?.uid }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'C' }) }).catch(() => { });
             // #endregion
 
             // Validate authentication response
             if (!authResult) {
                 console.error('❌ [AUTH] authResult is null or undefined!');
                 // #region agent log
-                fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'pi-adapter.js:105',message:'authResult is null',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+                fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'pi-adapter.js:105', message: 'authResult is null', data: {}, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'C' }) }).catch(() => { });
                 // #endregion
                 throw new Error('Pi.authenticate() returned null or undefined. This may indicate an issue with Pi SDK or network connection.');
             }
-            
+
             if (!authResult.user) {
                 console.error('❌ [AUTH] authResult.user is missing!', { authResult });
                 // #region agent log
-                fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'pi-adapter.js:105',message:'Invalid auth response - no user',data:{hasResult:!!authResult,hasUser:!!(authResult?.user),keys:Object.keys(authResult||{})},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+                fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'pi-adapter.js:105', message: 'Invalid auth response - no user', data: { hasResult: !!authResult, hasUser: !!(authResult?.user), keys: Object.keys(authResult || {}) }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'C' }) }).catch(() => { });
                 // #endregion
                 throw new Error('Invalid authentication response from Pi SDK: user object is missing. Please try again or check Pi Browser connection.');
             }
@@ -360,9 +366,9 @@ class PiAdapter {
                 accessToken: authResult.accessToken // Temporary for debugging
             };
             this.accessToken = authResult.accessToken;
-            
-            console.log('✅ [AUTH] User authenticated:', { 
-                uid: this.user.uid, 
+
+            console.log('✅ [AUTH] User authenticated:', {
+                uid: this.user.uid,
                 username: this.user.username,
                 hasAccessToken: !!this.accessToken,
                 tokenLength: this.accessToken?.length,
@@ -370,7 +376,7 @@ class PiAdapter {
                 hostname: window.location.hostname
             });
             // #region agent log
-            fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'pi-adapter.js:113',message:'User data stored, checking KYC',data:{uid:this.user.uid,hasAccessToken:!!this.accessToken,tokenLength:this.accessToken?.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+            fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'pi-adapter.js:113', message: 'User data stored, checking KYC', data: { uid: this.user.uid, hasAccessToken: !!this.accessToken, tokenLength: this.accessToken?.length }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'D' }) }).catch(() => { });
             // #endregion
 
             // HACKATHON 2025 PATTERN: KYC check (required for all Hackathon winners)
@@ -381,7 +387,7 @@ class PiAdapter {
                 kycStatus = await this.checkKYCStatus();
                 console.log('✅ [KYC] KYC status received:', kycStatus);
                 // #region agent log
-                fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'pi-adapter.js:116',message:'KYC status received',data:{completed:kycStatus?.completed,status:kycStatus?.status,message:kycStatus?.message},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+                fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'pi-adapter.js:116', message: 'KYC status received', data: { completed: kycStatus?.completed, status: kycStatus?.status, message: kycStatus?.message }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'D' }) }).catch(() => { });
                 // #endregion
             } catch (kycError) {
                 console.warn('⚠️ [KYC] KYC check failed (non-blocking):', kycError);
@@ -389,25 +395,25 @@ class PiAdapter {
                 // In production, this should be enforced, but for debugging we allow it
                 kycStatus = { completed: true, status: 'unknown', message: 'KYC check failed - allowing access for debugging' };
                 // #region agent log
-                fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'pi-adapter.js:117',message:'KYC check error (non-blocking)',data:{error:kycError.message},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+                fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'pi-adapter.js:117', message: 'KYC check error (non-blocking)', data: { error: kycError.message }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'D' }) }).catch(() => { });
                 // #endregion
             }
-            
+
             // Only enforce KYC if we got a valid response saying it's not completed
             if (kycStatus && kycStatus.completed === false) {
                 console.error('❌ [KYC] KYC not completed!');
                 // #region agent log
-                fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'pi-adapter.js:117',message:'KYC not completed error',data:{hasKycStatus:!!kycStatus,completed:kycStatus?.completed},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+                fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'pi-adapter.js:117', message: 'KYC not completed error', data: { hasKycStatus: !!kycStatus, completed: kycStatus?.completed }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'D' }) }).catch(() => { });
                 // #endregion
                 throw new Error('KYC verification required. Please complete KYC in Pi Browser to use this application.');
             }
-            
+
             // HACKATHON 2025 PATTERN: Store KYC status in user object (Blind_Lounge pattern)
             this.user.kycCompleted = kycStatus?.completed !== false; // Default to true if unknown
 
             console.log('Pi authentication successful:', this.user);
             // #region agent log
-            fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'pi-adapter.js:125',message:'Authentication successful',data:{uid:this.user.uid,kycCompleted:this.user.kycCompleted},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+            fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'pi-adapter.js:125', message: 'Authentication successful', data: { uid: this.user.uid, kycCompleted: this.user.kycCompleted }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'E' }) }).catch(() => { });
             // #endregion
             return {
                 success: true,
@@ -418,12 +424,12 @@ class PiAdapter {
         } catch (error) {
             console.error('❌ [AUTH] Pi authentication failed:', error);
             console.error('❌ [AUTH] Error details:', { message: error.message, stack: error.stack, name: error.name });
-            
+
             // Detailed error analysis
             const errorMessage = error.message || 'Unknown error';
             let detailedError = errorMessage;
             let troubleshootingSteps = [];
-            
+
             // Analyze error to provide specific guidance
             if (errorMessage.includes('Origin') || errorMessage.includes('origin')) {
                 detailedError = '❌ Origin Mismatch Error\n\n' +
@@ -510,20 +516,20 @@ class PiAdapter {
                     'Check network connection'
                 ];
             }
-            
+
             // Log full error details
             console.error('❌ [AUTH] Full error object:', error);
             console.error('❌ [AUTH] Troubleshooting steps:', troubleshootingSteps);
-            
+
             // Show alert with detailed error (only in Pi Browser to avoid spam)
             if (/PiBrowser/.test(navigator.userAgent)) {
                 alert(detailedError);
             }
-            
+
             // #region agent log
-            fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'pi-adapter.js:133',message:'Authentication error caught',data:{error:error.message,stack:error.stack,detailedError,troubleshootingSteps},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
+            fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'pi-adapter.js:133', message: 'Authentication error caught', data: { error: error.message, stack: error.stack, detailedError, troubleshootingSteps }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'F' }) }).catch(() => { });
             // #endregion
-            
+
             // Return detailed error for debugging
             return {
                 success: false,
@@ -1027,18 +1033,18 @@ class PiAdapter {
      */
     async checkKYCStatus() {
         // #region agent log
-        fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'pi-adapter.js:615',message:'checkKYCStatus() called',data:{hasAccessToken:!!this.accessToken,tokenLength:this.accessToken?.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+        fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'pi-adapter.js:615', message: 'checkKYCStatus() called', data: { hasAccessToken: !!this.accessToken, tokenLength: this.accessToken?.length }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'D' }) }).catch(() => { });
         // #endregion
         try {
             if (!this.accessToken) {
                 // #region agent log
-                fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'pi-adapter.js:618',message:'No access token',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+                fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'pi-adapter.js:618', message: 'No access token', data: {}, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'D' }) }).catch(() => { });
                 // #endregion
                 return { completed: false, message: 'No access token available' };
             }
 
             // #region agent log
-            fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'pi-adapter.js:623',message:'Fetching KYC status',data:{endpoint:'/api/pi/kyc-status',hasToken:!!this.accessToken},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+            fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'pi-adapter.js:623', message: 'Fetching KYC status', data: { endpoint: '/api/pi/kyc-status', hasToken: !!this.accessToken }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'D' }) }).catch(() => { });
             // #endregion
             const response = await fetch('/api/pi/kyc-status', {
                 method: 'GET',
@@ -1048,19 +1054,19 @@ class PiAdapter {
                 }
             });
             // #region agent log
-            fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'pi-adapter.js:632',message:'KYC status response received',data:{status:response.status,ok:response.ok},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+            fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'pi-adapter.js:632', message: 'KYC status response received', data: { status: response.status, ok: response.ok }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'D' }) }).catch(() => { });
             // #endregion
 
             if (!response.ok) {
                 // #region agent log
-                fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'pi-adapter.js:635',message:'KYC status HTTP error',data:{status:response.status},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+                fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'pi-adapter.js:635', message: 'KYC status HTTP error', data: { status: response.status }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'D' }) }).catch(() => { });
                 // #endregion
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
 
             const data = await response.json();
             // #region agent log
-            fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'pi-adapter.js:640',message:'KYC status data parsed',data:{kyc_completed:data.kyc_completed,completed:data.completed,status:data.status},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+            fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'pi-adapter.js:640', message: 'KYC status data parsed', data: { kyc_completed: data.kyc_completed, completed: data.completed, status: data.status }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'D' }) }).catch(() => { });
             // #endregion
             // Backend returns {kyc_completed: true/false, kyc_status: "verified"/...}
             return {
@@ -1071,7 +1077,7 @@ class PiAdapter {
         } catch (error) {
             console.error('Error checking KYC status:', error);
             // #region agent log
-            fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'pi-adapter.js:645',message:'KYC status error caught',data:{error:error.message,stack:error.stack},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+            fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'pi-adapter.js:645', message: 'KYC status error caught', data: { error: error.message, stack: error.stack }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'D' }) }).catch(() => { });
             // #endregion
             return { completed: false, message: 'Failed to check KYC status' };
         }
