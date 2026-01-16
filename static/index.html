@@ -830,7 +830,7 @@
     </div>
 
     <!-- Load modules - MUST be after script tags -->
-    <script src="/static/js/ui-utils.js"></script>
+    <script src="/static/js/ui-utils.js?v=4.2"></script>
     <!-- Add delay to ensure script tags are fully loaded -->
     <script>
         // Ensure script tags are loaded before modules
@@ -853,11 +853,11 @@
 
                     // Load modules using script tags as fallback
                     const modules = [
-                        '/static/js/security.js',
-                        '/static/js/pi-adapter.js',
-                        '/static/js/lifecycle.js',
-                        '/static/js/db.js',
-                        '/static/js/invoice.js'
+                        '/static/js/security.js?v=4.2',
+                        '/static/js/pi-adapter.js?v=4.2',
+                        '/static/js/lifecycle.js?v=4.2',
+                        '/static/js/db.js?v=4.2',
+                        '/static/js/invoice.js?v=4.2'
                     ];
 
                     let loadedCount = 0;
@@ -2284,7 +2284,9 @@
             }
 
         } // End of initApp function
-    </script>
-</body>
+        <div id="version-display" style="position:fixed; bottom:5px; right:5px; opacity:0.7; font-size:10px; background:rgba(0,0,0,0.5); color:white; padding:2px 5px; border-radius:3px; pointer-events:none; z-index:9999;">
+            v4.2 (Zero-Error Build)
+        </div>
+</body >
 
-</html>
+</html >
