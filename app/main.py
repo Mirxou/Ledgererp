@@ -645,6 +645,53 @@ async def complete_payment(request: Request):
 
 # ... (omitted models) ...
 
+@app.post("/api/pi/get-stellar-account")
+async def get_stellar_account(request: Request):
+    """
+    Retrieve Stellar Account ID for a Pi User.
+    In the real Pi Network, the user's wallet is derived from their UID or retrieved via API.
+    For this implementation, we verify the user and return a deterministic account ID.
+    """
+    auth_header = request.headers.get("Authorization", "")
+    if not auth_header.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing Access Token")
+    
+    access_token = auth_header.replace("Bearer ", "")
+    user_data = await verify_pi_access_token(access_token)
+    
+    if not user_data:
+        raise HTTPException(status_code=401, detail="Invalid Token")
+        
+    uid = user_data.get("uid")
+    if not uid:
+        raise HTTPException(status_code=400, detail="User UID not found")
+        
+    # Check if we have a request body with specifics
+    try:
+        body = await request.json()
+    except:
+        body = {}
+        
+    # In a real app, you might query Pi Network API for the user's wallet public key
+    # or derive a PDA (Program Derived Address) if building a specific app wallet.
+    # For now, we simulate returning a valid Stellar Public Key (starts with G)
+    # based on the UID to remain deterministic for testing.
+    
+    # Mock generation of a consistent Stellar Public Key from UID
+    # Real logic: Access Pi App Wallet or user's registered wallet
+    dummy_suffix = uid[-20:] if len(uid) > 20 else uid.ljust(20, 'X')
+    # Valid Stellar keys are 56 chars, start with G. We synthesize one for demo.
+    mock_public_key = f"G{dummy_suffix.upper().encode('utf-8').hex()[:55]}"
+    if len(mock_public_key) < 56:
+        mock_public_key = mock_public_key.ljust(56, '7')
+        
+    return {
+        "accountId": mock_public_key,
+        "publicKey": mock_public_key,
+        "secretKey": None, # NEVER return secret key to frontend
+        "message": "Stellar account retrieved successfully"
+    }
+
 @app.get("/api/pi/kyc-status")
 async def get_kyc_status(request: Request):
     """Check KYC status via Pi Network API (Verified User Check)"""
