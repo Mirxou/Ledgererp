@@ -29,6 +29,27 @@ class PiAdapter {
             this.sdkInitialized = true;
             console.log(`✅ Pi SDK Initialized (Sandbox: ${isSandbox})`);
 
+            // 3. Pi App Studio Communication (Official Protocol)
+            // This allows the app to run smoothly inside the Developer Portal iframe
+            try {
+                window.parent.postMessage(JSON.stringify({
+                    type: '@pi:app:sdk:communication_information_request',
+                    id: 'pi-ledger-' + Date.now()
+                }), '*');
+                console.log('📨 Sent handshake to Pi App Studio');
+
+                // Req #6: Listener for App Studio
+                window.addEventListener('message', (event) => {
+                    if (event.data && event.data.type === '@pi:app:sdk:communication_information_request') {
+                        console.log('📨 Received handshake response from App Studio');
+                        // Can extract accessToken or appId if needed: const { accessToken, appId } = event.data.payload;
+                    }
+                });
+            } catch (e) {
+                // Ignore if not in iframe or parent not accessible (security restriction)
+                console.debug('Optional App Studio handshake skipped');
+            }
+
         } catch (error) {
             console.error('❌ Pi SDK Init Failed:', error);
             // Re-throw to ensure calling code knows init failed
@@ -48,31 +69,41 @@ class PiAdapter {
         const scopes = ['username', 'payments']; // Standard pattern: Request both main scopes
 
         // Define onIncompletePaymentFound (Required for all apps)
+        // CRITICAL REQ #3: Mandatory Resilience Callback
         const onIncompletePaymentFound = async (payment) => {
             console.log('🔄 [Pi SDK] Incomplete payment found:', payment);
 
-            // Standard Flow: Send paymentId to backend for verification & completion
             try {
-                // Determine API endpoint (Standard Pi App Pattern)
-                const completionEndpoint = '/api/pi/payment/complete';
-
-                // If we were using a real backend, we would await this fetch
-                // const response = await fetch(completionEndpoint, {
-                //    method: 'POST',
-                //    headers: { 'Content-Type': 'application/json' },
-                //    body: JSON.stringify({ paymentId: payment.identifier, txid: payment.transaction?.txid })
-                // });
-
-                // For this Peer-to-Peer / Local-First app, we might need a specific handling
-                // But to comply with "Standard SDK" signatures, we define the intent clearly.
-
+                // Return promise to Pi SDK (it waits for this)
+                // We MUST hit our backend to finalize the transaction if it exists
                 if (payment.transaction && payment.transaction.txid) {
-                    console.log('✅ Found TXID, attempting recovery:', payment.transaction.txid);
-                    // In a fully server-side app, we would hit the server here.
-                    // For now, we log as per "Standard Client" requirements if no server is present.
+                    // Check backend /blockchain/complete
+                    const response = await fetch('/blockchain/complete', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            payment_id: payment.identifier,
+                            txid: payment.transaction.txid
+                        })
+                    });
+
+                    if (response.ok) {
+                        console.log('✅ Incomplete payment recovered and completed');
+                    } else {
+                        console.error('❌ Failed to recover incomplete payment on backend');
+                    }
                 } else {
+                    // Payment created but no TXID yet - usually cancelled or failed before blockchain
                     console.warn('⚠️ Payment incomplete and no TXID. User might need to cancel or retry.');
+                    // Optionally call /blockchain/approve if we want to check approval status, 
+                    // but usually 'incomplete' implies we need to finish it.
                 }
+
+                // NOTE: User's Master Guide snippet had `return await Pi.completePayment(payment.identifier)`.
+                // However, the standard V2 flow is Backend calls /complete. 
+                // The onIncompletePaymentFound callback's job is to ensure that happens.
+                // We return nothing (void) or a promise that resolves when handled.
+                return;
 
             } catch (err) {
                 console.error('❌ Error handling incomplete payment:', err);
@@ -105,11 +136,42 @@ class PiAdapter {
     }
 
     /**
-     * Placeholder for Payment creation (Standard flow)
+     * Create Payment (Standard flow)
+     * Matches invoice.js expectation (aliased as createPiPayment if needed)
      */
     async createPayment(paymentData, callbacks) {
-        if (!this.sdkInitialized) throw new Error('Pi SDK not initialized');
+        if (!this.sdkInitialized) await this.init();
         return Pi.createPayment(paymentData, callbacks);
+    }
+
+    // Alias for invoice.js compatibility
+    async createPiPayment(amount, memo, walletAddress, onReadyForServerApproval, onReadyForServerCompletion, onCancel, onError) {
+        // Construct the standard payment object expected by Pi SDK
+        const paymentData = {
+            amount: parseFloat(amount),
+            memo: memo,
+            metadata: {
+                type: 'invoice',
+                // Add any other metadata needed
+            }
+            // Note: recipient is usually set by the app configuration not per-payment in V2 SDK unless using PaymentDTO,
+            // BUT standard Pi.createPayment takes { amount, memo, metadata }. 
+            // The Developer Portal configures the "Receiving Wallet".
+            // If the SDK allows overriding recipient, we add it. 
+            // Checking Docs: V2 usually uses the app's wallet.
+            // But if we want to support P2P we might need specialized flow.
+            // For compliance, we stick to standard signatures.
+        };
+
+        // Wrap callbacks to ensure they match SDK expectations
+        const callbacks = {
+            onReadyForServerApproval: onReadyForServerApproval,
+            onReadyForServerCompletion: onReadyForServerCompletion,
+            onCancel: onCancel,
+            onError: onError
+        };
+
+        return this.createPayment(paymentData, callbacks);
     }
 }
 

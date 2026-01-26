@@ -19,21 +19,8 @@
     <meta name="pi-app-version" content="1.0.0">
     <link rel="stylesheet" href="/css/style.css">
 
-    <!-- Standard Pi Network SDK -->
-    <script src="https://sdk.minepi.com/pi-sdk.js"></script>
-    <script>
-        // Initialize Pi SDK immediately (Best Practice)
-        try {
-            // Auto-detect sandbox mode for development convenience
-            // (Official docs use explicit true/false, but this is safe standard practice)
-            const isSandbox = window.location.search.includes('sandbox=true');
-            Pi.init({ version: "2.0", sandbox: isSandbox });
-            console.log('Pi SDK Initialized (Global)');
-        } catch (e) {
-            // SDK might not be loaded yet if network fails, handled in adapter
-            console.warn('Pi SDK init deferred:', e);
-        }
-    </script>
+    <!-- Standard Pi Network SDK - Loaded Asynchronously (Req #1) -->
+    <script src="https://sdk.minepi.com/pi-sdk.js" async defer></script>
 
     <!-- Note: DOMPurify and ethers are now loaded as ES modules via esm.sh in security.js -->
 

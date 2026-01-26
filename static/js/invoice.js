@@ -22,13 +22,13 @@ function formatPiAmount(value) {
     if (value === null || value === undefined || isNaN(value) || !isFinite(value)) {
         return '0';
     }
-    
+
     // Ensure value is a number
     const numValue = Number(value);
     if (isNaN(numValue) || !isFinite(numValue)) {
         return '0';
     }
-    
+
     if (numValue >= 1) {
         return numValue.toFixed(2);
     } else {
@@ -280,7 +280,7 @@ class InvoiceManager {
         // FIX: Ensure modal content is visible
         this.modal.showModal();
         this.modal.classList.add('slide-up-enter');
-        
+
         // FIX: Ensure modal content has proper styling
         const modalContent = this.modal.querySelector('.modal-content');
         if (modalContent) {
@@ -320,7 +320,7 @@ class InvoiceManager {
         if (this.closeModalTimeoutId) {
             clearTimeout(this.closeModalTimeoutId);
         }
-        
+
         if (this.modal) {
             // Animate exit
             this.modal.classList.add('slide-down-exit');
@@ -346,13 +346,13 @@ class InvoiceManager {
         this.resetForm();
         this.editingInvoiceId = null;
         this.currentInvoiceId = null;
-        
+
         // MEMORY LEAK FIX: Remove popstate listener when modal closes
         if (this.popstateListener) {
             window.removeEventListener('popstate', this.popstateListener);
             this.popstateListener = null;
         }
-        
+
         // MEMORY LEAK FIX: Remove modal click listener
         if (this.modal && this.modalClickListener) {
             this.modal.removeEventListener('click', this.modalClickListener);
@@ -441,7 +441,7 @@ class InvoiceManager {
         // XSS FIX: Sanitize user input before using in innerHTML
         const sanitizedName = typeof DOMPurify !== 'undefined' ? DOMPurify.sanitize(name || '') : (name || '');
         const sanitizedPrice = pricePi || '';
-        
+
         itemDiv.innerHTML = `
             <input type="text" class="item-name" placeholder="Item name" value="${sanitizedName}"
                    style="flex: 2; padding: 8px; border: 1px solid #ddd; border-radius: 5px;">
@@ -655,7 +655,7 @@ class InvoiceManager {
             if (!currentDbManager || typeof currentDbManager.getCurrentMerchantId !== 'function') {
                 throw new Error('Database manager not available. Please refresh the page.');
             }
-            
+
             // Get merchant ID from database
             const merchantId = await currentDbManager.getCurrentMerchantId();
             if (!merchantId) {
@@ -755,7 +755,7 @@ class InvoiceManager {
                         // Skip registration if JSON.stringify fails (circular reference, etc.)
                         throw jsonError;
                     }
-                    
+
                     const response = await fetch('/blockchain/register-invoice', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -929,7 +929,7 @@ class InvoiceManager {
             if (!currentDbManager || typeof currentDbManager.getCurrentMerchantId !== 'function') {
                 throw new Error('Database manager not available. Please refresh the page.');
             }
-            
+
             // Get merchant ID from Pi authentication
             const merchantId = await currentDbManager.getCurrentMerchantId();
             if (!merchantId) {
@@ -966,7 +966,7 @@ class InvoiceManager {
                 exchangeRate: this.exchangeRate,
                 externalRef: externalRef // External reference / paper invoice ID
             };
-            
+
             // Ensure database is initialized before saving
             if (!currentDbManager.piStorage) {
                 console.log('Database not initialized, initializing now...');
@@ -1010,9 +1010,9 @@ class InvoiceManager {
                 return; // Exit early for update
             } else {
                 // Create new invoice
-            // STATE MANAGEMENT FIX: Use helper method for consistency
-            const currentDbManager = this._getDbManager();
-            await currentDbManager.createInvoice(invoiceData);
+                // STATE MANAGEMENT FIX: Use helper method for consistency
+                const currentDbManager = this._getDbManager();
+                await currentDbManager.createInvoice(invoiceData);
                 console.log('✅ Invoice created:', invoiceId);
 
                 // Generate QR code (always Pi payment)
@@ -1061,7 +1061,7 @@ class InvoiceManager {
         try {
             // HACKATHON 2025 PATTERN: Use Pi.createPayment() directly (Blind_Lounge pattern)
             // This follows the pattern used by Hackathon 2025 winners
-            
+
             // Get Pi Adapter
             const currentPiAdapter = window.piAdapter;
             if (!currentPiAdapter || !currentPiAdapter.user) {
@@ -1172,7 +1172,7 @@ class InvoiceManager {
                     timestamp: Date.now()
                 };
                 console.log('💳 Payment data stored for Pi.createPayment() (Hackathon 2025 pattern):', this.pendingPayment);
-                
+
                 // HACKATHON 2025 PATTERN: Automatically initiate Pi.createPayment() when QR is generated
                 // This follows Blind_Lounge pattern - direct SDK integration
                 try {
@@ -1546,7 +1546,7 @@ class InvoiceManager {
             if (!currentDbManager.piStorage) {
                 await currentDbManager.initialize();
             }
-            
+
             // Update invoice
             await currentDbManager.updateInvoice(invoiceId, {
                 status: 'refunded',
@@ -1557,7 +1557,7 @@ class InvoiceManager {
 
             // COLLISION FIX: Generate refund ID once and reuse
             const refundId = `REF-${Date.now()}-${Math.random().toString(36).substring(2, 9).toUpperCase()}`;
-            
+
             // Record refund on blockchain (currentDbManager already declared above)
             await currentDbManager.saveRefund({
                 refundId: refundId,
@@ -1739,16 +1739,16 @@ class InvoiceManager {
         // SECURITY: Sanitize title and message to prevent XSS
         const safeTitle = typeof title === 'string' ? title.replace(/<[^>]*>/g, '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') : String(title);
         const safeMessage = typeof message === 'string' ? message.replace(/<[^>]*>/g, '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') : String(message);
-        
+
         // Use textContent to safely set content
         const titleDiv = document.createElement('div');
         titleDiv.style.cssText = 'font-weight: bold; margin-bottom: 5px;';
         titleDiv.textContent = `✅ ${safeTitle}`;
-        
+
         const messageDiv = document.createElement('div');
         messageDiv.style.cssText = 'font-size: 14px; opacity: 0.9;';
         messageDiv.textContent = safeMessage;
-        
+
         toast.appendChild(titleDiv);
         toast.appendChild(messageDiv);
 
@@ -1789,16 +1789,16 @@ class InvoiceManager {
         // SECURITY: Sanitize title and message to prevent XSS
         const safeTitle = typeof title === 'string' ? title.replace(/<[^>]*>/g, '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') : String(title);
         const safeMessage = typeof message === 'string' ? message.replace(/<[^>]*>/g, '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') : String(message);
-        
+
         // Use textContent to safely set content
         const titleDiv = document.createElement('div');
         titleDiv.style.cssText = 'font-weight: bold; margin-bottom: 5px;';
         titleDiv.textContent = `❌ ${safeTitle}`;
-        
+
         const messageDiv = document.createElement('div');
         messageDiv.style.cssText = 'font-size: 14px; opacity: 0.9;';
         messageDiv.textContent = safeMessage;
-        
+
         toast.appendChild(titleDiv);
         toast.appendChild(messageDiv);
 
@@ -1893,11 +1893,11 @@ class InvoiceManager {
                     document.body.appendChild(textArea);
                     textArea.select();
                     textArea.setSelectionRange(0, chatMessage.length); // For mobile devices
-                    
+
                     // ERROR HANDLING FIX: Check if execCommand succeeded
                     const copySuccess = document.execCommand('copy');
                     document.body.removeChild(textArea);
-                    
+
                     if (!copySuccess) {
                         throw new Error('Failed to copy using execCommand');
                     }
@@ -1936,59 +1936,87 @@ class InvoiceManager {
                 throw new Error('Invalid payment data');
             }
 
-            console.log('💳 Initiating Pi.createPayment() (Hackathon 2025 pattern - Blind_Lounge)...');
+            console.log('💳 Initiating Pi.createPayment() (Strict Compliance)...');
 
-            // HACKATHON 2025 PATTERN: Use Pi.createPayment() directly as Blind_Lounge does
+            // HACKATHON 2025 PATTERN: Use Pi.createPayment() directly
+            // COMPLIANCE FIXME: Must call BACKEND endpoints for standard 4-step flow
             const paymentResult = await currentPiAdapter.createPiPayment(
                 paymentData.amountPi,
                 paymentData.memo,
                 paymentData.walletAddress,
-                // onReadyForServerApproval
-                async (paymentId, txid) => {
-                    console.log('✅ Payment ready for server approval:', { paymentId, txid });
-                    // Backend will verify the payment
+                // onReadyForServerApproval (Step 2)
+                async (paymentId) => {
+                    console.log('⏳ Server Approval Requested:', paymentId);
+                    try {
+                        const response = await fetch('/blockchain/approve', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ payment_id: paymentId })
+                        });
+
+                        if (!response.ok) {
+                            const errorText = await response.text();
+                            throw new Error(`Server approval failed: ${errorText}`);
+                        }
+                        console.log('✅ Server Approved:', paymentId);
+                        // Standard Pi SDK flow: The SDK waits for this promise to resolve
+                    } catch (error) {
+                        console.error('❌ Server Approval Error:', error);
+                        throw error; // Propagate to SDK to cancel payment
+                    }
                 },
-                // onReadyForServerCompletion
+                // onReadyForServerCompletion (Step 4)
                 async (paymentId, txid) => {
-                    console.log('✅ Payment completed (Hackathon 2025 pattern):', { paymentId, txid });
-                    // Update invoice status to paid
-                    if (paymentData.invoiceId && window.dbManager) {
-                        await window.dbManager.updateInvoiceStatus(paymentData.invoiceId, 'paid');
-                        // Refresh dashboard
-                        if (window.renderInvoices) {
-                            await window.renderInvoices();
+                    console.log('⏳ Server Completion Requested:', { paymentId, txid });
+                    try {
+                        // 1. Call Backend to finalize
+                        const response = await fetch('/blockchain/complete', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ payment_id: paymentId, txid: txid })
+                        });
+
+                        if (!response.ok) {
+                            const errorText = await response.text();
+                            throw new Error(`Server completion failed: ${errorText}`);
                         }
-                        if (window.renderStats) {
-                            await window.renderStats();
+
+                        console.log('✅ Server Completed Payment:', paymentId);
+
+                        // 2. Update Local DB
+                        if (paymentData.invoiceId && window.dbManager) {
+                            await window.dbManager.updateInvoiceStatus(paymentData.invoiceId, 'paid');
+
+                            // Refresh UI
+                            if (window.renderInvoices) await window.renderInvoices();
+                            if (window.renderStats) await window.renderStats();
+                            if (window.Toast) window.Toast.success('Payment Verified & Complete!');
                         }
-                        if (window.Toast) {
-                            window.Toast.success('Payment received! Invoice marked as paid.');
-                        }
+                    } catch (error) {
+                        console.error('❌ Server Completion Error:', error);
+                        // Even if server fails, the tx is likely on chain.
+                        // We log error but maybe don't throw to prevent UI confusion if funds moved.
+                        // But strictly, we should throw.
+                        throw error;
                     }
                 },
                 // onCancel
-                () => {
-                    console.log('⚠️ Payment cancelled by user');
+                (paymentId) => {
+                    console.log('⚠️ Payment cancelled by user:', paymentId);
+                    if (window.Toast) window.Toast.warning('Payment cancelled');
                 },
                 // onError
-                (error) => {
-                    console.error('❌ Payment error:', error);
+                (error, payment) => {
+                    console.error('❌ Payment error:', error, payment);
                     if (window.Toast) {
-                        window.Toast.error('Payment error: ' + error.message);
+                        window.Toast.error('Payment error: ' + (error.message || date));
                     }
                 }
             );
 
-            if (paymentResult.success) {
-                console.log('✅ Pi.createPayment() initiated successfully (Hackathon 2025 pattern)');
-            } else {
-                console.warn('⚠️ Pi.createPayment() failed:', paymentResult.error);
-            }
-
             return paymentResult;
         } catch (error) {
             console.error('Error initiating Pi payment:', error);
-            // Don't throw - QR code still works for manual scanning
             return { success: false, error: error.message };
         }
     }
