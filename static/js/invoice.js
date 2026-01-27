@@ -1401,10 +1401,6 @@ class InvoiceManager {
 
             console.log('✅ Invoice deleted:', invoiceId);
 
-            // Refresh dashboard
-            if (window.renderInvoices) {
-                await window.renderInvoices();
-            }
             if (window.renderStats) {
                 await window.renderStats();
             }
@@ -1630,10 +1626,6 @@ class InvoiceManager {
 
             console.log('✅ Invoice voided:', invoiceId);
 
-            // Refresh dashboard
-            if (window.renderInvoices) {
-                await window.renderInvoices();
-            }
             if (window.renderStats) {
                 await window.renderStats();
             }

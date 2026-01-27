@@ -1136,11 +1136,65 @@
             window.B2BDirectory = b2bModule.B2BDirectory;
             console.log('b2b.js loaded');
 
-            // Import image compression utility
             console.log('Importing image-compression.js...');
             const imageCompressionModule = await import('/static/js/image-compression.js' + cacheBuster);
             window.ImageCompressor = imageCompressionModule.ImageCompressor;
             console.log('image-compression.js loaded');
+
+            // Import Subscription Manager (Req #20 - PRO Features)
+            console.log('Importing subscription-manager.js...');
+            await import('/static/js/subscription-manager.js' + cacheBuster);
+            console.log('subscription-manager.js loaded');
+
+            // Import CSV Import Manager (Req #36)
+            console.log('Importing csv-import.js...');
+            await import('/static/js/csv-import.js' + cacheBuster);
+            console.log('csv-import.js loaded');
+
+            // Import Product Manager
+            console.log('Importing product-manager.js...');
+            await import('/static/js/product-manager.js' + cacheBuster);
+            console.log('product-manager.js loaded');
+
+            // Import Audit Logs Manager
+            console.log('Importing audit-logs.js...');
+            await import('/static/js/audit-logs.js' + cacheBuster);
+            console.log('audit-logs.js loaded');
+
+            // Import Auto-Lock Security
+            console.log('Importing auto-lock.js...');
+            await import('/static/js/auto-lock.js' + cacheBuster);
+            console.log('auto-lock.js loaded');
+
+            // Import Bug Reporting (Global Error Handler)
+            console.log('Importing bug-reporting.js...');
+            await import('/static/js/bug-reporting.js' + cacheBuster);
+            console.log('bug-reporting.js loaded');
+
+            // Import Hardware Manager (Req #34, #40)
+            console.log('Importing hardware.js...');
+            await import('/static/js/hardware.js' + cacheBuster);
+            console.log('hardware.js loaded');
+
+            // Import Market Ticker (Req #19)
+            console.log('Importing market-ticker.js...');
+            await import('/static/js/market-ticker.js' + cacheBuster);
+            console.log('market-ticker.js loaded');
+
+            // Import Account Settings (Req #37)
+            console.log('Importing account-settings.js...');
+            await import('/static/js/account-settings.js' + cacheBuster);
+            console.log('account-settings.js loaded');
+
+            // Import Data Export (Req #41)
+            console.log('Importing data-export.js...');
+            await import('/static/js/data-export.js' + cacheBuster);
+            console.log('data-export.js loaded');
+
+            // Import Deep Linking (Req #38)
+            console.log('Importing deep-linking.js...');
+            await import('/static/js/deep-linking.js' + cacheBuster);
+            console.log('deep-linking.js loaded');
 
             console.log('All modules imported successfully!');
             // Mark modules as loaded

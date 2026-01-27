@@ -30,17 +30,17 @@ PI_API_KEY = os.getenv("PI_API_KEY")
 # SECURITY: Import strict configuration (will exit if invalid)
 from app.core.config import settings
 
-from app.routers import vault, reports, telemetry, notifications
+from app.routers import vault, telemetry, notifications
 from app.services.blockchain import BlockchainService, NodeMode, StellarAccountData
 from app.services.market import market_service
 from app.middleware.kyb import KYBMiddleware
 
-# Database Persistence Initialization
-from app.core.database import Base, engine
-from app.models import sql_models
+# Database Persistence Initialization (DISABLED)
+# from app.core.database import Base, engine
+# from app.models import sql_models
 
 # Create tables
-Base.metadata.create_all(bind=engine)
+# Base.metadata.create_all(bind=engine)
 
 
 # Req #45: LOG ROTATION - Configure logging with rotation to prevent disk full
@@ -432,8 +432,12 @@ async def serve_manifest():
 from app.core.security import verify_pi_token, PI_API_KEY, PI_API_BASE
 
 # Include routers
-app.include_router(vault.router, prefix="/sync", tags=["vault"])
-app.include_router(reports.router, prefix="/reports", tags=["reports"])
+from app.routers import blockchain, telemetry, notifications
+
+# app.include_router(vault.router, prefix="/sync", tags=["vault"]) # Disabled for Pure Blockchain Mode
+app.include_router(blockchain.router, prefix="/api/blockchain", tags=["blockchain"])
+app.include_router(blockchain.router, prefix="/api/pi", tags=["pi-helpers"]) # For /get-stellar-account
+
 app.include_router(telemetry.router, prefix="/telemetry", tags=["telemetry"])  # Req #27
 app.include_router(notifications.router, prefix="/notifications", tags=["notifications"])  # Req #31: SSE
 
@@ -559,12 +563,14 @@ async def approve_payment(request: Request):
     # For now, we proceed to approve it at Pi Network level
     
     if not PI_API_KEY:
-        logger.warning(f"PI_API_KEY missing. Mock-approving payment {payment_id}")
-        return {
-            "status": "approved",
-            "payment_id": payment_id,
-            "message": "Payment approved (Mock Mode - Set PI_API_KEY for real approval)"
-        }
+        logger.error(f"PI_API_KEY missing. Cannot approve payment {payment_id}")
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "message": "Server Configuration Error: PI_API_KEY missing"
+            }
+        )
         
     try:
         async with httpx.AsyncClient() as client:
@@ -612,8 +618,8 @@ async def complete_payment(request: Request):
     
     # 2. Complete at Pi Network level
     if not PI_API_KEY:
-         logger.warning(f"PI_API_KEY missing. Mock-completing payment {payment_id}")
-         return {"status": "completed", "payment_id": payment_id}
+         logger.error(f"PI_API_KEY missing. Cannot complete payment {payment_id}")
+         return JSONResponse(status_code=500, content={"message": "Server Configuration Error: PI_API_KEY missing"})
 
     try:
         async with httpx.AsyncClient() as client:
@@ -636,53 +642,6 @@ async def complete_payment(request: Request):
         return JSONResponse(status_code=500, content={"message": str(e)})
 
 # ... (omitted models) ...
-
-@app.post("/api/pi/get-stellar-account")
-async def get_stellar_account(request: Request):
-    """
-    Retrieve Stellar Account ID for a Pi User.
-    In the real Pi Network, the user's wallet is derived from their UID or retrieved via API.
-    For this implementation, we verify the user and return a deterministic account ID.
-    """
-    auth_header = request.headers.get("Authorization", "")
-    if not auth_header.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Missing Access Token")
-    
-    access_token = auth_header.replace("Bearer ", "")
-    user_data = await verify_pi_access_token(access_token)
-    
-    if not user_data:
-        raise HTTPException(status_code=401, detail="Invalid Token")
-        
-    uid = user_data.get("uid")
-    if not uid:
-        raise HTTPException(status_code=400, detail="User UID not found")
-        
-    # Check if we have a request body with specifics
-    try:
-        body = await request.json()
-    except:
-        body = {}
-        
-    # In a real app, you might query Pi Network API for the user's wallet public key
-    # or derive a PDA (Program Derived Address) if building a specific app wallet.
-    # For now, we simulate returning a valid Stellar Public Key (starts with G)
-    # based on the UID to remain deterministic for testing.
-    
-    # Mock generation of a consistent Stellar Public Key from UID
-    # Real logic: Access Pi App Wallet or user's registered wallet
-    dummy_suffix = uid[-20:] if len(uid) > 20 else uid.ljust(20, 'X')
-    # Valid Stellar keys are 56 chars, start with G. We synthesize one for demo.
-    mock_public_key = f"G{dummy_suffix.upper().encode('utf-8').hex()[:55]}"
-    if len(mock_public_key) < 56:
-        mock_public_key = mock_public_key.ljust(56, '7')
-        
-    return {
-        "accountId": mock_public_key,
-        "publicKey": mock_public_key,
-        "secretKey": None, # NEVER return secret key to frontend
-        "message": "Stellar account retrieved successfully"
-    }
 
 @app.get("/api/pi/kyc-status")
 async def get_kyc_status(request: Request):

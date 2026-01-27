@@ -101,22 +101,7 @@ async def stream_events(request: Request, merchant_id: str):
         }
     )
 
-@router.post("/test-notification")
-async def test_notification(merchant_id: str, invoice_id: str):
-    """
-    Test endpoint to send a notification (for development)
-    """
-    notification = {
-        "type": "payment_confirmed",
-        "invoice_id": invoice_id,
-        "merchant_id": merchant_id,
-        "status": "paid",
-        "timestamp": datetime.now().isoformat(),
-        "message": "Payment confirmed successfully"
-    }
-    
-    await notification_manager.broadcast_notification(merchant_id, notification)
-    return {"status": "notification_sent"}
+
 
 # Export notification manager for use in blockchain service
 __all__ = ['router', 'notification_manager', 'event_generator']
