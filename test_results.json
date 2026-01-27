@@ -2,17 +2,17 @@
   "static_analysis": {
     "summary": {
       "total": 8,
-      "passed": 7,
-      "failed": 0,
+      "passed": 5,
+      "failed": 2,
       "warnings": 1,
-      "status": "pass"
+      "status": "fail"
     },
     "details": {
       "demo_mode": {
-        "status": "pass",
+        "status": "fail",
         "details": [
-          "[PASS] Demo Mode button found in index.html",
-          "[PASS] loadDemoData() function found in db.js"
+          "[FAIL] Demo Mode button not found in index.html",
+          "[FAIL] loadDemoData() function not found in db.js"
         ]
       },
       "invoice_creation": {
@@ -25,11 +25,11 @@
         ]
       },
       "pi_authentication": {
-        "status": "pass",
+        "status": "fail",
         "details": [
           "✅ Pi.authenticate() found",
-          "✅ Pi SDK initialize() found",
-          "✅ onIncompletePaymentFound() found (Req #2)"
+          "✅ onIncompletePaymentFound() found (Req #2)",
+          "❌ Pi SDK initialize() not found"
         ]
       },
       "bip39": {
@@ -67,76 +67,65 @@
           "✅ DOMPurify found in static/index.html",
           "✅ DOMPurify found in static/app.html",
           "✅ DOMPurify is being used",
-          "⚠️ Found 34 potentially unsafe innerHTML usages",
-          "  - static/js/invoice.js:366",
-          "  - static/js/invoice.js:1094",
-          "  - static/js/invoice.js:1237",
-          "  - static/js/ui-utils.js:39",
-          "  - static/js/ui-utils.js:91"
+          "⚠️ Found 30 potentially unsafe innerHTML usages",
+          "  - static/js/invoice.js:382",
+          "  - static/js/invoice.js:1117",
+          "  - static/js/invoice.js:1283",
+          "  - static/js/ui-utils.js:96",
+          "  - static/js/ui-utils.js:163"
         ]
       },
       "error_handling": {
         "status": "pass",
         "details": [
           "✅ ErrorHandler class found",
-          "✅ Found 17 try-catch blocks in invoice.js"
+          "✅ Found 21 try-catch blocks in invoice.js"
         ]
       }
     }
   },
   "server_status": {
     "status": "running",
-    "already_running": true
+    "pid": 12512
   },
   "browser_tests": [
     {
       "test": "console_errors",
       "status": "warning",
       "details": [
-        "[WARN] Found 16 console error(s)",
-        "  - Refused to apply style from 'http://localhost:8000/css/style.css' because its MIME type ('application/json') is not a supported stylesheet MIME type, and strict MIME checking is enabled.",
-        "  - Failed to load resource: the server responded with a status of 404 (Not Found)",
-        "  - Failed to load resource: the server responded with a status of 404 (Not Found)",
-        "  - Failed to load resource: the server responded with a status of 404 (Not Found)",
+        "[WARN] Found 1 console error(s)",
         "  - Failed to load resource: the server responded with a status of 404 (Not Found)"
       ],
       "screenshots": []
     },
     {
       "test": "demo_mode",
-      "status": "pass",
+      "status": "fail",
       "details": [
-        "[PASS] Demo Mode button found",
-        "[PASS] Dashboard appeared after Demo Mode",
-        "[PASS] Found 8 invoice(s) in demo data"
+        "[FAIL] Demo Mode button not found"
       ],
       "screenshots": [
-        "test_screenshots\\demo_mode_initial.png",
-        "test_screenshots\\demo_mode_activated.png"
+        "test_screenshots\\demo_mode_initial.png"
       ]
     },
     {
       "test": "invoice_creation",
       "status": "fail",
       "details": [
-        "[PASS] Create Invoice button found",
-        "[FAIL] Error: ElementHandle.fill: Timeout 30000ms exceeded.\nCall log:\n    - fill(\"Test Item\")\n  - attempting fill action\n    2 × waiting for element to be visible, enabled and editable\n      - element is not visible\n    - retrying fill action\n    - waiting 20ms\n    2 × waiting for element to be visible, enabled and editable\n      - element is not visible\n    - retrying fill action\n      - waiting 100ms\n    57 × waiting for element to be visible, enabled and editable\n       - element is not visible\n     - retrying fill action\n       - waiting 500ms\n"
+        "[FAIL] Create Invoice button not found"
       ],
-      "screenshots": [
-        "test_screenshots\\invoice_modal_opened.png",
-        "test_screenshots\\invoice_creation_error.png"
-      ]
+      "screenshots": []
     },
     {
       "test": "responsive_design",
       "status": "pass",
       "details": [
         "[PASS] mobile_iphone_se: Font size 16px",
-        "[PASS] mobile_iphone_se: 26 visible buttons",
+        "[PASS] mobile_iphone_se: 0 visible buttons",
         "[PASS] tablet_ipad: Font size 16px",
-        "[PASS] tablet_ipad: 26 visible buttons",
+        "[PASS] tablet_ipad: 0 visible buttons",
         "[PASS] desktop: Font size 16px",
-        "[PASS] desktop: 26 visible buttons"
+        "[PASS] desktop: 0 visible buttons"
       ],
       "screenshots": [
         "test_screenshots\\responsive_mobile_iphone_se.png",
@@ -146,20 +135,17 @@
     },
     {
       "test": "bip39_pin",
-      "status": "pass",
+      "status": "warning",
       "details": [
-        "[PASS] Mnemonic input field found",
-        "[WARN] PIN maxlength is None, expected 6",
-        "[PASS] Generate mnemonic button found"
+        "[WARN] Setup page not visible (may need to be triggered)"
       ],
       "screenshots": []
     },
     {
       "test": "pi_authentication",
-      "status": "pass",
+      "status": "fail",
       "details": [
-        "[PASS] Pi Authentication button found",
-        "[PASS] Pi Authentication button is visible"
+        "[FAIL] Pi Authentication button not found"
       ],
       "screenshots": [
         "test_screenshots\\pi_auth_check.png"
@@ -194,18 +180,17 @@
     },
     {
       "test": "service_worker",
-      "status": "warning",
+      "status": "fail",
       "details": [
-        "[PASS] Service Worker file found",
-        "[WARN] Service Worker registration not found"
+        "[FAIL] Service Worker file not found"
       ]
     }
   ],
   "summary": {
-    "static_analysis": "pass",
+    "static_analysis": "fail",
     "server_running": true,
-    "browser_tests": "4/6",
+    "browser_tests": "1/6",
     "functional_tests": "3/4",
-    "overall": "pass"
+    "overall": "fail"
   }
 }

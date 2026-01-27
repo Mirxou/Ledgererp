@@ -15,6 +15,7 @@ import hashlib
 
 from app.core.database import get_db
 from app.models.sql_models import VaultEntry
+from app.core.security import get_current_user_id
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +36,7 @@ class VaultDownload(BaseModel):
 async def upload_vault(
     vault_data: VaultUpload,
     request: Request,
-    authorization: Optional[str] = Header(None),
+    user_id: str = Depends(get_current_user_id),
     db: Session = Depends(get_db)
 ):
     """
@@ -43,9 +44,6 @@ async def upload_vault(
     Backend receives encrypted blob and stores it without decryption capability
     """
     try:
-        # Extract user identifier from auth token (if available)
-        user_id = "anonymous"  # In production, extract from Pi auth token
-        
         # Check if vault already exists for user
         db_vault = db.query(VaultEntry).filter(VaultEntry.user_id == user_id).first()
         
@@ -88,7 +86,7 @@ async def upload_vault(
 async def download_vault(
     recovery_password: str,
     request: Request,
-    authorization: Optional[str] = Header(None),
+    user_id: str = Depends(get_current_user_id),
     db: Session = Depends(get_db)
 ):
     """
@@ -96,8 +94,6 @@ async def download_vault(
     User must provide recovery password to download
     """
     try:
-        user_id = "anonymous"  # In production, extract from auth token
-        
         db_vault = db.query(VaultEntry).filter(VaultEntry.user_id == user_id).first()
         
         if not db_vault:
@@ -126,13 +122,11 @@ async def download_vault(
 @router.delete("/vault")
 async def delete_vault(
     request: Request,
-    authorization: Optional[str] = Header(None),
+    user_id: str = Depends(get_current_user_id),
     db: Session = Depends(get_db)
 ):
     """Delete vault backup"""
     try:
-        user_id = "anonymous"  # In production, extract from auth token
-        
         db_vault = db.query(VaultEntry).filter(VaultEntry.user_id == user_id).first()
         
         if db_vault:
@@ -152,12 +146,10 @@ async def delete_vault(
 @router.get("/vault/exists")
 async def check_vault_exists(
     request: Request,
-    authorization: Optional[str] = Header(None),
+    user_id: str = Depends(get_current_user_id),
     db: Session = Depends(get_db)
 ):
     """Check if vault exists for user"""
-    user_id = "anonymous"  # In production, extract from auth token
-    
     exists = db.query(VaultEntry).filter(VaultEntry.user_id == user_id).first() is not None
     
     return {

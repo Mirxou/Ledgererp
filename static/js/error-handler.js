@@ -24,7 +24,7 @@ class ErrorHandler {
         }
 
         // Pi SDK errors
-        if (errorMessage.includes('Pi SDK') || errorMessage.includes('Pi.authenticate')) {
+        if (errorMessage.includes('Pi SDK')) {
             return {
                 ar: 'فشل تحميل Pi SDK. يرجى التأكد من الاتصال بالإنترنت وإعادة تحميل الصفحة.',
                 en: 'Failed to load Pi SDK. Please ensure you have internet connection and reload the page.'

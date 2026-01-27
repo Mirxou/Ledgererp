@@ -3,8 +3,7 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport"
-        content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>Ledger ERP - Non-Custodial ERP</title>
 
     <!-- Pi Network App Manifest -->
@@ -553,13 +552,12 @@
             <div id="auth-section">
                 <h2>Authentication</h2>
                 <div class="auth-actions">
-                    <button id="pi-auth-btn" class="btn btn-lg btn-green">
-                        Login with Pi Network
-                    </button>
+
                 </div>
                 <div id="auth-status"></div>
                 <p class="form-note">
-                    ⚠️ <strong>KYC Required:</strong> You must complete KYC verification in Pi Browser to use this application.
+                    ⚠️ <strong>KYC Required:</strong> You must complete KYC verification in Pi Browser to use this
+                    application.
                 </p>
             </div>
 
@@ -891,7 +889,7 @@
             console.log('Page fully loaded. Script tags should be ready.');
             console.log('Final check - Dexie:', typeof window.Dexie);
             console.log('Final check - DOMPurify:', typeof window.DOMPurify);
-            
+
             // Check if module script is running
             setTimeout(() => {
                 if (!window.moduleScriptRunning) {
@@ -903,7 +901,7 @@
                         spinner.style.display = 'none';
                         console.log('✅ Loading spinner hidden (fallback)');
                     }
-                    
+
                     // Load modules using script tags as fallback
                     const modules = [
                         '/js/security.js',
@@ -912,7 +910,7 @@
                         '/js/db.js',
                         '/js/invoice.js'
                     ];
-                    
+
                     let loadedCount = 0;
                     modules.forEach((src, index) => {
                         const script = document.createElement('script');
@@ -944,7 +942,7 @@
                         };
                         document.head.appendChild(script);
                     });
-                    
+
                     // Also try to initialize app immediately
                     if (typeof initApp === 'function' && !window.appInitialized) {
                         console.log('🔄 Attempting to initialize app immediately...');
@@ -1284,115 +1282,8 @@
             }
 
             // Pi Authentication Handler (Req #1)
-            const piAuthBtn = document.getElementById('pi-auth-btn');
-            if (piAuthBtn) {
-                piAuthBtn.addEventListener('click', async () => {
-                    // Show loading state
-                    const authStatus = document.getElementById('auth-status');
-                    authStatus.innerHTML = '<p class="info-text">⏳ Authenticating with Pi Network...</p>';
-                    piAuthBtn.disabled = true;
-                    piAuthBtn.textContent = 'Authenticating...';
+            // Pi Authentication Logic Removed (Offline Mode)
 
-                    try {
-                        const result = await piAdapter.authenticate();
-                        if (result.success) {
-                            // XSS FIX: Sanitize username before displaying
-                            const sanitizedUsername = typeof DOMPurify !== 'undefined' 
-                                ? DOMPurify.sanitize(result.user.username || '') 
-                                : String(result.user.username || '').replace(/[<>&"']/g, '');
-                            authStatus.innerHTML =
-                                '<p class="success-text">✓ Authenticated as: ' + sanitizedUsername + '</p>';
-                            document.getElementById('setup-section').classList.remove('hidden');
-                            console.log('✅ Authentication successful! Setup section is now visible.');
-                        } else {
-                            // Display detailed error information
-                            const sanitize = (str) => {
-                                if (typeof DOMPurify !== 'undefined') {
-                                    return DOMPurify.sanitize(str || '');
-                                }
-                                return String(str || '').replace(/[<>&"']/g, '');
-                            };
-                            
-                            const errorMsg = sanitize(result.error || 'Authentication failed');
-                            const detailedError = sanitize(result.detailedError || '');
-                            const troubleshootingSteps = result.troubleshootingSteps || [];
-                            const diagnostic = result.diagnostic || {};
-                            
-                            let errorHTML = '<div class="error-text">';
-                            errorHTML += '<p><strong>✗ Authentication failed: ' + errorMsg + '</strong></p>';
-                            
-                            if (detailedError) {
-                                errorHTML += '<div style="margin-top: 10px; padding: 10px; background: rgba(244, 67, 54, 0.1); border-left: 3px solid #f44336; white-space: pre-wrap; font-size: 0.9em;">';
-                                errorHTML += sanitize(detailedError.replace(/\n/g, '<br>'));
-                                errorHTML += '</div>';
-                            }
-                            
-                            if (troubleshootingSteps.length > 0) {
-                                errorHTML += '<div style="margin-top: 10px;"><strong>Steps to fix:</strong><ul style="margin: 5px 0; padding-left: 20px;">';
-                                troubleshootingSteps.forEach(step => {
-                                    errorHTML += '<li style="margin: 5px 0;">' + sanitize(step) + '</li>';
-                                });
-                                errorHTML += '</ul></div>';
-                            }
-                            
-                            if (diagnostic && Object.keys(diagnostic).length > 0) {
-                                errorHTML += '<div style="margin-top: 10px; padding: 8px; background: rgba(0,0,0,0.05); font-size: 0.85em; font-family: monospace;">';
-                                errorHTML += '<strong>Diagnostic Info:</strong><br>';
-                                errorHTML += 'Origin: ' + sanitize(diagnostic.origin) + '<br>';
-                                errorHTML += 'Expected: ' + sanitize(diagnostic.expectedOrigin) + '<br>';
-                                errorHTML += 'Pi Browser: ' + (diagnostic.isPiBrowser ? 'Yes' : 'No') + '<br>';
-                                errorHTML += 'Pi SDK loaded: ' + (diagnostic.hasPi ? 'Yes' : 'No') + '<br>';
-                                errorHTML += 'Pi.authenticate available: ' + (diagnostic.hasAuthenticate ? 'Yes' : 'No') + '<br>';
-                                errorHTML += 'SDK initialized: ' + (diagnostic.sdkInitialized ? 'Yes' : 'No');
-                                errorHTML += '</div>';
-                            }
-                            
-                            errorHTML += '</div>';
-                            authStatus.innerHTML = errorHTML;
-                        }
-                    } catch (error) {
-                        // XSS FIX: Sanitize error message before displaying
-                        const sanitize = (str) => {
-                            if (typeof DOMPurify !== 'undefined') {
-                                return DOMPurify.sanitize(str || '');
-                            }
-                            return String(str || '').replace(/[<>&"']/g, '');
-                        };
-                        
-                        const sanitizedErrorMsg = sanitize(error.message || 'Unknown error');
-                        authStatus.innerHTML =
-                            '<div class="error-text">' +
-                            '<p><strong>✗ Authentication error: ' + sanitizedErrorMsg + '</strong></p>' +
-                            '<div style="margin-top: 10px; padding: 10px; background: rgba(244, 67, 54, 0.1); border-left: 3px solid #f44336;">' +
-                            '<p><strong>Common causes:</strong></p>' +
-                            '<div style="margin-top: 10px; padding: 12px; background: rgba(244, 67, 54, 0.1); border-left: 4px solid #f44336; margin-bottom: 15px;">' +
-                            '<strong style="font-size: 1.1em;">⚠️ CHECKLIST STEP 10 - MOST COMMON CAUSE:</strong><br>' +
-                            '<strong>"username" scope NOT enabled in Developer Portal!</strong><br><br>' +
-                            '<strong>SOLUTION:</strong><br>' +
-                            '1. Go to: Developer Portal → Your App<br>' +
-                            '2. Find: "Permissions" or "Scopes" section<br>' +
-                            '3. Enable: ✅ username (MUST be enabled)<br>' +
-                            '4. Click: Save / Confirm<br>' +
-                            '5. Wait: 1-2 minutes<br>' +
-                            '6. Close Pi Browser completely<br>' +
-                            '7. Reopen Pi Browser<br>' +
-                            '8. Try authentication again' +
-                            '</div>' +
-                            '<p><strong>Other possible causes:</strong></p>' +
-                            '<ul style="margin: 5px 0; padding-left: 20px;">' +
-                            '<li>App URL mismatch in Pi Developer Portal (must be exactly: https://ledgererp.online)</li>' +
-                            '<li>Not using Pi Browser</li>' +
-                            '<li>Network connection issues</li>' +
-                            '</ul>' +
-                            '<p style="margin-top: 10px;"><strong>Check browser console for detailed diagnostic information.</strong></p>' +
-                            '</div>' +
-                            '</div>';
-                    } finally {
-                        piAuthBtn.disabled = false;
-                        piAuthBtn.textContent = 'Login with Pi Network';
-                    }
-                });
-            }
 
 
             // Generate Mnemonic Handler (Req #7)
@@ -1908,7 +1799,7 @@
                     const today = new Date();
                     today.setHours(0, 0, 0, 0);
                     let dailyRevenue = 0;
-                    
+
                     for (const invoice of allInvoices) {
                         if (invoice.status === 'paid' && invoice.paidAt) {
                             const paidDate = new Date(invoice.paidAt);

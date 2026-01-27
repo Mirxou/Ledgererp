@@ -12,6 +12,7 @@ from enum import Enum
 from typing import Optional, Dict, Any, Tuple, List
 from datetime import datetime, timedelta
 import hashlib
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -86,6 +87,80 @@ class BlockchainService:
         # SECURITY: Invoice cache (in production, query from database)
         # Format: {invoice_id: {amount, merchant_id, wallet_address, status}}
         self.invoice_cache: Dict[str, Dict[str, Any]] = {}
+
+    SUBSCRIPTION_KEY = "pi_ledger_sub"
+    
+    async def verify_subscription_on_chain(self, account_id: str, stellar_data_service: 'StellarAccountData') -> Dict[str, Any]:
+        """
+        Verify if a merchant has a valid 'Pro' subscription stored on-chain.
+        
+        Args:
+            account_id: Merchant's Stellar Public Key
+            stellar_data_service: Instance of StellarAccountData to fetch data
+            
+        Returns:
+            Dict with subscription status
+        """
+        import json
+        
+        try:
+            # 1. Fetch data from blockchain
+            data_str = await stellar_data_service.get_account_data(account_id, self.SUBSCRIPTION_KEY)
+            
+            if not data_str:
+                return {"is_pro": False, "reason": "No subscription data found"}
+                
+            # 2. Parse JSON
+            # Structure: {"tier": "pro", "expiry": "ISO_DATE", "signature": "..."}
+            try:
+                sub_data = json.loads(data_str)
+            except json.JSONDecodeError:
+                return {"is_pro": False, "reason": "Corrupt subscription data"}
+            
+            # 3. Check Expiry
+            expiry_str = sub_data.get("expiry")
+            if not expiry_str:
+                return {"is_pro": False, "reason": "Invalid subscription data (no expiry)"}
+                
+            try:
+                # Handle potentially missing timezone or Z
+                if expiry_str.endswith('Z'):
+                    expiry_str = expiry_str[:-1]
+                expiry_date = datetime.fromisoformat(expiry_str)
+                
+                if datetime.now() > expiry_date:
+                    return {"is_pro": False, "expiry": expiry_str, "reason": "Subscription expired"}
+            except ValueError:
+                 return {"is_pro": False, "reason": "Invalid date format"}
+                
+            # 4. Verify Signature
+            provided_signature = sub_data.get("signature")
+            if not provided_signature:
+                 return {"is_pro": False, "reason": "Unsigned subscription data"}
+            
+            # Reconstruct payload for verification (remove signature from dict)
+            verify_payload = sub_data.copy()
+            del verify_payload["signature"]
+            
+            # Serialize exactly as the signer did (sort_keys=True)
+            payload_str = json.dumps(verify_payload, sort_keys=True)
+            
+            # Secret (Must match backend)
+            signing_secret = os.getenv("LICENSE_SIGNING_SECRET", "super_secret_signing_key_change_me")
+            expected_signature = hashlib.sha256(f"{payload_str}{signing_secret}".encode()).hexdigest()
+            
+            if provided_signature != expected_signature:
+                return {"is_pro": False, "reason": "Invalid signature - Data tampering detected"}
+
+            return {
+                "is_pro": True, 
+                "tier": sub_data.get("tier"), 
+                "expiry": sub_data.get("expiry")
+            }
+            
+        except Exception as e:
+            logger.error(f"Subscription verification error: {e}")
+            return {"is_pro": False, "reason": f"Verification error: {str(e)}"}
     
     @staticmethod
     def validate_memo(memo: str) -> Tuple[bool, Optional[str], int]:
@@ -168,8 +243,11 @@ class BlockchainService:
                     self.current_mode = NodeMode.HIBERNATION
                     self.circuit_breaker_open = True
             else:
-                # Recovery successful (handled in _try_public_api)
-                pass
+                # Recovery successful
+                if self.current_mode == NodeMode.HIBERNATION:
+                    self.current_mode = NodeMode.PUBLIC
+                    self.circuit_breaker_open = False
+                    logger.info("Recovered from HIBERNATION to PUBLIC mode")
     
     async def _try_local_node(self) -> bool:
         """Try to connect to local Pi Node"""
@@ -201,8 +279,7 @@ class BlockchainService:
                     if response.status == 200:
                         self.circuit_breaker.record_success()
                         if self.current_mode == NodeMode.HIBERNATION:
-                            self.current_mode = NodeMode.PUBLIC
-                            self.circuit_breaker_open = False
+                            pass # Handled in caller
                         return True
                     elif response.status in [500, 503]:
                         self.circuit_breaker.record_failure()

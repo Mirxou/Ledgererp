@@ -36,57 +36,12 @@ class B2BDirectory {
                     return;
                 }
             } catch (error) {
-                console.warn('Backend not available, using mock data');
+                console.warn('Backend unavailable');
+                // Production Safe: No mock data
+                this.publicMerchants = [];
             }
 
-            // Fallback: Use mock data for demo
-            this.publicMerchants = [
-                {
-                    merchantId: 'merchant_001',
-                    name: 'Coffee Shop Downtown',
-                    category: 'Food & Beverage',
-                    location: 'New York, NY',
-                    acceptsPi: true,
-                    description: 'Premium coffee and pastries',
-                    walletAddress: 'GCOFFEE123456'
-                },
-                {
-                    merchantId: 'merchant_002',
-                    name: 'Tech Gadgets Store',
-                    category: 'Electronics',
-                    location: 'San Francisco, CA',
-                    acceptsPi: true,
-                    description: 'Latest tech gadgets and accessories',
-                    walletAddress: 'GTECH789012'
-                },
-                {
-                    merchantId: 'merchant_003',
-                    name: 'Fashion Boutique',
-                    category: 'Fashion & Apparel',
-                    location: 'Los Angeles, CA',
-                    acceptsPi: true,
-                    description: 'Trendy fashion and accessories',
-                    walletAddress: 'GFASHION345678'
-                },
-                {
-                    merchantId: 'merchant_004',
-                    name: 'Organic Grocery',
-                    category: 'Food & Groceries',
-                    location: 'Portland, OR',
-                    acceptsPi: true,
-                    description: 'Fresh organic produce and groceries',
-                    walletAddress: 'GORGANIC901234'
-                },
-                {
-                    merchantId: 'merchant_005',
-                    name: 'Bookstore & Cafe',
-                    category: 'Books & Media',
-                    location: 'Seattle, WA',
-                    acceptsPi: true,
-                    description: 'Books, coffee, and cozy reading space',
-                    walletAddress: 'GBOOKS567890'
-                }
-            ];
+
         } catch (error) {
             console.error('Error loading public merchants:', error);
             this.publicMerchants = [];

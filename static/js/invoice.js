@@ -8,7 +8,9 @@ import securityManager from './security.js';
 import piAdapter from './pi-adapter.js';
 
 // Exchange Rates
-const RATE_MARKET_TEST = 10.0; // $10 = 1 Pi (for easy testing math)
+// Exchange Rates
+// RATE_MARKET_TEST removed for production
+
 const RATE_GCV = 314159.0; // $314,159 = 1 Pi (Global Consensus Value)
 
 /**
@@ -43,7 +45,8 @@ class InvoiceManager {
         this.modal = null;
         this.items = [];
         this.useGCV = false;
-        this.exchangeRate = RATE_MARKET_TEST; // Default: Market test rate
+        // REAL PRODUCTION: Use global market price or 0 if not yet loaded
+        this.exchangeRate = window.piMarketPrice || 0;
         this.editingInvoiceId = null; // Track if we're editing an invoice
         this.currentInvoiceId = null; // Track current invoice ID (for QR generation)
         this.pendingPayment = null; // HACKATHON 2025: Store payment for Pi.createPayment() (Blind_Lounge pattern)

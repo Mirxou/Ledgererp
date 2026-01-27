@@ -15,6 +15,8 @@ from sqlalchemy import func
 from app.core.database import get_db
 from app.models.sql_models import TelemetryEvent as TelemetryEventModel, BugReport
 
+from app.core.security import verify_pi_token
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
@@ -29,16 +31,16 @@ class TelemetryEvent(BaseModel):
 async def submit_telemetry_event(
     event: TelemetryEvent,
     request: Request,
-    authorization: Optional[str] = Header(None),
+    user_data: Dict[str, Any] = Depends(verify_pi_token),
     db: Session = Depends(get_db)
 ):
     """
     Req #27: Submit anonymous telemetry event
-    No PII (Personally Identifiable Information) allowed
+    Requires real Pi authentication, but payload remains anonymous (No PII)
     """
     try:
         # Validate no PII in metadata
-        forbidden_keys = ['username', 'email', 'phone', 'address', 'name', 'uid', 'user_id']
+        forbidden_keys = ['username', 'email', 'phone', 'address', 'name', 'uid', 'user_id', 'merchant_id']
         for key in forbidden_keys:
             if key.lower() in str(event.metadata).lower():
                 raise HTTPException(
@@ -58,9 +60,6 @@ async def submit_telemetry_event(
         db.add(new_event)
         db.commit()
         
-        # Optional: Retention policy (keep last 10000) - can be done as background task or skipped for SQLite
-        # For hackathon, unlimited is fine or simple check
-        
         logger.info(f"Telemetry event received: {event.event_type}")
         
         return {
@@ -79,12 +78,12 @@ async def submit_telemetry_event(
 async def get_metrics(
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
-    authorization: Optional[str] = Header(None),
+    user_data: Dict[str, Any] = Depends(verify_pi_token),
     db: Session = Depends(get_db)
 ):
     """
-    Req #27: Get aggregated metrics for Ventures pitch
-    Returns anonymous statistics only
+    Req #27: Get aggregated metrics
+    Requires real Pi authentication
     """
     try:
         # Build query

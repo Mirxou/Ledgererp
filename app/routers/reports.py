@@ -10,6 +10,8 @@ from datetime import datetime, timedelta
 import logging
 import json
 
+from app.core.security import get_current_user_id
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
@@ -35,15 +37,13 @@ class TransactionRecord(BaseModel):
 async def generate_aml_report(
     report_request: ReportRequest,
     request: Request,
-    authorization: Optional[str] = Header(None)
+    user_id: str = Depends(get_current_user_id)
 ):
     """
     Req #21: Generate Signed PDF "Source of Funds" report
     This report can be submitted to CEX platforms as proof of income
     """
     try:
-        user_id = "anonymous"  # In production, extract from Pi auth token
-        
         # In production, fetch actual transaction data from database
         # For now, return mock structure
         transactions = await _fetch_transactions(
@@ -72,6 +72,7 @@ async def generate_aml_report(
                 "verified_transactions": sum(1 for t in transactions if t["verified"])
             },
             "transactions": transactions,
+            "user_id": user_id,
             "generated_at": datetime.now().isoformat(),
             "report_type": "Source of Funds",
             "compliance": {

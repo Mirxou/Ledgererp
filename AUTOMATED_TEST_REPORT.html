@@ -80,20 +80,20 @@
 <body>
     <div class="header">
         <h1>Automated Test Report</h1>
-        <p class="timestamp">Generated: 2026-01-05 12:05:18</p>
+        <p class="timestamp">Generated: 2026-01-26 11:03:16</p>
     </div>
     
     <div class="summary">
         <div class="summary-card">
             <h3>Overall Status</h3>
-            <p class="status-pass">
-                PASS
+            <p class="status-fail">
+                FAIL
             </p>
         </div>
         <div class="summary-card">
             <h3>Static Analysis</h3>
-            <p class="status-pass">
-                PASS
+            <p class="status-fail">
+                FAIL
             </p>
         </div>
         <div class="summary-card">
@@ -104,7 +104,7 @@
         </div>
         <div class="summary-card">
             <h3>Browser Tests</h3>
-            <p>4/6</p>
+            <p>1/6</p>
         </div>
         <div class="summary-card">
             <h3>Functional Tests</h3>
@@ -115,11 +115,11 @@
     <div class="section">
         <h2>Static Code Analysis</h2>
 
-        <div class="test-item pass">
+        <div class="test-item fail">
             <h3>Demo Mode</h3>
             <ul>
-                <li>[PASS] Demo Mode button found in index.html</li>
-                <li>[PASS] loadDemoData() function found in db.js</li>
+                <li>[FAIL] Demo Mode button not found in index.html</li>
+                <li>[FAIL] loadDemoData() function not found in db.js</li>
             </ul>
         </div>
 
@@ -133,12 +133,12 @@
             </ul>
         </div>
 
-        <div class="test-item pass">
+        <div class="test-item fail">
             <h3>Pi Authentication</h3>
             <ul>
                 <li>✅ Pi.authenticate() found</li>
-                <li>✅ Pi SDK initialize() found</li>
                 <li>✅ onIncompletePaymentFound() found (Req #2)</li>
+                <li>❌ Pi SDK initialize() not found</li>
             </ul>
         </div>
 
@@ -180,12 +180,12 @@
                 <li>✅ DOMPurify found in static/index.html</li>
                 <li>✅ DOMPurify found in static/app.html</li>
                 <li>✅ DOMPurify is being used</li>
-                <li>⚠️ Found 34 potentially unsafe innerHTML usages</li>
-                <li>  - static/js/invoice.js:366</li>
-                <li>  - static/js/invoice.js:1094</li>
-                <li>  - static/js/invoice.js:1237</li>
-                <li>  - static/js/ui-utils.js:39</li>
-                <li>  - static/js/ui-utils.js:91</li>
+                <li>⚠️ Found 30 potentially unsafe innerHTML usages</li>
+                <li>  - static/js/invoice.js:382</li>
+                <li>  - static/js/invoice.js:1117</li>
+                <li>  - static/js/invoice.js:1283</li>
+                <li>  - static/js/ui-utils.js:96</li>
+                <li>  - static/js/ui-utils.js:163</li>
             </ul>
         </div>
 
@@ -193,7 +193,7 @@
             <h3>Error Handling</h3>
             <ul>
                 <li>✅ ErrorHandler class found</li>
-                <li>✅ Found 17 try-catch blocks in invoice.js</li>
+                <li>✅ Found 21 try-catch blocks in invoice.js</li>
             </ul>
         </div>
     </div>
@@ -204,63 +204,36 @@
         <div class="test-item warning">
             <h3>Console Errors</h3>
             <ul>
-                <li>[WARN] Found 16 console error(s)</li>
-                <li>  - Refused to apply style from 'http://localhost:8000/css/style.css' because its MIME type ('application/json') is not a supported stylesheet MIME type, and strict MIME checking is enabled.</li>
-                <li>  - Failed to load resource: the server responded with a status of 404 (Not Found)</li>
-                <li>  - Failed to load resource: the server responded with a status of 404 (Not Found)</li>
-                <li>  - Failed to load resource: the server responded with a status of 404 (Not Found)</li>
+                <li>[WARN] Found 1 console error(s)</li>
                 <li>  - Failed to load resource: the server responded with a status of 404 (Not Found)</li>
             </ul>
         </div>
 
-        <div class="test-item pass">
+        <div class="test-item fail">
             <h3>Demo Mode</h3>
             <ul>
-                <li>[PASS] Demo Mode button found</li>
-                <li>[PASS] Dashboard appeared after Demo Mode</li>
-                <li>[PASS] Found 8 invoice(s) in demo data</li>
+                <li>[FAIL] Demo Mode button not found</li>
             </ul>
             <h4>Screenshots:</h4>
             <img src="test_screenshots\demo_mode_initial.png" class="screenshot" alt="Screenshot">
-            <img src="test_screenshots\demo_mode_activated.png" class="screenshot" alt="Screenshot">
         </div>
 
         <div class="test-item fail">
             <h3>Invoice Creation</h3>
             <ul>
-                <li>[PASS] Create Invoice button found</li>
-                <li>[FAIL] Error: ElementHandle.fill: Timeout 30000ms exceeded.
-Call log:
-    - fill("Test Item")
-  - attempting fill action
-    2 × waiting for element to be visible, enabled and editable
-      - element is not visible
-    - retrying fill action
-    - waiting 20ms
-    2 × waiting for element to be visible, enabled and editable
-      - element is not visible
-    - retrying fill action
-      - waiting 100ms
-    57 × waiting for element to be visible, enabled and editable
-       - element is not visible
-     - retrying fill action
-       - waiting 500ms
-</li>
+                <li>[FAIL] Create Invoice button not found</li>
             </ul>
-            <h4>Screenshots:</h4>
-            <img src="test_screenshots\invoice_modal_opened.png" class="screenshot" alt="Screenshot">
-            <img src="test_screenshots\invoice_creation_error.png" class="screenshot" alt="Screenshot">
         </div>
 
         <div class="test-item pass">
             <h3>Responsive Design</h3>
             <ul>
                 <li>[PASS] mobile_iphone_se: Font size 16px</li>
-                <li>[PASS] mobile_iphone_se: 26 visible buttons</li>
+                <li>[PASS] mobile_iphone_se: 0 visible buttons</li>
                 <li>[PASS] tablet_ipad: Font size 16px</li>
-                <li>[PASS] tablet_ipad: 26 visible buttons</li>
+                <li>[PASS] tablet_ipad: 0 visible buttons</li>
                 <li>[PASS] desktop: Font size 16px</li>
-                <li>[PASS] desktop: 26 visible buttons</li>
+                <li>[PASS] desktop: 0 visible buttons</li>
             </ul>
             <h4>Screenshots:</h4>
             <img src="test_screenshots\responsive_mobile_iphone_se.png" class="screenshot" alt="Screenshot">
@@ -268,20 +241,17 @@ Call log:
             <img src="test_screenshots\responsive_desktop.png" class="screenshot" alt="Screenshot">
         </div>
 
-        <div class="test-item pass">
+        <div class="test-item warning">
             <h3>Bip39 Pin</h3>
             <ul>
-                <li>[PASS] Mnemonic input field found</li>
-                <li>[WARN] PIN maxlength is None, expected 6</li>
-                <li>[PASS] Generate mnemonic button found</li>
+                <li>[WARN] Setup page not visible (may need to be triggered)</li>
             </ul>
         </div>
 
-        <div class="test-item pass">
+        <div class="test-item fail">
             <h3>Pi Authentication</h3>
             <ul>
-                <li>[PASS] Pi Authentication button found</li>
-                <li>[PASS] Pi Authentication button is visible</li>
+                <li>[FAIL] Pi Authentication button not found</li>
             </ul>
             <h4>Screenshots:</h4>
             <img src="test_screenshots\pi_auth_check.png" class="screenshot" alt="Screenshot">
@@ -316,11 +286,10 @@ Call log:
             </ul>
         </div>
 
-        <div class="test-item warning">
+        <div class="test-item fail">
             <h3>Service Worker</h3>
             <ul>
-                <li>[PASS] Service Worker file found</li>
-                <li>[WARN] Service Worker registration not found</li>
+                <li>[FAIL] Service Worker file not found</li>
             </ul>
         </div>
     </div>
