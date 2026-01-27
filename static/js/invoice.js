@@ -46,7 +46,9 @@ class InvoiceManager {
         this.items = [];
         this.useGCV = false;
         // REAL PRODUCTION: Use global market price or 0 if not yet loaded
-        this.exchangeRate = window.piMarketPrice || 0;
+        this.exchangeRate = typeof window.piMarketPrice !== 'undefined' ? window.piMarketPrice : 0;
+        // If price is 0, we will try to fetch it or wait for ticker
+
         this.editingInvoiceId = null; // Track if we're editing an invoice
         this.currentInvoiceId = null; // Track current invoice ID (for QR generation)
         this.pendingPayment = null; // HACKATHON 2025: Store payment for Pi.createPayment() (Blind_Lounge pattern)
@@ -174,7 +176,7 @@ class InvoiceManager {
                 this.useGCV = false;
                 if (customRateInput) {
                     customRateInput.disabled = false;
-                    this.exchangeRate = parseFloat(customRateInput.value) || RATE_MARKET_TEST;
+                    this.exchangeRate = parseFloat(customRateInput.value) || (typeof window.piMarketPrice !== 'undefined' ? window.piMarketPrice : 0);
                 }
                 this.calculateTotals();
             });
@@ -183,7 +185,7 @@ class InvoiceManager {
         if (customRateInput) {
             customRateInput.addEventListener('input', () => {
                 if (!this.useGCV) {
-                    this.exchangeRate = parseFloat(customRateInput.value) || RATE_MARKET_TEST;
+                    this.exchangeRate = parseFloat(customRateInput.value) || (typeof window.piMarketPrice !== 'undefined' ? window.piMarketPrice : 0);
                     // PERFORMANCE FIX: Debounce calculateTotals to avoid excessive recalculations
                     this.debouncedCalculateTotals();
                 }
@@ -400,18 +402,23 @@ class InvoiceManager {
             cashPaidInput.value = '0';
         }
 
-        // Reset exchange rate to default (Market Test Rate)
+        // Reset exchange rate to default (Real Market Price)
         const rateGCV = document.getElementById('rate-gcv');
         const rateCustom = document.getElementById('rate-custom');
         const customRateInput = document.getElementById('custom-rate-input');
+
         if (rateGCV) rateGCV.checked = false;
         if (rateCustom) rateCustom.checked = true;
+
+        // Use current real global price if available
+        const currentRealPrice = typeof window.piMarketPrice !== 'undefined' ? window.piMarketPrice : 0;
+
         if (customRateInput) {
-            customRateInput.value = RATE_MARKET_TEST;
+            customRateInput.value = currentRealPrice > 0 ? currentRealPrice : '';
             customRateInput.disabled = false;
         }
         this.useGCV = false;
-        this.exchangeRate = RATE_MARKET_TEST;
+        this.exchangeRate = currentRealPrice;
 
         // Clear editing state
         this.editingInvoiceId = null;
@@ -527,8 +534,8 @@ class InvoiceManager {
         // Convert cash paid to Pi equivalent
         // VALIDATION FIX: Prevent division by zero or invalid exchange rate
         if (!this.exchangeRate || this.exchangeRate <= 0 || !isFinite(this.exchangeRate)) {
-            console.warn('Invalid exchange rate detected:', this.exchangeRate, '- Using default:', RATE_MARKET_TEST);
-            this.exchangeRate = RATE_MARKET_TEST; // Fallback to default
+            console.warn('Invalid exchange rate detected:', this.exchangeRate, '- Using default global price');
+            this.exchangeRate = typeof window.piMarketPrice !== 'undefined' ? window.piMarketPrice : 0; // Fallback to global
         }
         const cashPaidPi = cashPaidFiat / this.exchangeRate;
 
@@ -629,8 +636,8 @@ class InvoiceManager {
             // Convert cash paid to Pi equivalent
             // VALIDATION FIX: Prevent division by zero or invalid exchange rate
             if (!this.exchangeRate || this.exchangeRate <= 0 || !isFinite(this.exchangeRate)) {
-                console.warn('Invalid exchange rate detected in saveDraft:', this.exchangeRate, '- Using default:', RATE_MARKET_TEST);
-                this.exchangeRate = RATE_MARKET_TEST; // Fallback to default
+                console.warn('Invalid exchange rate detected in saveDraft:', this.exchangeRate, '- Using default global price');
+                this.exchangeRate = typeof window.piMarketPrice !== 'undefined' ? window.piMarketPrice : 0; // Fallback to default
             }
             const cashPaidPi = cashPaidFiat / this.exchangeRate;
 
@@ -904,8 +911,8 @@ class InvoiceManager {
             // Convert cash paid to Pi equivalent
             // VALIDATION FIX: Prevent division by zero or invalid exchange rate
             if (!this.exchangeRate || this.exchangeRate <= 0 || !isFinite(this.exchangeRate)) {
-                console.warn('Invalid exchange rate detected in saveDraft:', this.exchangeRate, '- Using default:', RATE_MARKET_TEST);
-                this.exchangeRate = RATE_MARKET_TEST; // Fallback to default
+                console.warn('Invalid exchange rate detected in saveDraft:', this.exchangeRate, '- Using default global price');
+                this.exchangeRate = typeof window.piMarketPrice !== 'undefined' ? window.piMarketPrice : 0; // Fallback to default
             }
             const cashPaidPi = cashPaidFiat / this.exchangeRate;
 
@@ -1271,11 +1278,11 @@ class InvoiceManager {
                 if (rateGCV) rateGCV.checked = false;
                 if (rateCustom) rateCustom.checked = true;
                 if (customRateInput) {
-                    customRateInput.value = invoice.exchangeRate || RATE_MARKET_TEST;
+                    customRateInput.value = invoice.exchangeRate || (typeof window.piMarketPrice !== 'undefined' ? window.piMarketPrice : 0);
                     customRateInput.disabled = false;
                 }
                 this.useGCV = false;
-                this.exchangeRate = invoice.exchangeRate || RATE_MARKET_TEST;
+                this.exchangeRate = invoice.exchangeRate || (typeof window.piMarketPrice !== 'undefined' ? window.piMarketPrice : 0);
                 console.log('✅ Exchange rate set to custom:', this.exchangeRate);
             }
 

@@ -88,7 +88,7 @@ class DatabaseManager {
 
             // Get merchant data from blockchain
             const merchantData = await this.piStorage.getAccountData(`merchant:${merchantId}`);
-            
+
             if (merchantData) {
                 return merchantData;
             }
@@ -208,12 +208,12 @@ class DatabaseManager {
 
             // Get all invoice entries from blockchain
             const entries = await this.piStorage.listAccountData('invoice:');
-            
+
             // Filter by merchant ID and convert to array
             const invoices = entries
                 .map(entry => entry.value)
                 .filter(invoice => invoice.merchantId === merchantId);
-            
+
             return invoices;
         } catch (error) {
             console.error('Error getting invoices:', error);
@@ -247,7 +247,7 @@ class DatabaseManager {
                 cashPaidFiat: invoiceData.cashPaidFiat || 0,
                 cashPaidPi: invoiceData.cashPaidPi || 0,
                 totalItemsPi: invoiceData.totalItemsPi || 0,
-                exchangeRate: invoiceData.exchangeRate || 10.0,
+                exchangeRate: invoiceData.exchangeRate || (typeof window.piMarketPrice !== 'undefined' ? window.piMarketPrice : 0),
                 externalRef: invoiceData.externalRef || null
             };
 
@@ -255,7 +255,7 @@ class DatabaseManager {
 
             // Store on blockchain (will use large data if needed)
             await this.piStorage.setLargeData(`invoice:${invoiceRecord.invoiceId}`, invoiceRecord);
-            
+
             console.log('✅ Invoice saved to blockchain:', invoiceRecord.invoiceId);
             return invoiceRecord.invoiceId;
         } catch (error) {
@@ -275,12 +275,12 @@ class DatabaseManager {
 
             // Get existing invoice
             const invoice = await this.piStorage.getLargeData(`invoice:${invoiceId}`);
-            
+
             if (invoice) {
                 // Update status
                 invoice.status = status;
                 invoice.updatedAt = new Date().toISOString();
-                
+
                 // Save back to blockchain
                 await this.piStorage.setLargeData(`invoice:${invoiceId}`, invoice);
                 return true;
@@ -456,7 +456,7 @@ class DatabaseManager {
 
             // Get all invoices from blockchain
             const allInvoices = (await this.piStorage.listAccountData('invoice:')).map(e => e.value);
-            
+
             // Filter old invoices
             const oldInvoices = allInvoices.filter(inv => inv.createdAt < cutoffISO);
 
@@ -623,7 +623,7 @@ class DatabaseManager {
             // Store audit log on blockchain
             const logId = `audit:${Date.now()}:${Math.random().toString(36).substring(2, 9)}`;
             await this.piStorage.setAccountData(logId, auditLog);
-            
+
             console.log(`📝 Audit Log: ${action} on ${entityType}`);
             return true;
         } catch (error) {
@@ -708,7 +708,7 @@ class DatabaseManager {
 
             // Get existing invoice
             const invoice = await this.piStorage.getLargeData(`invoice:${invoiceId}`);
-            
+
             if (!invoice) {
                 throw new Error('Invoice not found');
             }
@@ -858,19 +858,19 @@ class DatabaseManager {
                 .map(entry => entry.value)
                 .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
                 .slice(0, limit);
-            
+
             return logs;
         } catch (error) {
             console.error('Error getting audit logs:', error);
             return [];
         }
     }
-                    // Show reminder after a short delay
-                    setTimeout(() => {
-                        if (window.Modal && window.Toast) {
-                            window.Modal.show({
-                                title: '💾 Backup Reminder',
-                                content: `
+    // Show reminder after a short delay
+    setTimeout(() => {
+        if (window.Modal && window.Toast) {
+            window.Modal.show({
+                title: '💾 Backup Reminder',
+                content: `
                                     <div style="text-align: left; padding: 10px;">
                                         <p style="margin-bottom: 15px;">
                                             You have <strong>${invoiceCount}</strong> invoice(s) in your database.
@@ -888,40 +888,40 @@ class DatabaseManager {
                                         </p>
                                     </div>
                                 `,
-                                isHtml: true,
-                                footerButtons: [
-                                    { 
-                                        text: 'Remind Me Later', 
-                                        class: 'btn-grey',
-                                        onclick: () => {
-                                            localStorage.setItem('lastBackupReminder', now.toString());
-                                            window.Modal.close();
-                                        }
-                                    },
-                                    { 
-                                        text: 'Create Backup Now', 
-                                        class: 'btn-primary',
-                                        onclick: () => {
-                                            localStorage.setItem('lastBackupReminder', now.toString());
-                                            window.Modal.close();
-                                            // Trigger backup button click if available
-                                            const backupBtn = document.getElementById('create-vault-backup-btn');
-                                            if (backupBtn) {
-                                                backupBtn.click();
-                                            } else {
-                                                window.Toast.info('Please use the "Create Cloud Backup" button in the dashboard');
-                                            }
-                                        }
-                                    }
-                                ]
-                            });
+                isHtml: true,
+                footerButtons: [
+                    {
+                        text: 'Remind Me Later',
+                        class: 'btn-grey',
+                        onclick: () => {
+                            localStorage.setItem('lastBackupReminder', now.toString());
+                            window.Modal.close();
                         }
-                    }, 5000); // Show after 5 seconds
+                    },
+                    {
+                        text: 'Create Backup Now',
+                        class: 'btn-primary',
+                        onclick: () => {
+                            localStorage.setItem('lastBackupReminder', now.toString());
+                            window.Modal.close();
+                            // Trigger backup button click if available
+                            const backupBtn = document.getElementById('create-vault-backup-btn');
+                            if (backupBtn) {
+                                backupBtn.click();
+                            } else {
+                                window.Toast.info('Please use the "Create Cloud Backup" button in the dashboard');
+                            }
+                        }
+                    }
+                ]
+            });
+        }
+    }, 5000); // Show after 5 seconds
                 }
             }
         } catch (error) {
-            console.error('Error checking backup reminder:', error);
-        }
+    console.error('Error checking backup reminder:', error);
+}
     }
 
 
@@ -930,30 +930,30 @@ class DatabaseManager {
      * Completely removes all user data from blockchain
      */
     async wipeAllData() {
-        try {
-            console.log('🗑️ Starting complete data wipe from blockchain...');
+    try {
+        console.log('🗑️ Starting complete data wipe from blockchain...');
 
-            if (!this.piStorage) {
-                await this.initialize();
-            }
-
-            // Get merchant ID
-            const merchantId = await this.getCurrentMerchantId();
-            
-            // Delete all data using clearAllData (which handles all prefixes)
-            await this.clearAllData();
-
-            // Clear localStorage and sessionStorage
-            localStorage.clear();
-            sessionStorage.clear();
-
-            console.log('✅ All data wiped from blockchain and local storage');
-            return true;
-        } catch (error) {
-            console.error('❌ Error wiping data:', error);
-            throw new Error('Failed to wipe data: ' + error.message);
+        if (!this.piStorage) {
+            await this.initialize();
         }
+
+        // Get merchant ID
+        const merchantId = await this.getCurrentMerchantId();
+
+        // Delete all data using clearAllData (which handles all prefixes)
+        await this.clearAllData();
+
+        // Clear localStorage and sessionStorage
+        localStorage.clear();
+        sessionStorage.clear();
+
+        console.log('✅ All data wiped from blockchain and local storage');
+        return true;
+    } catch (error) {
+        console.error('❌ Error wiping data:', error);
+        throw new Error('Failed to wipe data: ' + error.message);
     }
+}
 }
 
 // Export singleton instance
