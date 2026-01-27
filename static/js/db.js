@@ -865,64 +865,7 @@ class DatabaseManager {
             return [];
         }
     }
-    // Show reminder after a short delay
-    setTimeout(() => {
-        if (window.Modal && window.Toast) {
-            window.Modal.show({
-                title: '💾 Backup Reminder',
-                content: `
-                                    <div style="text-align: left; padding: 10px;">
-                                        <p style="margin-bottom: 15px;">
-                                            You have <strong>${invoiceCount}</strong> invoice(s) in your database.
-                                        </p>
-                                        <p style="color: #f44336; font-weight: bold; margin-bottom: 15px;">
-                                            ⚠️ Important: Create a cloud backup to protect your data!
-                                        </p>
-                                        <ul style="margin-left: 20px; line-height: 1.8;">
-                                            <li>If you lose your device, your data will be lost forever</li>
-                                            <li>Cloud backup encrypts your data securely</li>
-                                            <li>You can restore on any new device with your recovery password</li>
-                                        </ul>
-                                        <p style="margin-top: 15px; color: #666;">
-                                            Click "Create Cloud Backup" in the dashboard to backup your data now.
-                                        </p>
-                                    </div>
-                                `,
-                isHtml: true,
-                footerButtons: [
-                    {
-                        text: 'Remind Me Later',
-                        class: 'btn-grey',
-                        onclick: () => {
-                            localStorage.setItem('lastBackupReminder', now.toString());
-                            window.Modal.close();
-                        }
-                    },
-                    {
-                        text: 'Create Backup Now',
-                        class: 'btn-primary',
-                        onclick: () => {
-                            localStorage.setItem('lastBackupReminder', now.toString());
-                            window.Modal.close();
-                            // Trigger backup button click if available
-                            const backupBtn = document.getElementById('create-vault-backup-btn');
-                            if (backupBtn) {
-                                backupBtn.click();
-                            } else {
-                                window.Toast.info('Please use the "Create Cloud Backup" button in the dashboard');
-                            }
-                        }
-                    }
-                ]
-            });
-        }
-    }, 5000); // Show after 5 seconds
-                }
-            }
-        } catch (error) {
-    console.error('Error checking backup reminder:', error);
-}
-    }
+
 
 
     /**
@@ -930,30 +873,30 @@ class DatabaseManager {
      * Completely removes all user data from blockchain
      */
     async wipeAllData() {
-    try {
-        console.log('🗑️ Starting complete data wipe from blockchain...');
+        try {
+            console.log('🗑️ Starting complete data wipe from blockchain...');
 
-        if (!this.piStorage) {
-            await this.initialize();
+            if (!this.piStorage) {
+                await this.initialize();
+            }
+
+            // Get merchant ID
+            const merchantId = await this.getCurrentMerchantId();
+
+            // Delete all data using clearAllData (which handles all prefixes)
+            await this.clearAllData();
+
+            // Clear localStorage and sessionStorage
+            localStorage.clear();
+            sessionStorage.clear();
+
+            console.log('✅ All data wiped from blockchain and local storage');
+            return true;
+        } catch (error) {
+            console.error('❌ Error wiping data:', error);
+            throw new Error('Failed to wipe data: ' + error.message);
         }
-
-        // Get merchant ID
-        const merchantId = await this.getCurrentMerchantId();
-
-        // Delete all data using clearAllData (which handles all prefixes)
-        await this.clearAllData();
-
-        // Clear localStorage and sessionStorage
-        localStorage.clear();
-        sessionStorage.clear();
-
-        console.log('✅ All data wiped from blockchain and local storage');
-        return true;
-    } catch (error) {
-        console.error('❌ Error wiping data:', error);
-        throw new Error('Failed to wipe data: ' + error.message);
     }
-}
 }
 
 // Export singleton instance
