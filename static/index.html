@@ -1575,10 +1575,14 @@
             if (generateMnemonicBtn) {
                 generateMnemonicBtn.addEventListener('click', async () => {
                     try {
-                        const mnemonic = await securityManager.generateMnemonic();
+                        if (!window.securityManager) {
+                            throw new Error('SecurityManager not initialized');
+                        }
+                        const mnemonic = await window.securityManager.generateMnemonic();
                         document.getElementById('mnemonic-input').value = mnemonic;
                         Toast.success('New 12-word phrase generated');
                     } catch (error) {
+                        alert('Error: ' + error.message); // Visible on mobile
                         Toast.error('Error generating mnemonic: ' + error.message);
                     }
                 });
@@ -1593,15 +1597,16 @@
                         const pin = document.getElementById('pin-input').value;
 
                         if (!mnemonic || !pin) {
-                            Toast.warning('Please enter both mnemonic and PIN');
+                            alert('Please enter both mnemonic and PIN');
                             return;
                         }
 
                         // Validate mnemonic (Req #8: Anti-Phishing)
-                        securityManager.validateMnemonicInput(mnemonic);
+                        if (!window.securityManager) throw new Error('SecurityManager not ready');
+                        window.securityManager.validateMnemonicInput(mnemonic);
 
                         // Initialize security manager
-                        await securityManager.initialize(mnemonic, pin);
+                        await window.securityManager.initialize(mnemonic, pin);
 
                         // STATE MANAGEMENT FIX: Use window.dbManager for consistency
                         const currentDbManager = window.dbManager || dbManager;
@@ -1617,6 +1622,7 @@
                         await showDashboard();
                     } catch (error) {
                         console.error(error);
+                        alert('Setup Fault: ' + error.message);
                         Toast.error('Setup error: ' + error.message);
                     }
                 });
