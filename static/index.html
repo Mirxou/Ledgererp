@@ -16,11 +16,8 @@
     <!-- Pi Network App Metadata -->
     <meta name="pi-app-id" content="pi-ledger-erp">
     <meta name="pi-app-name" content="Ledger ERP">
-    <link rel="pi-app-version" content="1.0.0">
-    <link rel="stylesheet" href="/css/design-tokens.css">
-    <link rel="stylesheet" href="/css/style.css">
-
-    <!-- Pi Network SDK is now loaded dynamically by pi-adapter.js for maximum reliability -->
+    <!-- Pi Network SDK and Dexie.js for Hybrid Storage -->
+    <script src="https://unpkg.com/dexie/dist/dexie.js"></script>
 
     <!-- Note: DOMPurify and ethers are now loaded as ES modules via esm.sh in security.js -->
 
@@ -465,6 +462,10 @@
                         <i class="fas fa-bars"></i>
                     </button>
                     <h1>Ledger ERP <span id="plan-badge" class="badge badge-free">FREE</span></h1>
+                    <div id="sync-status" class="sync-status ms-2 d-inline-block p-1 px-2 rounded-pill"
+                        style="font-size: 10px; background: rgba(0,0,0,0.1); vertical-align: middle;">
+                        <span class="sync-icon">🔄</span> <span class="sync-text">Local Mode</span>
+                    </div>
                 </div>
                 <div id="pi-price-ticker" class="price-ticker">
                     <span class="ticker-label">PI/USD:</span>
@@ -1540,17 +1541,25 @@
                     window.lifecycleManager = lifecycleManager;
                     console.log('✅ Global managers assigned to window');
 
-                    // Initialize database (Req #24)
-                    // Store dbInitialized in a way that event handler can access it
+                    // Initialize Local Database (IndexedDB)
+                    // Req #24: Zero-latency startup
                     window.dbInitialized = false;
                     if (dbManager) {
                         try {
+                            console.log('📦 Initializing Local Hybrid Storage...');
                             await dbManager.initialize();
-                            console.log('Database initialized');
+                            console.log('✅ Local Database ready.');
                             window.dbInitialized = true;
+
+                            // Update sync status
+                            const syncText = document.querySelector('#sync-status .sync-text');
+                            if (syncText) syncText.textContent = 'Local Ready';
                         } catch (err) {
-                            console.error('Database init error:', err);
-                            alert('خطأ في تهيئة قاعدة البيانات. Error initializing database: ' + err.message);
+                            console.error('Local Database init error:', err);
+                            // Silent fail for UI stability
+                            if (window.notificationManager) {
+                                window.notificationManager.show('Local storage error. Using memory fallback.', 'warning');
+                            }
                         }
                     }
 
@@ -1616,24 +1625,35 @@
                             localStorage.setItem('user_username', authResult.user.username);
                             localStorage.setItem('auth_type', 'pi');
 
-                            // Transition to App
+                            // Initialize App Data & Database (Now that we are authenticated)
+                            if (window.dbManager && !window.dbInitialized) {
+                                try {
+                                    authStatus.innerHTML = '<span class="text-success">✅ Authenticated! Initializing Blockchain Storage...</span>';
+                                    await window.dbManager.initialize();
+                                    window.dbInitialized = true;
+                                    console.log('Database initialized successfully after auth');
+                                } catch (dbErr) {
+                                    console.error('Database initialization failed:', dbErr);
+                                    // Optionally allow continuation if offline mode is a fallback, 
+                                    // but for "Pure Blockchain" it's critical.
+                                }
+                            }
+
+                            if (window.appManager) {
+                                window.appManager.currentUser = { username: authResult.user.username };
+                                if (window.appManager.updateUI) window.appManager.updateUI();
+                            }
+                            if (window.notificationManager) {
+                                window.notificationManager.show(`Welcome, ${authResult.user.username}!`, 'success');
+                            }
+
+                            // Transition to App after small delay
                             setTimeout(() => {
-                                // HACKATHON COMPLIANCE: Use official IDs for transitions
                                 const authSection = document.getElementById('auth-section');
                                 const dashboardSection = document.getElementById('dashboard-section');
 
                                 if (authSection) authSection.style.display = 'none';
                                 if (dashboardSection) dashboardSection.style.display = 'block';
-
-                                // Initialize App Data
-
-                                if (window.appManager) {
-                                    window.appManager.currentUser = { username: authResult.user.username };
-                                    if (window.appManager.updateUI) window.appManager.updateUI();
-                                }
-                                if (window.notificationManager) {
-                                    window.notificationManager.show(`Welcome, ${authResult.user.username}!`, 'success');
-                                }
                             }, 1000);
 
                         } catch (error) {
