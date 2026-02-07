@@ -6,7 +6,8 @@
  */
 class LifecycleManager {
     constructor() {
-        this.currentVersion = '1.0.0';
+        const metaVersion = document.querySelector('meta[name="pi-app-version"]')?.content;
+        this.currentVersion = window.APP_VERSION || metaVersion || '1.0.0';
         this.minVersion = null;
         this.updateRequired = false;
     }

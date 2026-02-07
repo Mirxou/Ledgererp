@@ -12,14 +12,14 @@ class Settings(BaseSettings):
     """
     
     # Core Security
-    SECRET_KEY: str
+    SECRET_KEY: str = "dev_only_secret_key_change_me_please_32chars"
     # CHANGE: Accept str OR List to prevent parsing errors
-    ALLOWED_HOSTS: Union[List[str], str] 
+    ALLOWED_HOSTS: Union[List[str], str] = ["ledgererp.online", "www.ledgererp.online"]
     ENVIRONMENT: str = "development"
     
     # CORS - SECURITY: Default to empty list, must be explicitly configured
     # In production, this MUST be set to specific domains (not "*")
-    CORS_ORIGINS: Union[List[str], str] = []
+    CORS_ORIGINS: Union[List[str], str] = ["https://ledgererp.online", "https://www.ledgererp.online", "https://app-cdn.minepi.com", "https://browser.minepi.com"]
     
     # Rate Limiting
     RATE_LIMIT_REQUESTS_PER_MINUTE: int = 60
@@ -34,9 +34,10 @@ class Settings(BaseSettings):
     TRUSTED_PROXIES: Union[List[str], str] = ["127.0.0.1", "::1"]
     
     # Blockchain & App Logic
-    LOCAL_NODE_URL: str = "http://localhost:31400"
+    LOCAL_NODE_URL: str = "https://api.minepi.com"
     PUBLIC_API_URL: str = "https://api.minepi.com"
     MIN_VERSION: str = "1.0.0"
+    APP_VERSION: str = "1.0.0"
     
     # Pi Network API Configuration
     PI_API_KEY: str = ""
@@ -44,6 +45,7 @@ class Settings(BaseSettings):
     # API Settings
     API_V1_PREFIX: str = "/api/v1"
     DATABASE_URL: str = ""
+    PI_ONLY_MODE: bool = True
 
     model_config = SettingsConfigDict(
         env_file=".env", 
@@ -55,6 +57,8 @@ class Settings(BaseSettings):
     def validate_secret_key(cls, v):
         if not v:
             raise ValueError("SECRET_KEY is required")
+        if v == "dev_only_secret_key_change_me_please_32chars":
+            print("[WARNING] Using default development SECRET_KEY. Set SECRET_KEY in environment for production.")
         # Production requires stronger keys
         if len(v) < 32:
             print("[WARNING] SECRET_KEY is weak! For production, use at least 32 characters.")

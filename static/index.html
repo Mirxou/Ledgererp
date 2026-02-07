@@ -530,9 +530,19 @@
                     <h2>Setup Your Merchant Account</h2>
                     <p>Generate your 12-word recovery phrase (BIP-39)</p>
 
-                    <div class="alert alert-info">
-                        <strong>Offline Mode:</strong> Pi Network Login has been disabled. You are running in local
-                        non-custodial mode.
+                    <div id="auth-mode-message" class="alert alert-info">
+                        <strong>Pi Login:</strong> Use Pi Browser to sign in and publish your app safely.
+                    </div>
+
+                    <div class="alert alert-secondary">
+                        <strong>Pi-Only Access:</strong> This app is published for <strong>Pi Browser</strong> on <strong>ledgererp.online</strong>.
+                        <br><small>الدخول متاح فقط عبر Pi Browser على نطاق ledgererp.online.</small>
+                        <div class="mt-10">
+                            <button id="pi-auth-btn" class="btn btn-sm btn-primary" type="button">
+                                Connect with Pi
+                            </button>
+                            <div id="auth-status" class="mt-10 text-sm text-muted"></div>
+                        </div>
                     </div>
 
                     <div class="form-group">
@@ -853,10 +863,30 @@
                     class="footer-link">Terms of Service</a>
             </div>
             <p class="footer-version">
-                Ledger ERP v1.0.0 | Non-Custodial ERP System
+                Ledger ERP v<span id="app-version-text">1.0.0</span> | Non-Custodial ERP System
             </p>
         </footer>
     </div>
+
+    <script>
+        (function () {
+            const metaVersion = document.querySelector('meta[name="pi-app-version"]')?.content || '1.0.0';
+            window.APP_VERSION = metaVersion;
+
+            const applyVersionLabels = () => {
+                const versionText = document.getElementById('app-version-text');
+                if (versionText) versionText.textContent = window.APP_VERSION;
+                const floatingVersion = document.getElementById('version-display');
+                if (floatingVersion) floatingVersion.textContent = `v${window.APP_VERSION}`;
+            };
+
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', applyVersionLabels);
+            } else {
+                applyVersionLabels();
+            }
+        })();
+    </script>
 
     <!-- Load modules - MUST be after script tags -->
     <script src="js/pi-storage.js"></script>
@@ -961,9 +991,7 @@
                         if (typeof Pi === 'undefined') throw new Error('Pi SDK script failed to load.');
                     }
 
-                    const isSandbox = window.location.search.includes('sandbox=true') ||
-                        window.location.hostname === 'localhost' ||
-                        window.location.hostname === '127.0.0.1';
+                    const isSandbox = false;
 
                     // Idempotent Init
                     try {
@@ -1467,9 +1495,8 @@
                     try {
                         await window.piAdapter.initialize();
                         console.log('Pi SDK initialized');
-                        // Suppress postMessage warnings/errors in development (localhost)
-                        // These are normal in localhost and don't affect functionality
-                        if (window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost') {
+                        // Pi production mode: keep SDK warnings visible for real-domain diagnostics
+                        if (false) {
                             const originalWarn = console.warn;
                             const originalError = console.error;
                             const suppressedMessages = ['postMessage', 'app-cdn.minepi.com', 'target origin', 'Failed to execute'];
@@ -1533,14 +1560,33 @@
                 alert('خطأ في تهيئة التطبيق. Error initializing app: ' + error.message);
             }
 
-            // Pi Authentication Logic Removed (Offline Mode)
-
+            // Pi Authentication Logic
+            const piAuthBtn = document.getElementById('pi-auth-btn');
             const authStatus = document.getElementById('auth-status');
+            const authModeMessage = document.getElementById('auth-mode-message');
+
+            const userAgent = (navigator.userAgent || '').toLowerCase();
+            const isLikelyPiBrowser = userAgent.includes('pibrowser') || userAgent.includes('minepi');
+
+            if (authModeMessage) {
+                authModeMessage.innerHTML = isLikelyPiBrowser
+                    ? '<strong>Pi Browser detected:</strong> You can connect on ledgererp.online.'
+                    : '<strong>Pi-only mode:</strong> Authentication is disabled outside Pi Browser.';
+            }
 
             if (piAuthBtn) {
+                if (!isLikelyPiBrowser) {
+                    piAuthBtn.disabled = true;
+                    if (authStatus) authStatus.innerHTML = '<div class="alert alert-warning">Pi Browser is required for login on ledgererp.online.</div>';
+                }
+
                 piAuthBtn.addEventListener('click', async () => {
+                    if (!isLikelyPiBrowser) {
+                        if (authStatus) authStatus.innerHTML = '<div class="alert alert-danger">Blocked: Please open ledgererp.online in Pi Browser.</div>';
+                        return;
+                    }
                     // UI reset
-                    authStatus.innerHTML = '<div class="spinner-border text-primary" role="status"></div> Connecting to Pi Network...';
+                    if (authStatus) authStatus.innerHTML = '<div class="spinner-border text-primary" role="status"></div> Connecting to Pi Network...';
                     piAuthBtn.disabled = true;
 
                     try {
@@ -1578,7 +1624,7 @@
                         }
 
                         // Success Handler
-                        authStatus.innerHTML = '<span class="text-success">✅ Authenticated! Loading...</span>';
+                        if (authStatus) authStatus.innerHTML = '<span class="text-success">✅ Authenticated! Loading...</span>';
                         console.log('User Authenticated:', authResult.user.username);
 
                         // Subscription Status Check
@@ -1612,9 +1658,12 @@
 
                     } catch (error) {
                         console.error('Authentication Error:', error);
-                        authStatus.innerHTML = `<div class="alert alert-danger">
+                        const errorText = (error && error.message) ? error.message : 'Please use Pi Browser';
+                        const nonPiHint = 'If you are on Chrome/Safari/Firefox, open this app in Pi Browser to authenticate.';
+                        if (authStatus) authStatus.innerHTML = `<div class="alert alert-danger">
                             Login failed.<br>
-                            <small>${error.message || 'Please use Pi Browser'}</small>
+                            <small>${errorText}</small><br>
+                            <small>${nonPiHint}</small>
                         </div>`;
                         piAuthBtn.disabled = false;
                     }
@@ -2048,7 +2097,7 @@
                         // Get all data
                         const invoices = await currentDbManager.db.invoices.toArray();
                         const exportData = {
-                            version: '1.0.0',
+                            version: window.APP_VERSION || '1.0.0',
                             timestamp: new Date().toISOString(),
                             invoices: invoices,
                             merchantId: await currentDbManager.getCurrentMerchantId(),
@@ -2483,7 +2532,7 @@
 
     <div id="version-display"
         style="position:fixed; bottom:5px; right:5px; opacity:0.7; font-size:10px; background:rgba(0,0,0,0.5); color:white; padding:2px 5px; border-radius:3px; pointer-events:none; z-index:9999;">
-        v4.3 (Scopes Updated)
+        v1.0.0
     </div>
 </body>
 

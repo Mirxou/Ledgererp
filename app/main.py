@@ -30,7 +30,7 @@ PI_API_KEY = os.getenv("PI_API_KEY")
 # SECURITY: Import strict configuration (will exit if invalid)
 from app.core.config import settings
 
-from app.routers import vault, telemetry, notifications
+from app.routers import telemetry, notifications
 from app.services.blockchain import BlockchainService, NodeMode, StellarAccountData
 from app.services.market import market_service
 from app.middleware.kyb import KYBMiddleware
@@ -171,9 +171,16 @@ logging.getLogger().addFilter(privacy_filter)
 app = FastAPI(
     title="Ledger ERP API",
     description="Non-Custodial ERP for Pi Network",
-    version="1.0.0",
+    version=settings.APP_VERSION,
     docs_url="/docs",  # Req #43: API Documentation
     redoc_url="/redoc"  # Req #43: Alternative API Documentation
+)
+
+
+# Enforce allowed hosts (Pi app domain + controlled dev hosts)
+app.add_middleware(
+    StarletteTrustedHostMiddleware,
+    allowed_hosts=settings.ALLOWED_HOSTS if isinstance(settings.ALLOWED_HOSTS, list) else ["ledgererp.online"]
 )
 
 # Req #1: Serve Static Files
@@ -224,10 +231,21 @@ async def secure_cookies_middleware(request: Request, call_next):
     
     return response
 
+# Pi-only runtime guard for production domain
+@app.middleware("http")
+async def enforce_pi_only_runtime(request: Request, call_next):
+    if settings.PI_ONLY_MODE:
+        host = request.url.hostname or ""
+        host_allowed = host in {"ledgererp.online", "www.ledgererp.online"}
+        if not host_allowed:
+            return JSONResponse(status_code=403, content={"error": "Host blocked: Pi-only deployment"})
+
+    return await call_next(request)
+
 # Req #15: Strict CSP Headers
 @app.get("/")
 async def root():
-    return {"message": "Ledger ERP API", "version": "1.0.0", "status": "active"}
+    return {"message": "Ledger ERP API", "version": settings.APP_VERSION, "status": "active"}
 
 @app.middleware("http")
 async def add_security_headers(request: Request, call_next):
@@ -260,7 +278,7 @@ async def add_security_headers(request: Request, call_next):
     response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
     
     # Req #13: Version Check Header
-    response.headers["X-Min-Version"] = "1.0.0"
+    response.headers["X-Min-Version"] = settings.MIN_VERSION
     
     # CRITICAL: Enforce correct MIME type for JavaScript modules
     # Prevents "Failed to load module script: Expected a JavaScript module script..." errors
@@ -749,6 +767,25 @@ async def check_subscription_status(request: Request):
         
     result = await blockchain_service.verify_subscription_on_chain(account_id, stellar_account_data)
     return result
+
+
+@app.get("/sync/vault/exists")
+async def vault_exists_compat():
+    """Compatibility endpoint for legacy clients/tests after vault deprecation."""
+    return {"exists": False, "mode": "pure_blockchain", "message": "Vault disabled in pure blockchain mode"}
+
+@app.get("/reports/aml/template")
+async def aml_template_compat():
+    """Compatibility AML template endpoint for clients expecting a downloadable structure."""
+    return {
+        "template": {
+            "version": settings.APP_VERSION,
+            "columns": ["invoice_id", "date", "amount_pi", "payer_uid", "merchant_uid", "txid", "risk_flags"],
+            "format": "json",
+            "mode": "pure_blockchain"
+        }
+    }
+
 
 @app.get("/api/market/pi-price")
 async def get_pi_market_price():
