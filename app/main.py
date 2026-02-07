@@ -30,7 +30,7 @@ PI_API_KEY = os.getenv("PI_API_KEY")
 # SECURITY: Import strict configuration (will exit if invalid)
 from app.core.config import settings
 
-from app.routers import vault, telemetry, notifications
+from app.routers import telemetry, notifications
 from app.services.blockchain import BlockchainService, NodeMode, StellarAccountData
 from app.services.market import market_service
 from app.middleware.kyb import KYBMiddleware
@@ -179,6 +179,20 @@ app = FastAPI(
 # Req #1: Serve Static Files
 # Mount static directory for frontend assets
 app.mount("/static", StaticFiles(directory="static"), name="static")
+
+# CDN Configuration Stub (Phase 2)
+# In production, set STATIC_URL to your CDN endpoint (e.g., https://cdn.piledger.com/static)
+STATIC_URL = os.getenv("STATIC_URL", "/static")
+
+def get_asset_url(path: str) -> str:
+    """
+    Generate URL for static assets, supporting CDN if configured.
+    """
+    if path.startswith("http"):
+        return path
+    return f"{STATIC_URL.rstrip('/')}/{path.lstrip('/')}"
+
+# Example usage: logger.info(f"Asset URL: {get_asset_url('css/style.css')}")
 
 # SECURITY: Force HTTPS in production
 @app.middleware("http")
@@ -429,7 +443,7 @@ async def serve_manifest():
         status_code=404
     )
 
-from app.core.security import verify_pi_token, PI_API_KEY, PI_API_BASE
+from app.core.security import verify_pi_token, verify_pi_access_token, PI_API_KEY, PI_API_BASE
 
 # Include routers
 from app.routers import blockchain, telemetry, notifications
@@ -758,6 +772,7 @@ async def get_pi_market_price():
     return await market_service.get_pi_price()
 
 @app.get("/api/subscription/quote")
+@cache_manager.cached(ttl=600, key_prefix="market")
 async def get_subscription_quote():
     """
     Calculate Pi amount for Monthly ($10) and Yearly ($96) subscriptions

@@ -34,16 +34,16 @@ class Toast {
             // Strip all HTML tags from toast messages
             safeMessage = message.replace(/<[^>]*>/g, '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
         }
-        
+
         // XSS FIX: Use textContent instead of innerHTML for structure
         const iconSpan = document.createElement('span');
         iconSpan.className = 'toast-icon';
         iconSpan.textContent = icon; // Icon is safe (emoji or empty)
-        
+
         const messageSpan = document.createElement('span');
         messageSpan.className = 'toast-message';
         messageSpan.textContent = safeMessage;
-        
+
         toast.appendChild(iconSpan);
         toast.appendChild(messageSpan);
 
@@ -174,14 +174,14 @@ class Modal {
             });
         } else {
             // Default close button or hidden if pure nav view
-            footerEl.style.display = 'none'; 
+            footerEl.style.display = 'none';
         }
 
         // Show overlay with animation
         overlay.classList.remove('hidden');
         overlay.classList.add('visible');
         contentEl.classList.add('slide-up-enter');
-        
+
         // Push state to history so "Back" button works
         if (!this.isOpen) {
             history.pushState({ modalOpen: true }, '', '#modal');
@@ -208,7 +208,7 @@ class Modal {
                 overlay.classList.add('hidden');
                 document.body.style.overflow = '';
                 if (contentEl) contentEl.classList.remove('slide-down-exit');
-                
+
                 this.isOpen = false;
 
                 // If closed via UI (not back button), pop the history state
@@ -293,4 +293,64 @@ class Modal {
 
 // Make globally available
 window.Toast = Toast;
-window.Modal = Modal;
+// View Switcher
+const switchView = (viewName) => {
+    const views = document.querySelectorAll('.view-item');
+    const menuItems = document.querySelectorAll('.menu-item');
+
+    views.forEach(v => v.classList.add('hidden'));
+    menuItems.forEach(m => m.classList.remove('active'));
+
+    const activeView = document.getElementById(`${viewName}-section`);
+    const activeMenu = document.querySelector(`.menu-item[data-view="${viewName}"]`);
+
+    if (activeView) activeView.classList.remove('hidden');
+    if (activeMenu) activeMenu.classList.add('active');
+
+    // Mobile Optimization: Close sidebar after selection
+    if (window.innerWidth < 1024) {
+        const sidebar = document.querySelector('.sidebar');
+        if (sidebar && !sidebar.classList.contains('collapsed')) {
+            // If we had a toggleSidebar function, we'd call it here
+            // For now, let's assume standard mobile sidebar behavior
+            console.log('📱 Mobile view: Sidebar should collapse');
+        }
+    }
+
+    // Special init for Reports
+    if (viewName === 'reports' && window.reportManager) {
+        window.reportManager.initialize();
+    }
+};
+
+// Sidebar Logic
+const initSidebar = () => {
+    const sidebar = document.getElementById('app-sidebar');
+    const toggleBtn = document.getElementById('sidebar-toggle');
+    const menuItems = document.querySelectorAll('.menu-item');
+
+    if (toggleBtn && sidebar) {
+        toggleBtn.addEventListener('click', () => {
+            sidebar.classList.toggle('open');
+        });
+    }
+
+    // Menu Navigation
+    menuItems.forEach(item => {
+        item.addEventListener('click', (e) => {
+            e.preventDefault();
+            const view = item.getAttribute('data-view');
+            if (view) {
+                switchView(view);
+                if (window.innerWidth <= 1024) sidebar.classList.remove('open');
+            }
+        });
+    });
+};
+
+// Auto-init sidebar
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initSidebar);
+} else {
+    initSidebar();
+}

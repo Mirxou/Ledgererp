@@ -1,0 +1,72 @@
+/**
+ * Design System Tokens - Vision 2030
+ * Premium aesthetics for the Pi Ledger ERP
+ */
+
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap');
+
+:root {
+  /* ===== Premium Color Palette (Jet Blue & Burnt Gold) ===== */
+  
+  /* Primary: Jet Blue */
+  --color-primary-h: 220;
+  --color-primary-s: 65%;
+  --color-primary-l: 12%;
+  
+  --color-primary: hsl(var(--color-primary-h), var(--color-primary-s), var(--color-primary-l));
+  --color-primary-light: hsl(var(--color-primary-h), var(--color-primary-s), 25%);
+  --color-primary-dark: hsl(var(--color-primary-h), var(--color-primary-s), 8%);
+  
+  /* Accent: Burnt Gold */
+  --color-accent-h: 42;
+  --color-accent-s: 52%;
+  --color-accent-l: 55%;
+  
+  --color-accent: hsl(var(--color-accent-h), var(--color-accent-s), var(--color-accent-l));
+  --color-accent-light: hsl(var(--color-accent-h), var(--color-accent-s), 70%);
+  --color-accent-dark: hsl(var(--color-accent-h), var(--color-accent-s), 40%);
+  
+  /* Semantic Colors */
+  --color-success: #2dce89;
+  --color-error: #f5365c;
+  --color-warning: #fb6340;
+  --color-info: #11cdef;
+  
+  /* Background Colors */
+  --color-bg-primary: #ffffff;
+  --color-bg-secondary: #f8f9fe;
+  --color-bg-elevated: #ffffff;
+  --glass-bg: rgba(255, 255, 255, 0.7);
+  --glass-border: rgba(255, 255, 255, 0.3);
+  
+  /* Text Colors */
+  --color-text-primary: #172b4d;
+  --color-text-secondary: #525f7f;
+  --color-text-tertiary: #8898aa;
+  
+  /* ===== Typography ===== */
+  --font-family-primary: 'Outfit', 'Inter', -apple-system, sans-serif;
+  --font-family-secondary: 'Inter', sans-serif;
+  
+  /* Spacing */
+  --spacing-unit: 1rem;
+  
+  /* Transitions */
+  --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-spring: all 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+/* Dark Mode Overrides */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-bg-primary: #0a192f;
+    --color-bg-secondary: #112240;
+    --color-bg-elevated: #172a45;
+    --glass-bg: rgba(10, 25, 47, 0.7);
+    --glass-border: rgba(100, 255, 218, 0.1);
+    
+    --color-text-primary: #e6f1ff;
+    --color-text-secondary: #8892b0;
+    --color-text-tertiary: #495670;
+  }
+}

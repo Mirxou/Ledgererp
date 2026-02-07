@@ -462,31 +462,13 @@ class SecurityManager {
     }
 
     /**
-     * Req #10: Restore data from encrypted vault backup
-     * Downloads encrypted blob from server and decrypts it using recovery password
+     * Req #10: Decrypt vault backup (offline/client-side)
+     * Data is retrieved from Blockchain by the caller (PiStorage)
      */
-    async restoreFromVault(recoveryPassword) {
+    async decryptVaultBackup(vaultData, recoveryPassword) {
         try {
-            // Download encrypted vault from server
-            const response = await fetch('/sync/vault?recovery_password=' + encodeURIComponent(recoveryPassword), {
-                method: 'GET',
-                headers: {
-                    'Content-Type': 'application/json'
-                }
-            });
-
-            if (!response.ok) {
-                if (response.status === 404) {
-                    throw new Error('No vault backup found. Please create a backup first.');
-                } else if (response.status === 401) {
-                    throw new Error('Invalid recovery password. Please check your password and try again.');
-                }
-                throw new Error('Failed to download vault backup');
-            }
-
-            const vaultData = await response.json();
-            if (!vaultData.encrypted_blob) {
-                throw new Error('Invalid vault data received from server');
+            if (!vaultData || !vaultData.encrypted_blob) {
+                throw new Error('Invalid vault data: missing encrypted blob');
             }
 
             // Decrypt vault blob using recovery password
@@ -549,33 +531,22 @@ class SecurityManager {
                 timestamp: vaultData.timestamp
             };
         } catch (error) {
-            console.error('Error restoring from vault:', error);
-            throw new Error('Failed to restore from vault: ' + error.message);
+            console.error('Error decrypting vault:', error);
+            // Don't expose internal crypto errors to UI if possible
+            if (error.name === 'OperationError') {
+                throw new Error('Incorrect Recovery Password');
+            }
+            throw new Error('Failed to decrypt vault: ' + error.message);
         }
     }
 
     /**
-     * Check if vault backup exists on server
+     * Deprecated: checkVaultExists (Removed Server Dependency)
+     * Vault existence is now checked via Blockchain (PiStorage.getAccountData)
      */
     async checkVaultExists() {
-        try {
-            const response = await fetch('/sync/vault/exists', {
-                method: 'GET',
-                headers: {
-                    'Content-Type': 'application/json'
-                }
-            });
-
-            if (!response.ok) {
-                return { exists: false };
-            }
-
-            const result = await response.json();
-            return { exists: result.exists || false };
-        } catch (error) {
-            console.error('Error checking vault existence:', error);
-            return { exists: false };
-        }
+        console.warn('checkVaultExists is deprecated. Use PiStorage.getAccountData("vault:backup")');
+        return { exists: false };
     }
 
     /**

@@ -652,7 +652,7 @@ class StellarAccountData:
                             "value": value_str
                         })
                     except Exception as e:
-                        logger.warn(f"Error decoding entry {key}: {e}")
+                        logger.warning(f"Error decoding entry {key}: {e}")
             
             return entries
         except Exception as e:

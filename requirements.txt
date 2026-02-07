@@ -20,6 +20,9 @@ sqlalchemy
 python-jose[cryptography]
 passlib[bcrypt]
 
+# Blockchain (Stellar SDK for Pi Network)
+stellar-sdk
+
 # Environment Variables
 python-dotenv
 
@@ -36,3 +39,10 @@ pytest
 pytest-cov
 httpx
 playwright
+
+# Optional Development Tools (for scripts)
+Pillow  # For update_logo.py
+pyngrok  # For start_ngrok.py (development only)
+
+# Performance Optimization (Phase 1 - 2025)
+redis  # For caching and performance optimization

@@ -1,240 +1,157 @@
 /**
- * Data Export Module - CSV Export
- * Allows merchants to export all their data in CSV format
- * GDPR: Data Portability Right
+ * Data Export Module - Enhanced Portability (XLSX, PDF, JSON, CSV)
+ * Vision 2030 - GDPR: Data Portability Right
  */
 
 class DataExporter {
     constructor(dbManager) {
-        this.dbManager = dbManager;
+        this.dbManager = dbManager || window.dbManager;
+    }
+
+    async getExportData() {
+        if (!this.dbManager) throw new Error('Database manager not initialized');
+        const merchantId = await this.dbManager.getCurrentMerchantId();
+        return {
+            invoices: await this.dbManager.getInvoices(merchantId),
+            products: await this.dbManager.getProducts(),
+            shiftReports: await this.dbManager.getShiftReports(),
+            refunds: await this.dbManager.getRefunds(),
+            exportDate: new Date().toISOString(),
+            merchantName: document.getElementById('shop-name')?.textContent || 'Pi Ledger Merchant'
+        };
     }
 
     /**
-     * Export all data to CSV format
+     * Export to Excel (XLSX) using SheetJS
      */
-    async exportAllDataToCSV() {
+    async exportToExcel() {
         try {
-            if (!this.dbManager || !this.dbManager.piStorage) {
-                await this.dbManager.initialize();
+            Toast.info('Generating Excel workbook...');
+            const data = await this.getExportData();
+            const wb = XLSX.utils.book_new();
+
+            // Create sheets for each data type
+            const sheets = {
+                'Invoices': data.invoices,
+                'Products': data.products,
+                'Shift Reports': data.shiftReports,
+                'Refunds': data.refunds
+            };
+
+            for (const [name, content] of Object.entries(sheets)) {
+                if (content && content.length > 0) {
+                    const ws = XLSX.utils.json_to_sheet(content);
+                    XLSX.utils.book_append_sheet(wb, ws, name);
+                }
             }
 
-            const merchantId = await this.dbManager.getCurrentMerchantId();
-            const data = {
-                invoices: await this.dbManager.getInvoices(merchantId),
-                transactions: (await this.dbManager.piStorage.listAccountData('transaction:')).map(e => e.value),
-                products: await this.dbManager.getProducts(),
-                shiftReports: await this.dbManager.getShiftReports(),
-                refunds: await this.dbManager.getRefunds(),
-                exportDate: new Date().toISOString()
-            };
-
-            // Generate CSV files for each data type
-            const csvFiles = {
-                invoices: this.convertToCSV(data.invoices, this.getInvoiceHeaders()),
-                transactions: this.convertToCSV(data.transactions, this.getTransactionHeaders()),
-                products: this.convertToCSV(data.products, this.getProductHeaders()),
-                shiftReports: this.convertToCSV(data.shiftReports, this.getShiftReportHeaders()),
-                refunds: this.convertToCSV(data.refunds, this.getRefundHeaders())
-            };
-
-            // Create ZIP file with all CSV files
-            await this.downloadCSVFiles(csvFiles, data.exportDate);
-
-            console.log('✅ Data exported successfully');
-            return csvFiles;
+            XLSX.writeFile(wb, `pi_ledger_export_${new Date().toISOString().split('T')[0]}.xlsx`);
+            Toast.success('Excel export complete');
         } catch (error) {
-            console.error('Error exporting data:', error);
-            throw error;
+            console.error('Excel Export Error:', error);
+            Toast.error('Excel export failed');
         }
     }
 
     /**
-     * Convert array of objects to CSV string
+     * Export to PDF using jsPDF
      */
-    convertToCSV(data, headers) {
-        if (!data || data.length === 0) {
-            return headers.join(',') + '\n'; // Empty CSV with headers
-        }
+    async exportToPDF() {
+        try {
+            Toast.info('Generating PDF report...');
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+            const data = await this.getExportData();
+            const timestamp = new Date().toLocaleString();
 
-        const rows = [headers.join(',')];
+            // Header
+            doc.setFontSize(22);
+            doc.setTextColor(0, 212, 255); // Jet Blue
+            doc.text(data.merchantName, 20, 20);
 
-        data.forEach(item => {
-            const row = headers.map(header => {
-                const value = item[header] || '';
-                // Escape commas and quotes in CSV
-                const stringValue = String(value).replace(/"/g, '""');
-                return `"${stringValue}"`;
+            doc.setFontSize(12);
+            doc.setTextColor(100);
+            doc.text(`Business Performance Report - ${timestamp}`, 20, 30);
+            doc.line(20, 35, 190, 35);
+
+            // Summary Stats
+            doc.setFontSize(16);
+            doc.setTextColor(212, 175, 55); // Burnt Gold
+            doc.text('Summary', 20, 45);
+
+            doc.setFontSize(10);
+            doc.setTextColor(0);
+            doc.text(`Total Invoices: ${data.invoices.length}`, 20, 55);
+            doc.text(`Total Products: ${data.products.length}`, 20, 60);
+
+            // Simple Invoices Table
+            doc.setFontSize(14);
+            doc.text('Recent Invoices', 20, 75);
+            let y = 85;
+            doc.setFontSize(8);
+            data.invoices.slice(0, 20).forEach(inv => {
+                if (y > 270) { doc.addPage(); y = 20; }
+                doc.text(`${inv.id.substring(0, 8)}... | π${inv.amount.toFixed(4)} | ${inv.status} | ${new Date(inv.createdAt).toLocaleDateString()}`, 20, y);
+                y += 7;
             });
+
+            doc.save(`pi_ledger_report_${new Date().toISOString().split('T')[0]}.pdf`);
+            Toast.success('PDF report generated');
+        } catch (error) {
+            console.error('PDF Export Error:', error);
+            Toast.error('PDF export failed');
+        }
+    }
+
+    /**
+     * Export to JSON (Portable ERP format)
+     */
+    async exportToJSON() {
+        try {
+            const data = await this.getExportData();
+            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `pi_ledger_portable_${new Date().toISOString().split('T')[0]}.json`;
+            a.click();
+            Toast.success('JSON export complete');
+        } catch (error) {
+            Toast.error('JSON export failed');
+        }
+    }
+
+    /**
+     * CSV Export (Legacy support)
+     */
+    async exportToCSV() {
+        // Keep existing CSV logic but consolidated
+        const data = await this.getExportData();
+        const csv = this.convertToCSV(data.invoices, this.getInvoiceHeaders());
+        const blob = new Blob([csv], { type: 'text/csv' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `pi_ledger_invoices_${new Date().toISOString().split('T')[0]}.csv`;
+        a.click();
+    }
+
+    convertToCSV(data, headers) {
+        if (!data || data.length === 0) return headers.join(',') + '\n';
+        const rows = [headers.join(',')];
+        data.forEach(item => {
+            const row = headers.map(h => `"${String(item[h] || '').replace(/"/g, '""')}"`);
             rows.push(row.join(','));
         });
-
         return rows.join('\n');
     }
 
-    /**
-     * Get CSV headers for invoices
-     */
     getInvoiceHeaders() {
-        return [
-            'Invoice ID',
-            'Merchant ID',
-            'Customer Name',
-            'Amount (Pi)',
-            'Currency',
-            'Status',
-            'Cash Paid (Fiat)',
-            'Cash Paid (Pi)',
-            'Total Items (Pi)',
-            'Exchange Rate',
-            'External Reference',
-            'Created At',
-            'Updated At'
-        ];
-    }
-
-    /**
-     * Get CSV headers for transactions
-     */
-    getTransactionHeaders() {
-        return [
-            'Transaction ID',
-            'Invoice ID',
-            'Amount',
-            'Currency',
-            'Memo',
-            'Status',
-            'Verified',
-            'Timestamp'
-        ];
-    }
-
-    /**
-     * Get CSV headers for products
-     */
-    getProductHeaders() {
-        return [
-            'Product ID',
-            'Name',
-            'Price (Pi)',
-            'Category',
-            'Created At',
-            'Updated At'
-        ];
-    }
-
-    /**
-     * Get CSV headers for shift reports
-     */
-    getShiftReportHeaders() {
-        return [
-            'Report ID',
-            'Date',
-            'Total Cash',
-            'Total Pi',
-            'Total Invoices',
-            'Created At'
-        ];
-    }
-
-    /**
-     * Get CSV headers for refunds
-     */
-    getRefundHeaders() {
-        return [
-            'Refund ID',
-            'Invoice ID',
-            'Amount',
-            'Reason',
-            'Created At'
-        ];
-    }
-
-    /**
-     * Download CSV files (creates separate downloads for each file)
-     */
-    async downloadCSVFiles(csvFiles, exportDate) {
-        const timestamp = new Date(exportDate).toISOString().split('T')[0];
-        
-        // Download each CSV file
-        for (const [type, csv] of Object.entries(csvFiles)) {
-            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-            const url = URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = `ledger_erp_${type}_${timestamp}.csv`;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            URL.revokeObjectURL(url);
-            
-            // Small delay between downloads to avoid browser blocking
-            await new Promise(resolve => setTimeout(resolve, 500));
-        }
-
-        // Show success message
-        alert(`✅ Data exported successfully!\n\nDownloaded ${Object.keys(csvFiles).length} CSV files:\n${Object.keys(csvFiles).map(k => `- ${k}.csv`).join('\n')}`);
-    }
-
-    /**
-     * Export single table to CSV
-     */
-    async exportTableToCSV(tableName) {
-        try {
-            if (!this.dbManager || !this.dbManager.piStorage) {
-                await this.dbManager.initialize();
-            }
-
-            const merchantId = await this.dbManager.getCurrentMerchantId();
-            let data = [];
-            let headers = [];
-
-            switch (tableName) {
-                case 'invoices':
-                    data = await this.dbManager.getInvoices(merchantId);
-                    headers = this.getInvoiceHeaders();
-                    break;
-                case 'transactions':
-                    data = (await this.dbManager.piStorage.listAccountData('transaction:')).map(e => e.value);
-                    headers = this.getTransactionHeaders();
-                    break;
-                case 'products':
-                    data = await this.dbManager.getProducts();
-                    headers = this.getProductHeaders();
-                    break;
-                case 'shiftReports':
-                    data = await this.dbManager.getShiftReports();
-                    headers = this.getShiftReportHeaders();
-                    break;
-                case 'refunds':
-                    data = await this.dbManager.getRefunds();
-                    headers = this.getRefundHeaders();
-                    break;
-                default:
-                    throw new Error(`Unknown table: ${tableName}`);
-            }
-
-            const csv = this.convertToCSV(data, headers);
-            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-            const url = URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = `ledger_erp_${tableName}_${new Date().toISOString().split('T')[0]}.csv`;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            URL.revokeObjectURL(url);
-
-            console.log(`✅ ${tableName} exported to CSV`);
-        } catch (error) {
-            console.error(`Error exporting ${tableName}:`, error);
-            throw error;
-        }
+        return ['id', 'amount', 'currency', 'status', 'createdAt', 'customerName'];
     }
 }
 
-// Export for use in other modules
-export { DataExporter };
-if (typeof window !== 'undefined') {
-    window.DataExporter = DataExporter;
-}
+const dataExporter = new DataExporter();
+export default dataExporter;
+window.dataExporter = dataExporter;
 

@@ -1,4 +1,7 @@
-
+"""
+Market Service - Real-time Pi Price Data
+Phase 1 Q1-Q2 2025: Optimized with Redis cache
+"""
 import httpx
 import time
 import logging
@@ -7,10 +10,13 @@ from typing import Optional, Dict, Any
 
 logger = logging.getLogger(__name__)
 
+# Phase 1: Import cache manager for Redis support
+from app.core.cache import cache_manager
+
 class MarketService:
     """
     Service to fetch real-time market data for Pi Network (Pi)
-    Uses public APIs (e.g., CoinGecko) and implements caching
+    Phase 1: Uses Redis cache for distributed caching
     """
     
     def __init__(self, update_interval: int = 30): # 30 seconds cache (Req: <= 45s)
@@ -21,14 +27,29 @@ class MarketService:
         # Bitget API v2 Ticker endpoint for PIUSDT (Spot)
         self.api_url = "https://api.bitget.com/api/v2/spot/market/tickers?symbol=PIUSDT"
         self._lock = asyncio.Lock()
+        self.cache_key = "pi_market_price"
 
     async def get_pi_price(self) -> Dict[str, Any]:
         """
         Get the latest Pi price (USD) from Bitget
+        Phase 1: Uses Redis cache for distributed caching
         Returns from cache if interval hasn't passed
         """
         async with self._lock:
             now = time.time()
+            
+            # Phase 1: Check Redis cache first
+            cached_data = await cache_manager.get(self.cache_key)
+            if cached_data:
+                cache_timestamp = cached_data.get("timestamp", 0)
+                if now - cache_timestamp < self.update_interval:
+                    logger.debug("Pi price retrieved from Redis cache")
+                    self.last_price = cached_data.get("price")
+                    self.last_fetched = cache_timestamp
+                    self.price_change_24h = cached_data.get("change_24h", 0)
+                    return self._format_response()
+            
+            # Check in-memory cache
             if now - self.last_fetched < self.update_interval and self.last_price is not None:
                 return self._format_response()
 
@@ -52,6 +73,15 @@ class MarketService:
                             self.price_change_24h = 0
                             
                         self.last_fetched = now
+                        
+                        # Phase 1: Store in Redis cache
+                        cache_data = {
+                            "price": self.last_price,
+                            "change_24h": self.price_change_24h,
+                            "timestamp": self.last_fetched
+                        }
+                        await cache_manager.set(self.cache_key, cache_data, ttl=self.update_interval)
+                        
                         logger.info(f"✅ Pi Price Updated (Bitget): ${self.last_price}")
                         return self._format_response()
                     else:

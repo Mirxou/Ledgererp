@@ -1,5 +1,6 @@
 """
 Centralized Security & Pi Authentication Logic
+Phase 1 Q1-Q2 2025: Optimized with Redis cache
 """
 import httpx
 import logging
@@ -16,21 +17,29 @@ PI_API_KEY = os.getenv("PI_API_KEY")
 
 security = HTTPBearer()
 
-# In-memory cache for token verification (Speed Optimization)
-# In production, use Redis for multi-worker support
+# Phase 1: Use Redis cache for token verification (multi-worker support)
+from app.core.cache import cache_manager
+
+# Fallback in-memory cache (for development or when Redis unavailable)
 token_cache: Dict[str, Dict[str, Any]] = {}
 
-async def verify_pi_token(request: Request, credentials: HTTPAuthorizationCredentials = Depends(security)) -> Dict[str, Any]:
+async def verify_pi_access_token(token: str) -> Dict[str, Any]:
     """
-    Verify the Pi Network access token and return user data.
-    Implements caching for performance (Req #2).
+    Verify a raw Pi Network access token string.
+    Phase 1 Optimization: Uses Redis cache for multi-worker support
     """
-    token = credentials.credentials
+    # 1. Check Cache (Fast Path) - Try Redis first, fallback to in-memory
+    cache_key = f"pi_token:{token}"
     
-    # 1. Check Cache (Fast Path)
+    # Try Redis cache
+    cached_data = await cache_manager.get(cache_key)
+    if cached_data:
+        logger.debug("Token verified from cache (Redis)")
+        return cached_data
+    
+    # Fallback to in-memory cache
     if token in token_cache:
-        # Check if cache is still valid (simplified)
-        # In real app, check timestamps
+        logger.debug("Token verified from cache (in-memory)")
         return token_cache[token]
     
     # 2. Verify with Pi Network (Slow Path)
@@ -44,8 +53,15 @@ async def verify_pi_token(request: Request, credentials: HTTPAuthorizationCreden
             
             if response.status_code == 200:
                 user_data = response.json()
-                # Cache results for 5 minutes (simplified)
+                # Cache results for 5 minutes (300 seconds)
+                cache_ttl = 300
+                
+                # Store in Redis cache
+                await cache_manager.set(cache_key, user_data, ttl=cache_ttl)
+                
+                # Also store in in-memory cache as fallback
                 token_cache[token] = user_data
+                
                 return user_data
             elif response.status_code == 401:
                 logger.warning("Invalid Pi Token provided")
@@ -57,9 +73,17 @@ async def verify_pi_token(request: Request, credentials: HTTPAuthorizationCreden
     except httpx.RequestError as e:
         logger.error(f"Network error during Pi token verification: {e}")
         raise HTTPException(status_code=503, detail="Could not connect to Pi Network")
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Unexpected error in token verification: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
+
+async def verify_pi_token(credentials: HTTPAuthorizationCredentials = Depends(security)) -> Dict[str, Any]:
+    """
+    FastAPI Dependency: Verify the Pi Network access token from Bearer header.
+    """
+    return await verify_pi_access_token(credentials.credentials)
 
 async def get_current_user(user_data: Dict[str, Any] = Depends(verify_pi_token)) -> Dict[str, Any]:
     """Dependency for route handlers to get the verified Pi user"""

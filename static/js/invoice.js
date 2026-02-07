@@ -58,7 +58,10 @@ class InvoiceManager {
         this.popstateListener = null;
         this.modalClickListener = null;
         this.setupTimeoutId = null;
-        this.closeModalTimeoutId = null;
+        this.calculateCloseModalTimeoutId = null;
+        this.currencies = ['PI', 'USDC', 'USD'];
+        this.currentCurrency = 'PI';
+        this.usdcRate = 1.0; // 1 USDC = $1 (Stablecoin)
     }
 
     /**
@@ -116,8 +119,16 @@ class InvoiceManager {
         // Initialize exchange rate (default to GCV)
         this.useGCV = true;
         this.exchangeRate = RATE_GCV;
+        this.currentCurrency = 'PI';
 
-        // Note: Exchange rate is used only for tax purposes and cash deduction calculations
+        // Setup currency selector
+        const currencySelector = document.getElementById('invoice-currency-selector');
+        if (currencySelector) {
+            currencySelector.addEventListener('change', (e) => {
+                this.currentCurrency = e.target.value;
+                this.calculateTotals();
+            });
+        }
     }
 
     /**
@@ -185,8 +196,7 @@ class InvoiceManager {
         if (customRateInput) {
             customRateInput.addEventListener('input', () => {
                 if (!this.useGCV) {
-                    this.exchangeRate = parseFloat(customRateInput.value) || (typeof window.piMarketPrice !== 'undefined' ? window.piMarketPrice : 0);
-                    // PERFORMANCE FIX: Debounce calculateTotals to avoid excessive recalculations
+                    this.exchangeRate = parseFloat(customRateInput.value) || 0;
                     this.debouncedCalculateTotals();
                 }
             });
@@ -556,10 +566,13 @@ class InvoiceManager {
         const totalPiWithFeeEl = document.getElementById('total-pi-with-fee');
         const totalFiatEl = document.getElementById('total-fiat');
 
-        // Format Pi amounts
-        const formattedTotalItems = formatPiAmount(totalItemsPi);
-        const formattedCashDeduction = formatPiAmount(cashPaidPi);
-        const formattedSubtotal = formatPiAmount(subtotalPi);
+        // Currency Formatting helper
+        const formatAmount = (val) => {
+            if (this.currentCurrency === 'PI') return formatPiAmount(val);
+            return val.toFixed(2);
+        };
+        const currencySymbol = this.currentCurrency === 'PI' ? 'π' : (this.currentCurrency === 'USD' ? '$' : 'USDC ');
+
         const formattedTotal = formatPiAmount(totalPiWithFee);
 
         if (totalItemsPiEl) {

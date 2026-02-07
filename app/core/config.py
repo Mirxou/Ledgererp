@@ -44,6 +44,10 @@ class Settings(BaseSettings):
     # API Settings
     API_V1_PREFIX: str = "/api/v1"
     DATABASE_URL: str = ""
+    
+    # Phase 1: Redis Cache Configuration (Q1-Q2 2025)
+    REDIS_URL: str = "redis://localhost:6379/0"
+    REDIS_PASSWORD: str = ""
 
     model_config = SettingsConfigDict(
         env_file=".env", 
