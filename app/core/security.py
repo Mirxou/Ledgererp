@@ -61,6 +61,34 @@ async def verify_pi_token(request: Request, credentials: HTTPAuthorizationCreden
         logger.error(f"Unexpected error in token verification: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
+
+async def verify_pi_access_token(token: str) -> Optional[Dict[str, Any]]:
+    """
+    Backward-compatible helper used by legacy routers.
+    Returns verified Pi user payload or None if token is invalid/unreachable.
+    """
+    if not token:
+        return None
+
+    if token in token_cache:
+        return token_cache[token]
+
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"{PI_API_BASE}/me",
+                headers={"Authorization": f"Bearer {token}"},
+                timeout=10.0
+            )
+            if response.status_code == 200:
+                user_data = response.json()
+                token_cache[token] = user_data
+                return user_data
+            return None
+    except Exception as e:
+        logger.warning(f"verify_pi_access_token fallback failed: {e}")
+        return None
+
 async def get_current_user(user_data: Dict[str, Any] = Depends(verify_pi_token)) -> Dict[str, Any]:
     """Dependency for route handlers to get the verified Pi user"""
     return user_data
