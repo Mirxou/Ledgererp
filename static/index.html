@@ -535,6 +535,17 @@
                         non-custodial mode.
                     </div>
 
+                    <div class="alert alert-secondary">
+                        <strong>Need Pi Login?</strong> Use <strong>Pi Browser</strong> then tap connect.
+                        <br><small>للتسجيل عبر Pi افتح التطبيق من Pi Browser ثم اضغط Connect.</small>
+                        <div class="mt-10">
+                            <button id="pi-auth-btn" class="btn btn-sm btn-primary" type="button">
+                                Connect with Pi
+                            </button>
+                            <div id="auth-status" class="mt-10 text-sm text-muted"></div>
+                        </div>
+                    </div>
+
                     <div class="form-group">
                         <label>Recovery Phrase (12 words):</label>
                         <textarea id="mnemonic-input" rows="3" class="input-full"
@@ -1612,9 +1623,12 @@
 
                     } catch (error) {
                         console.error('Authentication Error:', error);
+                        const errorText = (error && error.message) ? error.message : 'Please use Pi Browser';
+                        const nonPiHint = 'If you are on Chrome/Safari/Firefox, open this app in Pi Browser to authenticate.';
                         authStatus.innerHTML = `<div class="alert alert-danger">
                             Login failed.<br>
-                            <small>${error.message || 'Please use Pi Browser'}</small>
+                            <small>${errorText}</small><br>
+                            <small>${nonPiHint}</small>
                         </div>`;
                         piAuthBtn.disabled = false;
                     }
