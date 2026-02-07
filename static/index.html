@@ -538,13 +538,13 @@
                 <!-- Authentication Section -->
                 <div id="auth-section">
                     <!-- Setup Section (Now Default) -->
-                    <div id="setup-section">
+                    <div id="setup-section" style="display: none;">
                         <h2>Setup Your Merchant Account</h2>
                         <p>Generate your 12-word recovery phrase (BIP-39)</p>
 
                         <div class="alert alert-info">
-                            <strong>Offline Mode:</strong> Pi Network Login has been disabled. You are running in local
-                            non-custodial mode.
+                            <strong>Offline mode is available.</strong> However, syncing with Pi Network is recommended
+                            for blockchain features.
                         </div>
 
                         <div class="form-group">
@@ -567,11 +567,39 @@
                         <button id="setup-complete-btn" class="btn btn-md btn-green">
                             Complete Setup
                         </button>
+                        <div class="mt-20">
+                            <a href="#"
+                                onclick="document.getElementById('setup-section').style.display='none'; document.getElementById('pi-login-section').style.display='block'; return false;">Back
+                                to Pi Login</a>
+                        </div>
+                    </div>
+
+                    <!-- Pi Network Login Section (Restored) -->
+                    <div id="pi-login-section" class="text-center p-20 pwa-only">
+                        <div class="icon-lg text-primary mb-20">
+                            <i class="fas fa-p-circle fa-4x" style="color: #612f86;"></i>
+                        </div>
+                        <h2>Vision 2030 Login</h2>
+                        <p class="text-muted">Access your ERP data via Pi Network Authentication</p>
+
+                        <div id="auth-status" class="my-20"></div>
+
+                        <button id="pi-auth-btn" class="welcome-btn welcome-btn-primary w-100 py-15">
+                            Sign in with Pi Browser
+                        </button>
+
+                        <div class="mt-20">
+                            <p class="text-small">
+                                No Pi ID? <a href="#"
+                                    onclick="document.getElementById('pi-login-section').style.display='none'; document.getElementById('setup-section').style.display='block'; return false;">Use
+                                    Recovery Phrase (Offline)</a>
+                            </p>
+                        </div>
                     </div>
 
 
                     <!-- Dashboard Section -->
-                    <div id="dashboard-section" class="view-item active">
+                    <div id="dashboard-section" class="view-item">
                         <div id="dashboard-view" class="dashboard-view">
 
                             <!-- Live Store Indicator (hidden by default) -->
@@ -927,6 +955,7 @@
 
         <!-- Load modules - MUST be after script tags -->
         <script src="js/pi-storage.js"></script>
+        <script src="js/pi-adapter.js"></script>
         <script src="js/subscription-manager.js"></script>
         <script src="js/market-ticker.js"></script>
         <!-- External Resources -->
@@ -1022,92 +1051,12 @@
         <!-- 🟢 STANDARD PI SDK LOAD (Hackathon Standard) -->
         <script src="https://sdk.minepi.com/pi-sdk.js"></script>
         <script>
-            // 🛡️ Pi Adapter: Inlined for Guaranteed Reliability
-            // Replaces deleted external file to fix "undefined" error.
-            class PiAdapter {
-                constructor() {
-                    this.user = null;
+            // Pi SDK Initialization check
+            window.addEventListener('load', () => {
+                if (window.piAdapter && typeof window.piAdapter.init === 'function') {
+                    window.piAdapter.init().catch(err => console.warn('Pi SDK init delayed:', err));
                 }
-
-                async initialize() {
-                    try {
-                        console.log('🔄 PiAdapter initializing...');
-                        if (typeof Pi === 'undefined') {
-                            console.warn('Pi SDK not loaded yet. Waiting...');
-                            await new Promise(r => setTimeout(r, 500));
-                            if (typeof Pi === 'undefined') throw new Error('Pi SDK script failed to load.');
-                        }
-
-                        const isSandbox = window.location.search.includes('sandbox=true') ||
-                            window.location.hostname === 'localhost' ||
-                            window.location.hostname === '127.0.0.1';
-
-                        // Idempotent Init
-                        try {
-                            Pi.init({ version: '2.0', sandbox: isSandbox });
-                            console.log(`✅ Pi.init success (Sandbox: ${isSandbox})`);
-                        } catch (e) {
-                            if (!e.message.includes('already initialized')) console.warn('Pi.init warning:', e);
-                        }
-
-                        // UI Ready
-                        const btn = document.getElementById('pi-auth-btn');
-                        if (btn) btn.classList.add('ready');
-                        window.piAdapterReady = true;
-
-                    } catch (e) {
-                        console.error('❌ Pi Adapter Init Error:', e);
-                    }
-                }
-
-                async authenticate() {
-                    // Ensure Init
-                    await this.initialize();
-
-                    const scopes = ['username', 'payments'];
-                    const onIncompletePaymentFound = (payment) => {
-                        console.log('🔄 Incomplete Payment:', payment);
-                        if (payment.transaction && payment.transaction.txid) {
-                            fetch('/blockchain/complete', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ payment_id: payment.identifier, txid: payment.transaction.txid })
-                            }).catch(e => console.error('Backend sync failed', e));
-                        }
-                        return Pi.completePayment(payment.identifier);
-                    };
-
-                    const auth = await Pi.authenticate(scopes, onIncompletePaymentFound);
-                    this.user = auth.user;
-                    return { user: auth.user, authResult: auth };
-                }
-
-                async createPiPayment(amount, memo, metadata, onReadyForServerApproval, onReadyForServerCompletion, onCancel, onError) {
-                    if (!this.user) await this.authenticate();
-
-                    const paymentData = {
-                        amount: amount,
-                        memo: memo,
-                        metadata: metadata || {}
-                    };
-
-                    const callbacks = {
-                        onReadyForServerApproval,
-                        onReadyForServerCompletion,
-                        onCancel: onCancel || ((paymentId) => console.log('Payment cancelled', paymentId)),
-                        onError: onError || ((error, payment) => console.error('Payment error', error, payment))
-                    };
-
-                    return Pi.createPayment(paymentData, callbacks);
-                }
-            }
-
-            // Global Instance and Class
-            window.PiAdapter = PiAdapter; // Export Class for fallbacks
-            window.piAdapter = new PiAdapter(); // Export Instance
-
-            // Early Init
-            document.addEventListener('DOMContentLoaded', () => window.piAdapter.initialize());
+            });
         </script>
         <script type="module">
             // Req #29: Self-hosted modules (China Safe)
