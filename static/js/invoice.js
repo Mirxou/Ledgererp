@@ -759,42 +759,46 @@ class InvoiceManager {
                 );
 
                 // SECURITY: Register invoice with backend for verification
-                try {
-                    // VALIDATION FIX: Safe JSON.stringify with error handling
-                    let requestBody;
+                if (navigator.onLine) {
                     try {
-                        requestBody = JSON.stringify({
-                            invoice_id: invoiceId,
-                            invoice_data: {
-                                amount: totalPiWithFee,
-                                merchantId: merchantId,
-                                walletAddress: await this._getWalletAddress(merchantId),
-                                status: 'draft',
-                                customerName: customerName
-                            }
-                        });
-                    } catch (jsonError) {
-                        console.error('Error stringifying invoice data:', jsonError);
-                        // Skip registration if JSON.stringify fails (circular reference, etc.)
-                        throw jsonError;
-                    }
+                        // VALIDATION FIX: Safe JSON.stringify with error handling
+                        let requestBody;
+                        try {
+                            requestBody = JSON.stringify({
+                                invoice_id: invoiceId,
+                                invoice_data: {
+                                    amount: totalPiWithFee,
+                                    merchantId: merchantId,
+                                    walletAddress: await this._getWalletAddress(merchantId),
+                                    status: 'draft',
+                                    customerName: customerName
+                                }
+                            });
+                        } catch (jsonError) {
+                            console.error('Error stringifying invoice data:', jsonError);
+                            // Skip registration if JSON.stringify fails (circular reference, etc.)
+                            throw jsonError;
+                        }
 
-                    const response = await fetch('/blockchain/register-invoice', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: requestBody
-                    });
-                    // ERROR HANDLING FIX: Check response status properly
-                    if (response.ok) {
-                        console.log('✅ Invoice registered with blockchain service');
-                    } else {
-                        // Log non-OK responses for debugging
-                        const errorText = await response.text().catch(() => 'Unknown error');
-                        console.warn('⚠️ Backend registration failed:', response.status, errorText);
+                        const response = await fetch('/api/blockchain/register-invoice', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: requestBody
+                        });
+                        // ERROR HANDLING FIX: Check response status properly
+                        if (response.ok) {
+                            console.log('✅ Invoice registered with blockchain service');
+                        } else {
+                            // Log non-OK responses for debugging
+                            const errorText = await response.text().catch(() => 'Unknown error');
+                            console.warn('⚠️ Backend registration failed:', response.status, errorText);
+                        }
+                    } catch (error) {
+                        console.warn('⚠️ Failed to register invoice with backend:', error);
+                        // Non-critical error, continue
                     }
-                } catch (error) {
-                    console.warn('⚠️ Failed to register invoice with backend:', error);
-                    // Non-critical error, continue
+                } else {
+                    console.log('ℹ️ Offline: Skipping backend invoice registration. Will sync when online.');
                 }
             }
 
@@ -1963,7 +1967,7 @@ class InvoiceManager {
                 async (paymentId) => {
                     console.log('⏳ Server Approval Requested:', paymentId);
                     try {
-                        const response = await fetch('/blockchain/approve', {
+                        const response = await fetch('/api/blockchain/approve', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ payment_id: paymentId })
@@ -1985,7 +1989,7 @@ class InvoiceManager {
                     console.log('⏳ Server Completion Requested:', { paymentId, txid });
                     try {
                         // 1. Call Backend to finalize
-                        const response = await fetch('/blockchain/complete', {
+                        const response = await fetch('/api/blockchain/complete', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ payment_id: paymentId, txid: txid })

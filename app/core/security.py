@@ -5,15 +5,24 @@ Phase 1 Q1-Q2 2025: Optimized with Redis cache
 import httpx
 import logging
 import os
+import hashlib
+from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
 from fastapi import Request, HTTPException, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from jose import JWTError, jwt
+from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
+# SECURITY: Use SECRET_KEY from settings
+SECRET_KEY = settings.SECRET_KEY
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 15
+
 PI_API_BASE = "https://api.minepi.com/v2"
-# SECURITY: Get API Key from environment variable
-PI_API_KEY = os.getenv("PI_API_KEY")
+# SECURITY: Get API Key from central settings
+PI_API_KEY = settings.PI_API_KEY
 
 security = HTTPBearer()
 
@@ -79,11 +88,89 @@ async def verify_pi_access_token(token: str) -> Dict[str, Any]:
         logger.error(f"Unexpected error in token verification: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
-async def verify_pi_token(credentials: HTTPAuthorizationCredentials = Depends(security)) -> Dict[str, Any]:
+def create_session_token(data: dict, request: Request):
     """
-    FastAPI Dependency: Verify the Pi Network access token from Bearer header.
+    Create a JWT session token wrapped with device identifiers
+    SECURITY: Hijacking protection via IP and User-Agent binding
     """
-    return await verify_pi_access_token(credentials.credentials)
+    to_encode = data.copy()
+    expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    
+    # Extract identifiers for binding
+    user_agent = request.headers.get("User-Agent", "unknown")
+    ua_hash = hashlib.sha256(user_agent.encode()).hexdigest()
+    
+    # Use proxy-aware IP if available
+    from app.main import ProxyAwareIPExtractor
+    client_ip = ProxyAwareIPExtractor.get_client_ip(request)
+    
+    to_encode.update({
+        "exp": expire,
+        "ua": ua_hash,
+        "ip": client_ip,
+        "iat": datetime.utcnow()
+    })
+    
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
+
+async def verify_pi_token(
+    request: Request,
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)
+) -> Dict[str, Any]:
+    """
+    FastAPI Dependency: Verify the Pi Network access token or Session JWT.
+    Priority: 
+    1. Authorization: Bearer Header (for direct SDK calls)
+    2. pi_session Cookie (Session JWT - Req #2 enhancement)
+    """
+    token = None
+    is_session_jwt = False
+    
+    # 1. Check Header (Bearer Token)
+    if credentials:
+        token = credentials.credentials
+        
+    # 2. Check Cookie (Session JWT) if header is missing
+    if not token:
+        token = request.cookies.get("pi_session")
+        if token:
+            is_session_jwt = True
+        
+    if not token:
+        raise HTTPException(
+            status_code=401, 
+            detail="Authentication required. Please log in via Pi Browser."
+        )
+        
+    # 3. Handle Session JWT
+    if is_session_jwt:
+        try:
+            payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+            pi_access_token = payload.get("accessToken")
+            
+            if not pi_access_token:
+                raise HTTPException(status_code=401, detail="Invalid session payload")
+                
+            # 4. Hijacking Protection: Check IP and User-Agent
+            user_agent = request.headers.get("User-Agent", "unknown")
+            ua_hash = hashlib.sha256(user_agent.encode()).hexdigest()
+            
+            from app.main import ProxyAwareIPExtractor
+            client_ip = ProxyAwareIPExtractor.get_client_ip(request)
+            
+            if payload.get("ua") != ua_hash or payload.get("ip") != client_ip:
+                logger.warning(f"Session Hijacking Attempt Detected! IP: {client_ip}")
+                raise HTTPException(status_code=401, detail="Session binding failed. Please log in again.")
+                
+            # Session is valid, verify the underlying Pi token
+            return await verify_pi_access_token(pi_access_token)
+            
+        except JWTError:
+            raise HTTPException(status_code=401, detail="Session expired or invalid")
+            
+    # 5. Handle Direct Bearer Token
+    return await verify_pi_access_token(token)
 
 async def get_current_user(user_data: Dict[str, Any] = Depends(verify_pi_token)) -> Dict[str, Any]:
     """Dependency for route handlers to get the verified Pi user"""

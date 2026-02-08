@@ -14,6 +14,8 @@ from datetime import datetime, timedelta
 import hashlib
 import os
 
+from app.core.security import PI_API_BASE, PI_API_KEY
+
 logger = logging.getLogger(__name__)
 
 class NodeMode(Enum):
@@ -72,21 +74,29 @@ class BlockchainService:
         public_api_url: str = "https://api.minepi.com",
         check_interval: int = 5
     ):
+        """
+        Initialize the blockchain service
+        """
         self.local_node_url = local_node_url
         self.public_api_url = public_api_url
         self.check_interval = check_interval
+        
         self.current_mode = NodeMode.LOCAL
-        self.circuit_breaker = CircuitBreaker()
-        self.circuit_breaker_open = False
-        self.pending_transactions: Dict[str, Dict[str, Any]] = {}
+        self.is_running = False
         self._listener_task: Optional[asyncio.Task] = None
         
-        # SECURITY: Anti-Replay Protection - Store used transaction hashes
-        self.used_transactions: Dict[str, datetime] = {}
+        # Req #23: Circuit Breaker
+        self.pi_api_breaker = CircuitBreaker(failure_threshold=5, timeout=60)
         
-        # SECURITY: Invoice cache (in production, query from database)
-        # Format: {invoice_id: {amount, merchant_id, wallet_address, status}}
-        self.invoice_cache: Dict[str, Dict[str, Any]] = {}
+        # State management
+        self.pending_transactions: Dict[str, Dict[str, Any]] = {}  # txhash -> data
+        self.used_transactions: Dict[str, datetime] = {} # Anti-replay cache
+        self.registered_invoices: Dict[str, Dict[str, Any]] = {} # invoice_id -> data
+        
+        # Metrics (Legacy support or simple tracking)
+        self.processed_count = 0
+        self.failed_count = 0
+        self.circuit_breaker_open = False
 
     SUBSCRIPTION_KEY = "pi_ledger_sub"
     
@@ -219,11 +229,10 @@ class BlockchainService:
     
     async def _check_pending_transactions(self):
         """Check pending transactions for confirmation"""
-        if not self.circuit_breaker.can_attempt():
+        if not self.pi_api_breaker.can_attempt():
             # Req #23: Enter Hibernation Mode
             if self.current_mode != NodeMode.HIBERNATION:
                 self.current_mode = NodeMode.HIBERNATION
-                self.circuit_breaker_open = True
                 logger.warning("Entered HIBERNATION mode - Pi payments paused")
             return
         
@@ -258,14 +267,14 @@ class BlockchainService:
                     timeout=aiohttp.ClientTimeout(total=5)
                 ) as response:
                     if response.status == 200:
-                        self.circuit_breaker.record_success()
+                        self.pi_api_breaker.record_success()
                         return True
                     elif response.status in [500, 503]:
-                        self.circuit_breaker.record_failure()
+                        self.pi_api_breaker.record_failure()
                         return False
         except Exception as e:
             logger.debug(f"Local node check failed: {e}")
-            self.circuit_breaker.record_failure()
+            self.pi_api_breaker.record_failure()
             return False
     
     async def _try_public_api(self) -> bool:
@@ -277,16 +286,14 @@ class BlockchainService:
                     timeout=aiohttp.ClientTimeout(total=10)
                 ) as response:
                     if response.status == 200:
-                        self.circuit_breaker.record_success()
-                        if self.current_mode == NodeMode.HIBERNATION:
-                            pass # Handled in caller
+                        self.pi_api_breaker.record_success()
                         return True
                     elif response.status in [500, 503]:
-                        self.circuit_breaker.record_failure()
+                        self.pi_api_breaker.record_failure()
                         return False
         except Exception as e:
             logger.debug(f"Public API check failed: {e}")
-            self.circuit_breaker.record_failure()
+            self.pi_api_breaker.record_failure()
             return False
     
     async def verify_transaction(self, transaction_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -299,7 +306,7 @@ class BlockchainService:
         3. Anti-Replay: Transaction hash must be unique (not used before)
         4. Memo Validation: Memo must contain valid Invoice ID
         """
-        if self.circuit_breaker_open:
+        if not self.pi_api_breaker.can_attempt():
             return {
                 "status": "hibernation",
                 "message": "Blockchain service is in hibernation mode. Payments paused.",
@@ -349,7 +356,7 @@ class BlockchainService:
         
         # SECURITY CHECK 2: Amount Verification
         # Get invoice data (from cache or passed in transaction_data)
-        invoice_data = transaction_data.get("invoice_data") or self.invoice_cache.get(invoice_id_from_memo)
+        invoice_data = transaction_data.get("invoice_data") or self.registered_invoices.get(invoice_id_from_memo)
         
         if not invoice_data:
             # Invoice not found - request frontend to provide invoice data
@@ -484,7 +491,7 @@ class BlockchainService:
         Register invoice data for verification
         Called by frontend when invoice is created
         """
-        self.invoice_cache[invoice_id] = invoice_data
+        self.registered_invoices[invoice_id] = invoice_data
         logger.info(f"📋 Invoice registered: {invoice_id}")
     
     def get_used_transactions_count(self) -> int:
@@ -493,13 +500,85 @@ class BlockchainService:
     
     def get_status(self) -> str:
         """Get current service status"""
-        if self.circuit_breaker_open:
+        if not self.pi_api_breaker.can_attempt():
             return "hibernation"
         return self.current_mode.value
     
     def get_pending_transactions(self) -> Dict[str, Dict[str, Any]]:
         """Get all pending transactions"""
         return self.pending_transactions.copy()
+
+    # --- Pi Network API Helpers with Circuit Breaker ---
+
+    async def _call_pi_api(self, method: str, endpoint: str, **kwargs) -> Any:
+        """
+        Internal helper to call Pi API with circuit breaker
+        """
+        import httpx
+        
+        if not self.pi_api_breaker.can_attempt():
+            self.current_mode = NodeMode.HIBERNATION
+            logger.error(f"❌ Circuit Breaker OPEN - Hibernation Mode active for {endpoint}")
+            raise Exception("Hibernation Mode: Pi Network API is currently unreachable")
+
+        if not PI_API_KEY:
+            raise Exception("Internal Configuration Error: PI_API_KEY is missing")
+
+        headers = kwargs.get("headers", {})
+        headers["Authorization"] = f"Key {PI_API_KEY}"
+        kwargs["headers"] = headers
+        kwargs["timeout"] = kwargs.get("timeout", 10.0)
+
+        url = f"{PI_API_BASE}{endpoint}"
+        
+        try:
+            async with httpx.AsyncClient() as client:
+                if method.upper() == "GET":
+                    response = await client.get(url, **kwargs)
+                elif method.upper() == "POST":
+                    response = await client.post(url, **kwargs)
+                else:
+                    raise ValueError(f"Unsupported method: {method}")
+                
+                # Check for success (2xx) or failure (5xx)
+                if response.status_code >= 500:
+                    self.pi_api_breaker.record_failure()
+                    raise Exception(f"Pi Network Server Error: {response.status_code}")
+                
+                # Treat 404 as "not success" but not necessarily circuit failure 
+                # unless they persist (optional: decide based on specific 4xx)
+                
+                self.pi_api_breaker.record_success()
+                return response
+        except httpx.RequestError as e:
+            self.pi_api_breaker.record_failure()
+            logger.error(f"❌ Pi API request failed: {e}")
+            raise Exception(f"Network error connecting to Pi: {e}")
+        except Exception as e:
+            # Other exceptions might also count as failures
+            self.pi_api_breaker.record_failure()
+            raise
+
+    async def get_payment(self, payment_id: str) -> Dict[str, Any]:
+        """Fetch payment details from Pi Network"""
+        response = await self._call_pi_api("GET", f"/payments/{payment_id}")
+        if response.status_code != 200:
+            raise Exception(f"Payment not found: {response.status_code}")
+        return response.json()
+
+    async def approve_payment(self, payment_id: str) -> Dict[str, Any]:
+        """Approve a payment on Pi Network"""
+        response = await self._call_pi_api("POST", f"/payments/{payment_id}/approve")
+        if response.status_code != 200:
+            raise Exception(f"Approval failed: {response.status_code}")
+        return response.json()
+
+    async def complete_payment(self, payment_id: str, txid: str) -> Dict[str, Any]:
+        """Complete a payment on Pi Network"""
+        response = await self._call_pi_api("POST", f"/payments/{payment_id}/complete", json={"txid": txid})
+        if response.status_code != 200:
+            raise Exception(f"Completion failed: {response.status_code}")
+        return response.json()
 
 
 class StellarAccountData:
@@ -658,3 +737,7 @@ class StellarAccountData:
         except Exception as e:
             logger.error(f"Error listing account data: {e}")
             return []
+
+# Singleton instances for app-wide use
+blockchain_service = BlockchainService()
+stellar_account_data = StellarAccountData()

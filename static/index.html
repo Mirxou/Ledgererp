@@ -326,7 +326,7 @@
     <!-- Req #15: CSP Meta Tag (additional layer) - Allow ES modules -->
     <!-- Req #29: Allow esm.sh for ES module compatibility -->
     <meta http-equiv="Content-Security-Policy"
-        content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://sdk.minepi.com https://esm.sh https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' 'unsafe-hashes'; connect-src 'self' https://api.minepi.com https://cdn.jsdelivr.net https://esm.sh https://static.cloudflareinsights.com;">
+        content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://sdk.minepi.com https://app-cdn.minepi.com https://esm.sh https://unpkg.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; connect-src 'self' https://api.minepi.com https://sdk.minepi.com https://app-cdn.minepi.com https://esm.sh https://unpkg.com; img-src 'self' data: https:; font-src 'self' data:; frame-src 'self' https://sdk.minepi.com https://app-cdn.minepi.com;">
 </head>
 
 <body>
@@ -1568,7 +1568,24 @@
                     alert('خطأ في تهيئة التطبيق. Error initializing app: ' + error.message);
                 }
 
-                // Pi Authentication Logic Removed (Offline Mode)
+                // Phase 2: Automatic Session Check (HttpOnly)
+                if (window.piAdapter) {
+                    const user = await window.piAdapter.checkSession();
+                    if (user) {
+                        console.log('✅ Found existing session for:', user.username);
+                        // Trigger the same success flow if already authenticated
+                        if (window.appManager) {
+                            window.appManager.currentUser = { username: user.username };
+                            if (window.appManager.updateUI) window.appManager.updateUI();
+                        }
+                        if (window.dbManager && !window.dbInitialized) {
+                            await window.dbManager.initialize();
+                            window.dbInitialized = true;
+                        }
+                    } else {
+                        console.log('ℹ️ No active session found. User must authenticate.');
+                    }
+                }
 
                 const authStatus = document.getElementById('auth-status');
 
@@ -1621,8 +1638,8 @@
                                 await window.SubscriptionManager.checkStatus(authResult.user, authResult.user.uid);
                             }
 
-                            // Store Session (Standard)
-                            localStorage.setItem('user_username', authResult.user.username);
+                            // Phase 2 Fix: Rely on Session Cookie, not localStorage for tokens
+                            // We only keep non-sensitive display preference if needed
                             localStorage.setItem('auth_type', 'pi');
 
                             // Initialize App Data & Database (Now that we are authenticated)
@@ -2512,17 +2529,70 @@
             <div id="online-status-pill" class="status-pill online">
                 <i class="fas fa-check-circle"></i> متصل Online
             </div>
+            <div id="offline-status-pill" class="status-pill offline" style="display: none;">
+                <i class="fas fa-exclamation-triangle"></i> وضع الأوفلاين نشط (للقراءة فقط)
+            </div>
             <div id="version-display-inline" class="text-muted text-small">
-                v4.3 (Scopes Updated) | Vision 2030
+                v4.4 (Offline Optimized) | Vision 2030
             </div>
         </div>
 
         <script>
+            // Phase 4: Connection Monitoring & UI Guards
+            function updateConnectionStatus() {
+                const isOnline = navigator.onLine;
+                const onlinePill = document.getElementById('online-status-pill');
+                const offlinePill = document.getElementById('offline-status-pill');
+
+                if (isOnline) {
+                    if (onlinePill) onlinePill.style.display = 'inline-flex';
+                    if (offlinePill) offlinePill.style.display = 'none';
+                    document.body.classList.remove('is-offline');
+                } else {
+                    if (onlinePill) onlinePill.style.display = 'none';
+                    if (offlinePill) offlinePill.style.display = 'inline-flex';
+                    document.body.classList.add('is-offline');
+
+                    if (window.notificationManager) {
+                        window.notificationManager.show('تم تفعيل وضع الأوفلاين. العمليات المالية معطلة حالياً.', 'warning');
+                    }
+                }
+
+                // Disable/Enable sensitive actions
+                const financialButtons = document.querySelectorAll('.btn-buy-pro, .btn-create-invoice, #btn-approve-payment, #btn-complete-payment');
+                financialButtons.forEach(btn => {
+                    if (!isOnline) {
+                        btn.setAttribute('disabled', 'true');
+                        btn.title = 'معطل في وضع الأوفلاين';
+                    } else {
+                        btn.removeAttribute('disabled');
+                        btn.title = '';
+                    }
+                });
+            }
+
+            window.addEventListener('online', updateConnectionStatus);
+            window.addEventListener('offline', updateConnectionStatus);
+            window.addEventListener('load', updateConnectionStatus);
+
             // Register Service Worker for Phase 4 Offline Support
             if ('serviceWorker' in navigator) {
                 window.addEventListener('load', () => {
                     navigator.serviceWorker.register('/sw.js')
-                        .then(reg => console.log('✅ Service Worker registered', reg))
+                        .then(reg => {
+                            console.log('✅ Service Worker registered', reg);
+                            // Support for instant updates
+                            reg.onupdatefound = () => {
+                                const installingWorker = reg.installing;
+                                installingWorker.onstatechange = () => {
+                                    if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                                        if (window.notificationManager) {
+                                            window.notificationManager.show('تحديث جديد متاح. يرجى إعادة تحميل الصفحة.', 'success');
+                                        }
+                                    }
+                                };
+                            };
+                        })
                         .catch(err => console.error('❌ Service Worker registration failed', err));
                 });
             }

@@ -21,9 +21,7 @@ const SubscriptionManager = {
         try {
             console.log('🔍 Checking Subscription Status for:', accountId);
             const response = await fetch(`/api/subscription/status?account_id=${accountId}`, {
-                headers: {
-                    'Authorization': `Bearer ${piUser.accessToken}`
-                }
+                credentials: 'include'
             });
 
             const data = await response.json();
@@ -94,7 +92,7 @@ const SubscriptionManager = {
                 // onReadyForServerApproval (Step 2)
                 async (paymentId) => {
                     console.log('⏳ Approving subscription payment:', paymentId);
-                    await fetch('/blockchain/approve', {
+                    await fetch('/api/blockchain/approve', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ payment_id: paymentId })
@@ -105,7 +103,7 @@ const SubscriptionManager = {
                     console.log('⏳ Completing subscription payment:', { paymentId, txid });
 
                     // 1. Call standard blockchain completion
-                    await fetch('/blockchain/complete', {
+                    await fetch('/api/blockchain/complete', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ payment_id: paymentId, txid: txid })
@@ -115,9 +113,9 @@ const SubscriptionManager = {
                     const res = await fetch('/api/subscription/purchase', {
                         method: 'POST',
                         headers: {
-                            'Content-Type': 'application/json',
-                            'Authorization': `Bearer ${this.piUser.accessToken}`
+                            'Content-Type': 'application/json'
                         },
+                        credentials: 'include',
                         body: JSON.stringify({
                             payment_id: paymentId,
                             txid: txid,

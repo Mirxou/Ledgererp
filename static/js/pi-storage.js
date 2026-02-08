@@ -120,9 +120,9 @@ class PiStorage {
             const response = await fetch('/api/pi/get-stellar-account', {
                 method: 'POST',
                 headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${this.piAdapter.accessToken}`
+                    'Content-Type': 'application/json'
                 },
+                credentials: 'include',
                 body: JSON.stringify(requestBody)
             });
 
@@ -316,9 +316,9 @@ class PiStorage {
             const response = await fetch('/api/blockchain/data', {
                 method: 'POST',
                 headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${this.piAdapter.accessToken}`
+                    'Content-Type': 'application/json'
                 },
+                credentials: 'include',
                 body: JSON.stringify({
                     key: finalKey,
                     value: base64Value
@@ -374,9 +374,7 @@ class PiStorage {
             // PI NETWORK REQUIREMENT: Read from Backend (which queries blockchain)
             const response = await fetch(`/api/blockchain/data/${encodeURIComponent(this.accountId)}/${encodeURIComponent(key)}`, {
                 method: 'GET',
-                headers: {
-                    'Authorization': `Bearer ${this.piAdapter?.accessToken || ''}`
-                }
+                credentials: 'include'
             });
 
             if (!response.ok) {
@@ -424,10 +422,10 @@ class PiStorage {
             const response = await fetch(`/api/blockchain/data/${encodeURIComponent(this.accountId)}/${encodeURIComponent(key)}`, {
                 method: 'DELETE',
                 headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${this.piAdapter.accessToken}`
+                    'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({}) // Backend will use access_token to get account_secret
+                credentials: 'include',
+                body: JSON.stringify({}) // Backend will use session cookie
             });
 
             if (!response.ok) {
@@ -465,9 +463,7 @@ class PiStorage {
             // PI NETWORK REQUIREMENT: Query Backend which reads from blockchain
             const response = await fetch(`/api/blockchain/data?account_id=${encodeURIComponent(this.accountId)}&prefix=${encodeURIComponent(prefix)}`, {
                 method: 'GET',
-                headers: {
-                    'Authorization': `Bearer ${this.piAdapter?.accessToken || ''}`
-                }
+                credentials: 'include'
             });
 
             if (!response.ok) {

@@ -22,16 +22,12 @@ from urllib.parse import urlparse, parse_qs
 import httpx # Required for Pi Network API calls
 from typing import Optional, List, Dict, Any
 
-# Pi Network API Configuration
-PI_API_BASE = "https://api.minepi.com/v2"
-# SECURITY: Get API Key from environment variable (never hardcode)
-PI_API_KEY = os.getenv("PI_API_KEY") 
-
 # SECURITY: Import strict configuration (will exit if invalid)
 from app.core.config import settings
+from app.core.cache import cache_manager
 
-from app.routers import telemetry, notifications
-from app.services.blockchain import BlockchainService, NodeMode, StellarAccountData
+from app.routers import auth, blockchain, telemetry, notifications, payments
+from app.services.blockchain import blockchain_service, NodeMode, StellarAccountData
 from app.services.market import market_service
 from app.middleware.kyb import KYBMiddleware
 
@@ -180,6 +176,19 @@ app = FastAPI(
 # Mount static directory for frontend assets
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
+# Phase 3: Lifecycle Management for Blockchain Service
+@app.on_event("startup")
+async def startup_event():
+    """Tasks to run on server startup"""
+    await blockchain_service.start_listener()
+    logger.info("Server started - Blockchain listener active")
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Tasks to run on server shutdown"""
+    await blockchain_service.stop_listener()
+    logger.info("Server shutting down - Blockchain listener stopped")
+
 # CDN Configuration Stub (Phase 2)
 # In production, set STATIC_URL to your CDN endpoint (e.g., https://cdn.piledger.com/static)
 STATIC_URL = os.getenv("STATIC_URL", "/static")
@@ -253,6 +262,9 @@ async def add_security_headers(request: Request, call_next):
     # Req #15: Allow ES modules and dynamic imports
     # Req #29: Allow esm.sh for ES module compatibility (China Safe alternative)
     # CRITICAL: CSP must allow Pi SDK domains for Pi App Studio compliance
+    # CSP: Strict policy - only allow self and vital Pi Network domains
+    # Req #15: Allow ES modules and Pi SDK domains
+    # SECURITY: Refined to minimize external sources and track 'unsafe-inline' usage
     response.headers["Content-Security-Policy"] = (
         "default-src 'self'; "
         "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://sdk.minepi.com https://app-cdn.minepi.com https://esm.sh https://unpkg.com; "
@@ -261,7 +273,7 @@ async def add_security_headers(request: Request, call_next):
         "connect-src 'self' https://api.minepi.com https://sdk.minepi.com https://app-cdn.minepi.com https://esm.sh https://unpkg.com; "
         "style-src 'self' 'unsafe-inline'; "
         "img-src 'self' data: https:; "
-        "font-src 'self'; "
+        "font-src 'self' data:; "
         "frame-src 'self' https://sdk.minepi.com https://app-cdn.minepi.com; "
         "frame-ancestors 'self' https://app-cdn.minepi.com https://browser.minepi.com;"
     )
@@ -269,7 +281,7 @@ async def add_security_headers(request: Request, call_next):
     response.headers["X-Frame-Options"] = "SAMEORIGIN"
     response.headers["X-XSS-Protection"] = "1; mode=block"
     response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
-    # CRITICAL: Add missing security headers for Pi App Studio compliance
+    # CRITICAL: Security headers for Pi App Studio compliance
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
     
@@ -448,212 +460,22 @@ from app.core.security import verify_pi_token, verify_pi_access_token, PI_API_KE
 # Include routers
 from app.routers import blockchain, telemetry, notifications
 
-# app.include_router(vault.router, prefix="/sync", tags=["vault"]) # Disabled for Pure Blockchain Mode
+app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
+app.include_router(payments.router, prefix="/api/blockchain", tags=["payments"]) # Replaces legacy blockchain endpoints
 app.include_router(blockchain.router, prefix="/api/blockchain", tags=["blockchain"])
-app.include_router(blockchain.router, prefix="/api/pi", tags=["pi-helpers"]) # For /get-stellar-account
+app.include_router(blockchain.router, prefix="/api/pi", tags=["pi-helpers"]) 
 
-app.include_router(telemetry.router, prefix="/telemetry", tags=["telemetry"])  # Req #27
-app.include_router(notifications.router, prefix="/notifications", tags=["notifications"])  # Req #31: SSE
-
-# Req #18: Blockchain Service Endpoint (Singleton Listener)
-blockchain_service = BlockchainService()
-stellar_account_data = StellarAccountData()
-
-@app.post("/blockchain/verify")
-async def verify_payment(request: Request):
-    """
-    Backend-only payment verification endpoint
-    SECURITY: Implements strict verification triangle:
-    1. Amount Check
-    2. Recipient Check  
-    3. Anti-Replay Protection
-    """
-    try:
-        data = await request.json()
-    except Exception as e:
-        return {
-            "status": "error",
-            "error_code": "INVALID_REQUEST",
-            "message": "Invalid JSON in request body",
-            "verified": False
-        }
-    
-    if not data:
-        return {
-            "status": "error",
-            "error_code": "MISSING_DATA",
-            "message": "Request body is required",
-            "verified": False
-        }
-    
-    try:
-        result = await blockchain_service.verify_transaction(data)
-        return result
-    except Exception as e:
-        logger.error(f"Error verifying transaction: {e}")
-        return {
-            "status": "error",
-            "error_code": "VERIFICATION_FAILED",
-            "message": str(e),
-            "verified": False
-        }
+app.include_router(telemetry.router, prefix="/telemetry", tags=["telemetry"])
+app.include_router(notifications.router, prefix="/notifications", tags=["notifications"])
 
 @app.get("/blockchain/status")
 async def get_blockchain_status():
     """Get blockchain service status (Req #18)"""
     return {
         "status": blockchain_service.get_status(),
-        "circuit_open": blockchain_service.circuit_breaker_open,
+        "circuit_open": not blockchain_service.pi_api_breaker.can_attempt(),
         "mode": blockchain_service.current_mode.value
     }
-
-@app.post("/blockchain/register-invoice")
-async def register_invoice(request: Request):
-    """
-    Register invoice data for verification
-    Called by frontend when invoice is created
-    """
-    try:
-        data = await request.json()
-    except Exception as e:
-        return {
-            "status": "error",
-            "message": "Invalid JSON in request body"
-        }
-    
-    if not data:
-        return {
-            "status": "error",
-            "message": "Request body is required"
-        }
-    
-    invoice_id = data.get("invoice_id")
-    invoice_data = data.get("invoice_data", {})
-    
-    if not invoice_id:
-        return {
-            "status": "error",
-            "message": "invoice_id is required"
-        }
-    
-    if not invoice_data:
-        return {
-            "status": "error",
-            "message": "invoice_data is required"
-        }
-    
-    try:
-        blockchain_service.register_invoice(invoice_id, invoice_data)
-        return {"status": "success", "message": f"Invoice {invoice_id} registered"}
-    except Exception as e:
-        logger.error(f"Error registering invoice: {e}")
-
-# Note: verify_pi_access_token moved to app.core.security
-
-@app.post("/blockchain/approve")
-async def approve_payment(request: Request):
-    """
-    CRITICAL: Approve payment for Pi.createPayment() flow
-    Called by Pi SDK when payment is ready for server approval
-    Required by Pi App Studio for proper payment processing
-    """
-    try:
-        data = await request.json()
-    except Exception as e:
-        return JSONResponse(
-            status_code=400,
-            content={
-                "status": "error",
-                "message": "Invalid JSON"
-            }
-        )
-    
-    payment_id = data.get("payment_id")
-    
-    if not payment_id:
-        return JSONResponse(status_code=400, content={"message": "payment_id required"})
-        
-    # In a real app, you would check if this payment matches an order in your DB
-    # For now, we proceed to approve it at Pi Network level
-    
-    if not PI_API_KEY:
-        logger.error(f"PI_API_KEY missing. Cannot approve payment {payment_id}")
-        return JSONResponse(
-            status_code=500,
-            content={
-                "status": "error",
-                "message": "Server Configuration Error: PI_API_KEY missing"
-            }
-        )
-        
-    try:
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                f"{PI_API_BASE}/payments/{payment_id}/approve",
-                headers={"Authorization": f"Key {PI_API_KEY}"},
-                json={},
-                timeout=10.0
-            )
-            
-            if response.status_code == 200:
-                logger.info(f"Payment {payment_id} approved successfully on Pi Network")
-                return response.json()
-            else:
-                logger.error(f"Failed to approve payment {payment_id}: {response.text}")
-                # If already approved or other non-fatal error, we might still want to return success or specific error
-                return JSONResponse(status_code=response.status_code, content=response.json())
-                
-    except Exception as e:
-        logger.error(f"Error approving payment: {e}")
-        return JSONResponse(status_code=500, content={"message": str(e)})
-
-
-@app.post("/blockchain/complete")
-async def complete_payment(request: Request):
-    """
-    CRITICAL: Complete payment for Pi.createPayment() flow
-    Called by Pi SDK when payment is ready for server completion
-    Required by Pi App Studio for proper payment processing
-    """
-    try:
-        data = await request.json()
-    except Exception as e:
-        return JSONResponse(status_code=400, content={"message": "Invalid JSON"})
-    
-    payment_id = data.get("payment_id")
-    txid = data.get("txid")
-    
-    if not payment_id or not txid:
-        return JSONResponse(status_code=400, content={"message": "payment_id and txid required"})
-    
-    # 1. Verify transaction on blockchain (Double-Spend Check)
-    # verification_result = await blockchain_service.verify_transaction(...)
-    # if not verification_result.get("verified"): ...
-    
-    # 2. Complete at Pi Network level
-    if not PI_API_KEY:
-         logger.error(f"PI_API_KEY missing. Cannot complete payment {payment_id}")
-         return JSONResponse(status_code=500, content={"message": "Server Configuration Error: PI_API_KEY missing"})
-
-    try:
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                f"{PI_API_BASE}/payments/{payment_id}/complete",
-                headers={"Authorization": f"Key {PI_API_KEY}"},
-                json={"txid": txid},
-                timeout=10.0
-            )
-            
-            if response.status_code == 200:
-                logger.info(f"Payment {payment_id} completed successfully on Pi Network")
-                return response.json()
-            else:
-                logger.error(f"Failed to complete payment {payment_id}: {response.text}")
-                return JSONResponse(status_code=response.status_code, content=response.json())
-                
-    except Exception as e:
-        logger.error(f"Error completing payment: {e}")
-        return JSONResponse(status_code=500, content={"message": str(e)})
 
 # ... (omitted models) ...
 
