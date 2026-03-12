@@ -25,6 +25,7 @@ from typing import Optional, List, Dict, Any
 # SECURITY: Import strict configuration (will exit if invalid)
 from app.core.config import settings
 from app.core.cache import cache_manager
+from app.core.security import verify_pi_token, verify_pi_access_token, PI_API_KEY, PI_API_BASE
 
 from app.routers import auth, blockchain, telemetry, notifications, payments
 from app.services.blockchain import blockchain_service, NodeMode, StellarAccountData
@@ -454,8 +455,6 @@ async def serve_manifest():
         content={"error": "Manifest file not found"},
         status_code=404
     )
-
-from app.core.security import verify_pi_token, verify_pi_access_token, PI_API_KEY, PI_API_BASE
 
 # Include routers
 from app.routers import blockchain, telemetry, notifications
