@@ -18,8 +18,12 @@ class PiAdapter {
                 throw new Error('Pi SDK not found. Ensure pi-sdk.js is loaded.');
             }
 
+            console.log('✅ Pi SDK library found:', typeof Pi);
+
             // 2. Initialize with strict versioning
             const isSandbox = window.location.search.includes('sandbox=true');
+            console.log('🔧 Initialize Pi SDK with sandbox mode:', isSandbox);
+            console.log('📍 Current URL:', window.location.href);
 
             await Pi.init({ version: '2.0', sandbox: isSandbox });
             this.sdkInitialized = true;
@@ -40,6 +44,11 @@ class PiAdapter {
 
         } catch (error) {
             console.error('❌ Pi SDK Init Failed:', error);
+            console.error('📋 Error details:', {
+                message: error.message,
+                stack: error.stack,
+                type: error.constructor.name
+            });
             throw error;
         }
     }
@@ -78,27 +87,40 @@ class PiAdapter {
         };
 
         try {
+            console.log('🔐 Starting Pi.authenticate() with scopes:', scopes);
             const authResult = await Pi.authenticate(scopes, onIncompletePaymentFound);
+            console.log('📊 Pi.authenticate() returned:', authResult);
+            
             if (!authResult || !authResult.user) {
                 throw new Error('Authentication failed. Please try again in Pi Browser.');
             }
 
+            console.log('✅ Pi SDK authentication successful for user:', authResult.user.username);
+            console.log('🔑 Access Token received:', authResult.accessToken ? 'YES (length: ' + authResult.accessToken.length + ')' : 'NO');
+
             // Phase 2: Secure Cookie Sync (Professor's Recommendation)
             console.log('🔄 Syncing session with secure backend...');
+            console.log('📡 POST /api/auth/login with token...');
+            
             const loginResponse = await fetch('/api/auth/login', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
                 body: JSON.stringify({
                     accessToken: authResult.accessToken
                 })
             });
 
+            console.log('📊 Backend response status:', loginResponse.status, loginResponse.statusText);
+            
             if (!loginResponse.ok) {
-                throw new Error(`Backend sync failed: ${loginResponse.statusText}`);
+                const errorBody = await loginResponse.text();
+                console.error('❌ Backend response body:', errorBody);
+                throw new Error(`Backend sync failed: ${loginResponse.statusText} - ${errorBody}`);
             }
 
             const syncResult = await loginResponse.json();
-            console.log('✅ Backend Session Initialized (HttpOnly)');
+            console.log('✅ Backend Session Initialized (HttpOnly):', syncResult);
 
             this.currentUser = authResult.user;
             console.log('✅ Authentication Successful:', authResult);
@@ -112,6 +134,11 @@ class PiAdapter {
 
         } catch (error) {
             console.error('❌ Authentication Failed:', error);
+            console.error('📋 Full error details:', {
+                name: error.name,
+                message: error.message,
+                stack: error.stack
+            });
             throw error;
         }
     }
