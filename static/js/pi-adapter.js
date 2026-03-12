@@ -53,7 +53,10 @@ class PiAdapter {
             await this.init();
         }
 
-        const scopes = ['username', 'payments'];
+        // ✅ SECURITY FIX: Request minimal scopes only
+        // Per Pi Developer Guide: request only required scopes
+        // Payments are handled separately via Pi.createPayment()
+        const scopes = ['username'];
 
         const onIncompletePaymentFound = async (payment) => {
             console.log('🔄 [Pi SDK] Incomplete payment found:', payment);

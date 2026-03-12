@@ -97,6 +97,7 @@ class SecurityManager {
 
     /**
      * Req #9: Derive encryption key from mnemonic + PIN using PBKDF2
+     * SECURITY FIX: Use random salt instead of fixed salt
      */
     async deriveEncryptionKey(mnemonic, pinCode) {
         try {
@@ -116,11 +117,17 @@ class SecurityManager {
                 ['deriveBits', 'deriveKey']
             );
 
+            // ✅ SECURITY FIX: Generate random salt (16 bytes) instead of fixed salt
+            const salt = crypto.getRandomValues(new Uint8Array(16));
+
+            // Store salt for later decryption - will be prepended to ciphertext
+            this.salt = salt;
+
             // Derive key using PBKDF2
             this.encryptionKey = await crypto.subtle.deriveKey(
                 {
                     name: 'PBKDF2',
-                    salt: encoder.encode('pi-ledger-salt'), // In production, use random salt
+                    salt: salt,  // ✅ Use random salt
                     iterations: 100000,
                     hash: 'SHA-256'
                 },

@@ -23,15 +23,9 @@ class PiStorage {
      * Initialize Stellar SDK and get merchant account
      */
     async initialize() {
-        // #region agent log
-        fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'pi-storage.js:25', message: 'initialize() called', data: { hasPiAdapter: !!this.piAdapter, hasUser: !!(this.piAdapter?.user), hasUid: !!(this.piAdapter?.user?.uid) }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'A' }) }).catch(() => { });
-        // #endregion
         try {
             // Check for Stellar SDK
             if (typeof window === 'undefined' || !window.StellarSdk) {
-                // #region agent log
-                fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'pi-storage.js:29', message: 'Stellar SDK check failed', data: { hasWindow: typeof window !== 'undefined', hasStellarSdk: !!(window?.StellarSdk) }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'A' }) }).catch(() => { });
-                // #endregion
                 throw new Error('Stellar SDK not loaded. Please include Stellar SDK script.');
             }
 
@@ -39,17 +33,10 @@ class PiStorage {
 
             // Get merchant account from Pi.uid
             if (!this.piAdapter || !this.piAdapter.user || !this.piAdapter.user.uid) {
-                // #region agent log
-                fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'pi-storage.js:36', message: 'Pi auth check failed', data: { hasPiAdapter: !!this.piAdapter, hasUser: !!(this.piAdapter?.user), hasUid: !!(this.piAdapter?.user?.uid) }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'A' }) }).catch(() => { });
-                // #endregion
                 throw new Error('Pi authentication required. Please authenticate first.');
             }
 
             const merchantId = this.piAdapter.user.uid;
-
-            // #region agent log
-            fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'pi-storage.js:41', message: 'Getting Stellar account', data: { merchantId }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'A' }) }).catch(() => { });
-            // #endregion
 
             // HACKATHON 2025 PATTERN: Following Blind_Lounge pattern
             // In Pi Network, each user has a Stellar account automatically
@@ -60,10 +47,6 @@ class PiStorage {
             const stellarAccountInfo = await this.getStellarAccount(merchantId);
             this.accountId = stellarAccountInfo.accountId;
 
-            // #region agent log
-            fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'pi-storage.js:48', message: 'Stellar account received', data: { accountId: this.accountId, hasAccountId: !!this.accountId }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'A' }) }).catch(() => { });
-            // #endregion
-
             // HACKATHON 2025 PATTERN: Initialize Stellar server
             // Pi Network uses Stellar blockchain - use Pi Network's Horizon server
             // For production: Use Pi Network's Horizon endpoint
@@ -73,16 +56,9 @@ class PiStorage {
             // In Pi Browser, secret keys are never exposed to frontend
             // All blockchain writes go through Backend which gets keys from Pi Network API
             // We only store accountId for reference
-
-            // #region agent log
-            fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'pi-storage.js:59', message: 'Initialization complete', data: { accountId: this.accountId }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'A' }) }).catch(() => { });
-            // #endregion
             console.log('✅ Pi Storage initialized (Hackathon 2025 pattern)');
             return true;
         } catch (error) {
-            // #region agent log
-            fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'pi-storage.js:63', message: 'Initialization error', data: { error: error.message, stack: error.stack }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'A' }) }).catch(() => { });
-            // #endregion
             console.error('Error initializing Pi Storage:', error);
             throw error;
         }
@@ -270,14 +246,10 @@ class PiStorage {
         // Handle versioned keys
         const finalKey = versioned ? `${key}:${Date.now()}` : key;
 
-        // #region agent log
-        fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'pi-storage.js:207', message: 'setAccountData() called', data: { key: finalKey, hasAccountId: !!this.accountId, hasAccessToken: !!(this.piAdapter?.accessToken) }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'B' }) }).catch(() => { });
-        // #endregion
+
         try {
             if (!this.accountId) {
-                // #region agent log
-                fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'pi-storage.js:210', message: 'Initializing before setAccountData', data: { key: finalKey }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'B' }) }).catch(() => { });
-                // #endregion
+
                 await this.initialize();
             }
 
@@ -287,31 +259,23 @@ class PiStorage {
             // Convert to base64 string
             const base64Value = typeof encryptedValue === 'string' ? encryptedValue : btoa(JSON.stringify(encryptedValue));
 
-            // #region agent log
-            fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'pi-storage.js:218', message: 'Data prepared for storage', data: { key: finalKey, base64Length: base64Value.length, needsSplit: base64Value.length > 64 }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'B' }) }).catch(() => { });
-            // #endregion
+
 
             // Check if data fits in 64 bytes
             if (base64Value.length > 64) {
                 // Data too large, need to split
-                // #region agent log
-                fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'pi-storage.js:223', message: 'Data too large, using setLargeData', data: { key: finalKey, base64Length: base64Value.length }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'B' }) }).catch(() => { });
-                // #endregion
+
                 return await this.setLargeData(finalKey, value);
             }
 
             // PI NETWORK REQUIREMENT: Send to Backend for signing (secure)
             // Backend will get account_secret from Pi Network API using access_token
             if (!this.piAdapter || !this.piAdapter.accessToken) {
-                // #region agent log
-                fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'pi-storage.js:230', message: 'Missing access token', data: { key: finalKey, hasPiAdapter: !!this.piAdapter, hasAccessToken: !!(this.piAdapter?.accessToken) }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'B' }) }).catch(() => { });
-                // #endregion
+
                 throw new Error('Pi authentication required. Please authenticate first.');
             }
 
-            // #region agent log
-            fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'pi-storage.js:235', message: 'Sending to Backend', data: { key: finalKey, endpoint: '/api/blockchain/data', hasAccessToken: !!this.piAdapter.accessToken }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'B' }) }).catch(() => { });
-            // #endregion
+
 
             const response = await fetch('/api/blockchain/data', {
                 method: 'POST',
@@ -325,15 +289,11 @@ class PiStorage {
                 })
             });
 
-            // #region agent log
-            fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'pi-storage.js:249', message: 'Backend response received', data: { key, status: response.status, ok: response.ok }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'B' }) }).catch(() => { });
-            // #endregion
+
 
             if (!response.ok) {
                 const errorData = await response.json().catch(() => ({ detail: 'Unknown error' }));
-                // #region agent log
-                fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'pi-storage.js:253', message: 'Backend error response', data: { key, status: response.status, error: errorData.detail, status503: response.status === 503 }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'B' }) }).catch(() => { });
-                // #endregion
+
 
                 // Handle specific error cases
                 if (response.status === 503) {
@@ -347,15 +307,11 @@ class PiStorage {
             }
 
             const result = await response.json();
-            // #region agent log
-            fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'pi-storage.js:259', message: 'Data stored successfully', data: { key, success: result.success }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'B' }) }).catch(() => { });
-            // #endregion
+
             console.log(`✅ Data stored on blockchain: ${key}`);
             return result;
         } catch (error) {
-            // #region agent log
-            fetch('http://127.0.0.1:7243/ingest/cfa6f69f-2861-47d3-9841-18153f70ab5d', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'pi-storage.js:264', message: 'setAccountData error', data: { key, error: error.message }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'B' }) }).catch(() => { });
-            // #endregion
+
             console.error('Error storing data on blockchain:', error);
             throw error;
         }

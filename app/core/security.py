@@ -30,12 +30,22 @@ security = HTTPBearer()
 from app.core.cache import cache_manager
 
 # Fallback in-memory cache (for development or when Redis unavailable)
+# ⚠️ SECURITY NOTE: Token caching is necessary for performance in multi-worker environments
+# However, this violates strict Zero-Knowledge principles. Consider:
+# 1. Short TTL (5 minutes) - tokens expire quickly
+# 2. Redis in production - volatile store that doesn't persist
+# 3. SessionID-based approach - store only session metadata, not tokens
+# For true Zero-Knowledge: implement token-less verification or move tokens to frontend
 token_cache: Dict[str, Dict[str, Any]] = {}
 
 async def verify_pi_access_token(token: str) -> Dict[str, Any]:
     """
     Verify a raw Pi Network access token string.
     Phase 1 Optimization: Uses Redis cache for multi-worker support
+    
+    ⚠️ ZERO-KNOWLEDGE NOTE: This function caches tokens on the server.
+    While this improves performance, it partially violates Zero-Knowledge principles.
+    Tokens are cached for 5 minutes maximum and only contain non-sensitive user data (uid, username).
     """
     # 1. Check Cache (Fast Path) - Try Redis first, fallback to in-memory
     cache_key = f"pi_token:{token}"
