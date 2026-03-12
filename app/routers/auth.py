@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Request, Response, HTTPException, Depends
 from typing import Dict, Any
 import logging
-from app.core.security import verify_pi_access_token, create_session_token
+from app.core.security import verify_pi_access_token, verify_pi_token, create_session_token
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
