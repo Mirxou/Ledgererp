@@ -1,0 +1,1115 @@
+     1→"use client";
+     2→
+     3→import { useEffect, useState, useCallback } from "react";
+     4→import {
+     5→  ShieldAlert,
+     6→  ShieldX,
+     7→  ShieldCheck,
+     8→  AlertTriangle,
+     9→  Bug,
+    10→  Code2,
+    11→  Server,
+    12→  Globe,
+    13→  LayoutGrid,
+    14→  FileWarning,
+    15→  Terminal,
+    16→  Lock,
+    17→  Eye,
+    18→  XCircle,
+    19→  CheckCircle2,
+    20→  ArrowRight,
+    21→  ChevronDown,
+    22→  ChevronUp,
+    23→  ExternalLink,
+    24→  Github,
+    25→  Zap,
+    26→  Target,
+    27→  Layers,
+    28→  Cpu,
+    29→  Gauge,
+    30→  BarChart3,
+    31→} from "lucide-react";
+    32→import {
+    33→  Card,
+    34→  CardContent,
+    35→  CardDescription,
+    36→  CardHeader,
+    37→  CardTitle,
+    38→} from "@/components/ui/card";
+    39→import { Badge } from "@/components/ui/badge";
+    40→import { Button } from "@/components/ui/button";
+    41→import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+    42→import { Progress } from "@/components/ui/progress";
+    43→import { ScrollArea } from "@/components/ui/scroll-area";
+    44→import { Separator } from "@/components/ui/separator";
+    45→import {
+    46→  Accordion,
+    47→  AccordionContent,
+    48→  AccordionItem,
+    49→  AccordionTrigger,
+    50→} from "@/components/ui/accordion";
+    51→
+    52→// ─── Types ───────────────────────────────────────────────────────────────────
+    53→
+    54→interface AuditReport {
+    55→  meta: {
+    56→    projectName: string;
+    57→    repository: string;
+    58→    description: string;
+    59→    auditDate: string;
+    60→    totalFiles: number;
+    61→    totalLines: string;
+    62→    techStack: string[];
+    63→  };
+    64→  scores: {
+    65→    backend: { codeQuality: number; security: number; architecture: number; overall: number };
+    66→    frontend: { codeQuality: number; security: number; piCompliance: number; overall: number };
+    67→    piNetwork: {
+    68→      manifestCompliance: number;
+    69→      domainVerification: number;
+    70→      apiKeyManagement: number;
+    71→      paymentFlow: number;
+    72→      kycKyb: number;
+    73→      deploymentReadiness: number;
+    74→      nonCustodial: number;
+    75→      overall: number;
+    76→    };
+    77→    overall: number;
+    78→  };
+    79→  summary: { totalIssues: number; critical: number; high: number; medium: number; low: number; blockingDeployment: number };
+    80→  criticalFindings: Issue[];
+    81→  highIssues: IssueBrief[];
+    82→  mediumIssues: IssueBrief[];
+    83→  piNetworkCompliance: {
+    84→    blockingIssues: string[];
+    85→    manifestIssues: string[];
+    86→    deploymentIssues: string[];
+    87→    securityHeaders: string[];
+    88→  };
+    89→  codeQuality: {
+    90→    largestFiles: { file: string; size: number; lines: number }[];
+    91→    todoFixme: { file: string; text: string }[];
+    92→    emptyFiles: string[];
+    93→    incompleteFiles: string[];
+    94→  };
+    95→  architectureProblems: { title: string; description: string }[];
+    96→  recommendations: { priority: number; title: string; effort: string; impact: string }[];
+    97→}
+    98→
+    99→interface Issue {
+   100→  id: string;
+   101→  source: string;
+   102→  file: string;
+   103→  line: number;
+   104→  category: string;
+   105→  title: string;
+   106→  description: string;
+   107→  recommendation: string;
+   108→}
+   109→
+   110→interface IssueBrief {
+   111→  id: string;
+   112→  source: string;
+   113→  file: string;
+   114→  line: number;
+   115→  category: string;
+   116→  title: string;
+   117→}
+   118→
+   119→// ─── Components ───────────────────────────────────────────────────────────────
+   120→
+   121→function ScoreRing({ score, label, size = 120 }: { score: number; label: string; size?: number }) {
+   122→  const radius = (size - 16) / 2;
+   123→  const circumference = 2 * Math.PI * radius;
+   124→  const offset = circumference - (score / 100) * circumference;
+   125→  const color =
+   126→    score >= 80 ? "text-emerald-500" : score >= 60 ? "text-amber-500" : score >= 40 ? "text-orange-500" : "text-red-500";
+   127→  const strokeColor =
+   128→    score >= 80 ? "stroke-emerald-500" : score >= 60 ? "stroke-amber-500" : score >= 40 ? "stroke-orange-500" : "stroke-red-500";
+   129→  const bgColor =
+   130→    score >= 80 ? "bg-emerald-500/10" : score >= 60 ? "bg-amber-500/10" : score >= 40 ? "bg-orange-500/10" : "bg-red-500/10";
+   131→
+   132→  return (
+   133→    <div className="flex flex-col items-center gap-2">
+   134→      <div className={`relative rounded-full ${bgColor} p-2`}>
+   135→        <svg width={size} height={size} className="-rotate-90">
+   136→          <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="currentColor" strokeWidth="6" className="text-muted/30" />
+   137→          <circle
+   138→            cx={size / 2}
+   139→            cy={size / 2}
+   140→            r={radius}
+   141→            fill="none"
+   142→            strokeWidth="6"
+   143→            strokeLinecap="round"
+   144→            className={`${strokeColor} transition-all duration-1000 ease-out`}
+   145→            strokeDasharray={circumference}
+   146→            strokeDashoffset={offset}
+   147→          />
+   148→        </svg>
+   149→        <span className={`absolute inset-0 flex items-center justify-center text-2xl font-bold ${color}`}>
+   150→          {score}
+   151→        </span>
+   152→      </div>
+   153→      <span className="text-xs font-medium text-muted-foreground text-center max-w-[100px]">{label}</span>
+   154→    </div>
+   155→  );
+   156→}
+   157→
+   158→function SeverityBadge({ severity }: { severity: string }) {
+   159→  const variants: Record<string, { className: string; icon: React.ReactNode }> = {
+   160→    CRITICAL: { className: "bg-red-500/15 text-red-600 border-red-500/30", icon: <XCircle className="h-3 w-3" /> },
+   161→    HIGH: { className: "bg-orange-500/15 text-orange-600 border-orange-500/30", icon: <AlertTriangle className="h-3 w-3" /> },
+   162→    MEDIUM: { className: "bg-amber-500/15 text-amber-600 border-amber-500/30", icon: <ShieldAlert className="h-3 w-3" /> },
+   163→    LOW: { className: "bg-blue-500/15 text-blue-600 border-blue-500/30", icon: <ShieldCheck className="h-3 w-3" /> },
+   164→  };
+   165→  const v = variants[severity] || variants.LOW;
+   166→  return (
+   167→    <Badge variant="outline" className={`${v.className} gap-1 text-[10px] font-semibold`}>
+   168→      {v.icon}
+   169→      {severity}
+   170→    </Badge>
+   171→  );
+   172→}
+   173→
+   174→function SourceBadge({ source }: { source: string }) {
+   175→  const colors: Record<string, string> = {
+   176→    Backend: "bg-violet-500/15 text-violet-600 border-violet-500/30",
+   177→    Frontend: "bg-cyan-500/15 text-cyan-600 border-cyan-500/30",
+   178→    "Pi Network": "bg-purple-500/15 text-purple-600 border-purple-500/30",
+   179→  };
+   180→  return (
+   181→    <Badge variant="outline" className={`${colors[source] || ""} text-[10px] font-semibold`}>
+   182→      {source}
+   183→    </Badge>
+   184→  );
+   185→}
+   186→
+   187→function CriticalIssueCard({ issue, index }: { issue: Issue; index: number }) {
+   188→  const [expanded, setExpanded] = useState(false);
+   189→
+   190→  const categoryColors: Record<string, string> = {
+   191→    "Hardcoded Secret": "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400",
+   192→    "Authentication Bypass": "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400",
+   193→    "Authorization Bypass": "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400",
+   194→    "XSS - Stored": "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400",
+   195→    "XSS - DOM": "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400",
+   196→    "Insecure Storage": "bg-pink-100 text-pink-800 dark:bg-pink-900/30 dark:text-pink-400",
+   197→    "Weak Cryptography": "bg-rose-100 text-rose-800 dark:bg-rose-900/30 dark:text-rose-400",
+   198→    "Runtime Crash": "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400",
+   199→    "Custodial Architecture": "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400",
+   200→    "postMessage Vulnerability": "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400",
+   201→    "Pi SDK Bug": "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400",
+   202→    "Supply Chain": "bg-violet-100 text-violet-800 dark:bg-violet-900/30 dark:text-violet-400",
+   203→    "Fake KYC": "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400",
+   204→    "Rate Limiting Bypass": "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400",
+   205→    "Domain Verification": "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400",
+   206→    Deployment: "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400",
+   207→  };
+   208→
+   209→  return (
+   210→    <div
+   211→      className={`border rounded-xl p-4 transition-all duration-300 hover:shadow-md ${
+   212→        index < 7
+   213→          ? "border-red-200 bg-red-50/50 dark:border-red-900/50 dark:bg-red-950/20"
+   214→          : "border-orange-200 bg-orange-50/50 dark:border-orange-900/50 dark:bg-orange-950/20"
+   215→      }`}
+   216→    >
+   217→      <div className="flex items-start gap-3">
+   218→        <div className="flex-shrink-0 mt-0.5">
+   219→          <div className="w-8 h-8 rounded-full bg-red-500/20 flex items-center justify-center">
+   220→            <span className="text-red-600 dark:text-red-400 font-bold text-xs">{index + 1}</span>
+   221→          </div>
+   222→        </div>
+   223→        <div className="flex-1 min-w-0">
+   224→          <div className="flex items-center gap-2 flex-wrap mb-1.5">
+   225→            <SeverityBadge severity="CRITICAL" />
+   226→            <SourceBadge source={issue.source} />
+   227→            <Badge
+   228→              variant="outline"
+   229→              className={`text-[10px] font-medium ${categoryColors[issue.category] || "bg-gray-100 text-gray-800"}`}
+   230→            >
+   231→              {issue.category}
+   232→            </Badge>
+   233→            {index < 7 && (
+   234→              <Badge className="bg-red-600 text-white text-[10px] animate-pulse">BLOCKS DEPLOYMENT</Badge>
+   235→            )}
+   236→          </div>
+   237→          <h4 className="font-semibold text-sm mb-1">{issue.title}</h4>
+   238→          <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
+   239→            <Code2 className="h-3 w-3" />
+   240→            <span className="font-mono">{issue.file}</span>
+   241→            {issue.line > 0 && <span>Line {issue.line}</span>}
+   242→          </div>
+   243→          <p className="text-xs text-muted-foreground leading-relaxed">{issue.description}</p>
+   244→          <button
+   245→            onClick={() => setExpanded(!expanded)}
+   246→            className="mt-2 text-xs text-primary hover:underline flex items-center gap-1"
+   247→          >
+   248→            {expanded ? (
+   249→              <>
+   250→                Hide Fix <ChevronUp className="h-3 w-3" />
+   251→              </>
+   252→            ) : (
+   253→              <>
+   254→                Show Fix <ChevronDown className="h-3 w-3" />
+   255→              </>
+   256→            )}
+   257→          </button>
+   258→          {expanded && (
+   259→            <div className="mt-2 p-3 bg-emerald-50 dark:bg-emerald-950/30 rounded-lg border border-emerald-200 dark:border-emerald-900/50">
+   260→              <p className="text-xs text-emerald-800 dark:text-emerald-300 flex items-start gap-2">
+   261→                <CheckCircle2 className="h-3.5 w-3.5 mt-0.5 flex-shrink-0" />
+   262→                {issue.recommendation}
+   263→              </p>
+   264→            </div>
+   265→          )}
+   266→        </div>
+   267→      </div>
+   268→    </div>
+   269→  );
+   270→}
+   271→
+   272→function IssueRow({ issue, severity }: { issue: IssueBrief; severity: string }) {
+   273→  return (
+   274→    <div className="flex items-center gap-3 py-2.5 px-3 rounded-lg hover:bg-muted/50 transition-colors">
+   275→      <code className="text-xs font-mono text-muted-foreground flex-shrink-0 w-36 truncate">{issue.file}</code>
+   276→      {issue.line > 0 && (
+   277→        <code className="text-xs font-mono text-muted-foreground/70 flex-shrink-0">:{issue.line}</code>
+   278→      )}
+   279→      <span className="text-xs text-muted-foreground flex-shrink-0 w-28 truncate">{issue.category}</span>
+   280→      <span className="text-xs font-medium truncate flex-1">{issue.title}</span>
+   281→      <SourceBadge source={issue.source} />
+   282→    </div>
+   283→  );
+   284→}
+   285→
+   286→function StatCard({
+   287→  icon: Icon,
+   288→  label,
+   289→  value,
+   290→  sub,
+   291→  color,
+   292→}: {
+   293→  icon: React.ElementType;
+   294→  label: string;
+   295→  value: string | number;
+   296→  sub?: string;
+   297→  color: string;
+   298→}) {
+   299→  return (
+   300→    <Card className="relative overflow-hidden">
+   301→      <CardContent className="p-4">
+   302→        <div className="flex items-center gap-3">
+   303→          <div className={`w-10 h-10 rounded-lg ${color} flex items-center justify-center`}>
+   304→            <Icon className="h-5 w-5 text-white" />
+   305→          </div>
+   306→          <div>
+   307→            <p className="text-2xl font-bold">{value}</p>
+   308→            <p className="text-xs text-muted-foreground">{label}</p>
+   309→            {sub && <p className="text-[10px] text-muted-foreground/70">{sub}</p>}
+   310→          </div>
+   311→        </div>
+   312→      </CardContent>
+   313→    </Card>
+   314→  );
+   315→}
+   316→
+   317→// ─── Main Page ───────────────────────────────────────────────────────────────
+   318→
+   319→export default function AuditDashboard() {
+   320→  const [report, setReport] = useState<AuditReport | null>(null);
+   321→  const [loading, setLoading] = useState(true);
+   322→  const [activeTab, setActiveTab] = useState("overview");
+   323→
+   324→  useEffect(() => {
+   325→    fetch("/api/audit")
+   326→      .then((r) => r.json())
+   327→      .then(setReport)
+   328→      .finally(() => setLoading(false));
+   329→  }, []);
+   330→
+   331→  const getScoreColor = useCallback((score: number) => {
+   332→    if (score >= 80) return "text-emerald-600";
+   333→    if (score >= 60) return "text-amber-600";
+   334→    if (score >= 40) return "text-orange-600";
+   335→    return "text-red-600";
+   336→  }, []);
+   337→
+   338→  const getScoreBg = useCallback((score: number) => {
+   339→    if (score >= 80) return "from-emerald-500 to-emerald-600";
+   340→    if (score >= 60) return "from-amber-500 to-amber-600";
+   341→    if (score >= 40) return "from-orange-500 to-orange-600";
+   342→    return "from-red-500 to-red-600";
+   343→  }, []);
+   344→
+   345→  if (loading) {
+   346→    return (
+   347→      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-950 dark:to-slate-900">
+   348→        <div className="flex flex-col items-center gap-4">
+   349→          <div className="w-12 h-12 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
+   350→          <p className="text-sm text-muted-foreground">Loading audit report...</p>
+   351→        </div>
+   352→      </div>
+   353→    );
+   354→  }
+   355→
+   356→  if (!report) return null;
+   357→
+   358→  return (
+   359→    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-950 dark:to-slate-900">
+   360→      {/* ── Header ──────────────────────────────────────────────────────────── */}
+   361→      <header className="sticky top-0 z-50 bg-white/80 dark:bg-slate-950/80 backdrop-blur-xl border-b">
+   362→        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
+   363→          <div className="flex items-center gap-3">
+   364→            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-red-500 to-red-600 flex items-center justify-center shadow-lg shadow-red-500/20">
+   365→              <ShieldX className="h-5 w-5 text-white" />
+   366→            </div>
+   367→            <div>
+   368→              <h1 className="text-lg font-bold leading-tight">Security Audit Report</h1>
+   369→              <p className="text-xs text-muted-foreground">
+   370→                {report.meta.projectName} • {new Date(report.meta.auditDate).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}
+   371→              </p>
+   372→            </div>
+   373→          </div>
+   374→          <div className="flex items-center gap-2">
+   375→            <Badge variant="outline" className="hidden sm:flex items-center gap-1 text-xs">
+   376→              <Github className="h-3 w-3" />
+   377→              {report.meta.totalFiles} files
+   378→            </Badge>
+   379→            <Badge variant="outline" className="hidden sm:flex items-center gap-1 text-xs">
+   380→              <Layers className="h-3 w-3" />
+   381→              {report.meta.totalLines} lines
+   382→            </Badge>
+   383→            <a href={report.meta.repository} target="_blank" rel="noopener noreferrer">
+   384→              <Button variant="outline" size="sm" className="gap-1.5 text-xs">
+   385→                <ExternalLink className="h-3 w-3" />
+   386→                GitHub
+   387→              </Button>
+   388→            </a>
+   389→          </div>
+   390→        </div>
+   391→      </header>
+   392→
+   393→      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
+   394→        {/* ── Verdict Banner ─────────────────────────────────────────────────── */}
+   395→        <div className={`rounded-2xl p-6 mb-6 bg-gradient-to-r ${getScoreBg(report.scores.overall)} text-white shadow-xl`}>
+   396→          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+   397→            <div className="flex items-center gap-4">
+   398→              <div className="w-16 h-16 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center">
+   399→                <ShieldX className="h-8 w-8" />
+   400→              </div>
+   401→              <div>
+   402→                <h2 className="text-2xl font-bold">NOT READY FOR DEPLOYMENT</h2>
+   403→                <p className="text-white/80 text-sm mt-1 max-w-xl">
+   404→                  This project has {report.summary.critical} critical vulnerabilities, {report.summary.blockingDeployment} blocking issues, 
+   405→                  and an overall score of {report.scores.overall}/100. Immediate action required before any production deployment.
+   406→                </p>
+   407→              </div>
+   408→            </div>
+   409→            <div className="text-right">
+   410→              <div className="text-5xl font-black">{report.scores.overall}</div>
+   411→              <div className="text-white/70 text-xs font-medium">OVERALL SCORE</div>
+   412→            </div>
+   413→          </div>
+   414→        </div>
+   415→
+   416→        {/* ── Stat Cards ─────────────────────────────────────────────────────── */}
+   417→        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+   418→          <StatCard
+   419→            icon={XCircle}
+   420→            label="Critical Issues"
+   421→            value={report.summary.critical}
+   422→            color="bg-red-500"
+   423→          />
+   424→          <StatCard
+   425→            icon={AlertTriangle}
+   426→            label="High Issues"
+   427→            value={report.summary.high}
+   428→            color="bg-orange-500"
+   429→          />
+   430→          <StatCard
+   431→            icon={ShieldAlert}
+   432→            label="Total Issues"
+   433→            value={report.summary.totalIssues}
+   434→            sub={`${report.summary.medium} medium • ${report.summary.low} low`}
+   435→            color="bg-amber-500"
+   436→          />
+   437→          <StatCard
+   438→            icon={Bug}
+   439→            label="Blocking Deploy"
+   440→            value={report.summary.blockingDeployment}
+   441→            color="bg-rose-500"
+   442→          />
+   443→        </div>
+   444→
+   445→        {/* ── Main Tabs ──────────────────────────────────────────────────────── */}
+   446→        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+   447→          <TabsList className="grid w-full grid-cols-5 h-auto p-1">
+   448→            <TabsTrigger value="overview" className="text-xs py-2 gap-1.5">
+   449→              <Gauge className="h-3.5 w-3.5 hidden sm:block" />
+   450→              Overview
+   451→            </TabsTrigger>
+   452→            <TabsTrigger value="critical" className="text-xs py-2 gap-1.5">
+   453→              <ShieldX className="h-3.5 w-3.5 hidden sm:block" />
+   454→              Critical
+   455→            </TabsTrigger>
+   456→            <TabsTrigger value="security" className="text-xs py-2 gap-1.5">
+   457→              <Lock className="h-3.5 w-3.5 hidden sm:block" />
+   458→              Security
+   459→            </TabsTrigger>
+   460→            <TabsTrigger value="architecture" className="text-xs py-2 gap-1.5">
+   461→              <LayoutGrid className="h-3.5 w-3.5 hidden sm:block" />
+   462→              Architecture
+   463→            </TabsTrigger>
+   464→            <TabsTrigger value="pi-network" className="text-xs py-2 gap-1.5">
+   465→              <Globe className="h-3.5 w-3.5 hidden sm:block" />
+   466→              Pi Network
+   467→            </TabsTrigger>
+   468→          </TabsList>
+   469→
+   470→          {/* ── Overview Tab ──────────────────────────────────────────────────── */}
+   471→          <TabsContent value="overview" className="space-y-6">
+   472→            {/* Score Dashboard */}
+   473→            <Card>
+   474→              <CardHeader className="pb-3">
+   475→                <CardTitle className="text-base flex items-center gap-2">
+   476→                  <BarChart3 className="h-4 w-4" />
+   477→                  Quality Scores
+   478→                </CardTitle>
+   479→              </CardHeader>
+   480→              <CardContent>
+   481→                <div className="grid grid-cols-2 md:grid-cols-5 gap-6">
+   482→                  <div className="flex flex-col items-center">
+   483→                    <ScoreRing score={report.scores.overall} label="Overall" size={110} />
+   484→                  </div>
+   485→                  <div className="flex flex-col items-center">
+   486→                    <ScoreRing score={report.scores.backend.overall} label="Backend" size={100} />
+   487→                  </div>
+   488→                  <div className="flex flex-col items-center">
+   489→                    <ScoreRing score={report.scores.frontend.overall} label="Frontend" size={100} />
+   490→                  </div>
+   491→                  <div className="flex flex-col items-center">
+   492→                    <ScoreRing score={report.scores.piNetwork.overall} label="Pi Network" size={100} />
+   493→                  </div>
+   494→                  <div className="flex flex-col items-center">
+   495→                    <ScoreRing score={report.scores.backend.security} label="Security" size={100} />
+   496→                  </div>
+   497→                </div>
+   498→              </CardContent>
+   499→            </Card>
+   500→
+   501→            {/* Detailed Scores Breakdown */}
+   502→            <div className="grid md:grid-cols-2 gap-4">
+   503→              <Card>
+   504→                <CardHeader className="pb-3">
+   505→                  <CardTitle className="text-sm flex items-center gap-2">
+   506→                    <Server className="h-4 w-4 text-violet-500" />
+   507→                    Backend Scores
+   508→                  </CardTitle>
+   509→                </CardHeader>
+   510→                <CardContent className="space-y-4">
+   511→                  {[
+   512→                    { label: "Code Quality", value: report.scores.backend.codeQuality },
+   513→                    { label: "Security", value: report.scores.backend.security },
+   514→                    { label: "Architecture", value: report.scores.backend.architecture },
+   515→                  ].map((item) => (
+   516→                    <div key={item.label} className="space-y-1.5">
+   517→                      <div className="flex justify-between text-xs">
+   518→                        <span className="text-muted-foreground">{item.label}</span>
+   519→                        <span className={`font-semibold ${getScoreColor(item.value)}`}>{item.value}/100</span>
+   520→                      </div>
+   521→                      <Progress value={item.value} className="h-2" />
+   522→                    </div>
+   523→                  ))}
+   524→                </CardContent>
+   525→              </Card>
+   526→
+   527→              <Card>
+   528→                <CardHeader className="pb-3">
+   529→                  <CardTitle className="text-sm flex items-center gap-2">
+   530→                    <Terminal className="h-4 w-4 text-cyan-500" />
+   531→                    Frontend Scores
+   532→                  </CardTitle>
+   533→                </CardHeader>
+   534→                <CardContent className="space-y-4">
+   535→                  {[
+   536→                    { label: "Code Quality", value: report.scores.frontend.codeQuality },
+   537→                    { label: "Security", value: report.scores.frontend.security },
+   538→                    { label: "Pi Compliance", value: report.scores.frontend.piCompliance },
+   539→                  ].map((item) => (
+   540→                    <div key={item.label} className="space-y-1.5">
+   541→                      <div className="flex justify-between text-xs">
+   542→                        <span className="text-muted-foreground">{item.label}</span>
+   543→                        <span className={`font-semibold ${getScoreColor(item.value)}`}>{item.value}/100</span>
+   544→                      </div>
+   545→                      <Progress value={item.value} className="h-2" />
+   546→                    </div>
+   547→                  ))}
+   548→                </CardContent>
+   549→              </Card>
+   550→            </div>
+   551→
+   552→            {/* Pi Network Scores */}
+   553→            <Card>
+   554→              <CardHeader className="pb-3">
+   555→                <CardTitle className="text-sm flex items-center gap-2">
+   556→                  <Globe className="h-4 w-4 text-purple-500" />
+   557→                  Pi Network Compliance Scores
+   558→                </CardTitle>
+   559→              </CardHeader>
+   560→              <CardContent>
+   561→                <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-3">
+   562→                  {Object.entries(report.scores.piNetwork)
+   563→                    .filter(([k]) => k !== "overall")
+   564→                    .map(([key, value]) => {
+   565→                      const labels: Record<string, string> = {
+   566→                        manifestCompliance: "Manifest",
+   567→                        domainVerification: "Domain Verify",
+   568→                        apiKeyManagement: "API Keys",
+   569→                        paymentFlow: "Payment Flow",
+   570→                        kycKyb: "KYC/KYB",
+   571→                        deploymentReadiness: "Deployment",
+   572→                        nonCustodial: "Non-Custodial",
+   573→                      };
+   574→                      return (
+   575→                        <div key={key} className="text-center">
+   576→                          <div
+   577→                            className={`text-2xl font-bold ${getScoreColor(value as number)}`}
+   578→                          >
+   579→                            {value as number}
+   580→                          </div>
+   581→                          <p className="text-[10px] text-muted-foreground mt-1">{labels[key]}</p>
+   582→                        </div>
+   583→                      );
+   584→                    })}
+   585→                </div>
+   586→              </CardContent>
+   587→            </Card>
+   588→
+   589→            {/* Top Recommendations */}
+   590→            <Card>
+   591→              <CardHeader className="pb-3">
+   592→                <CardTitle className="text-sm flex items-center gap-2">
+   593→                  <Target className="h-4 w-4 text-emerald-500" />
+   594→                  Top 10 Priority Actions
+   595→                </CardTitle>
+   596→                <CardDescription>Ordered by impact — fix these first to unblock deployment</CardDescription>
+   597→              </CardHeader>
+   598→              <CardContent>
+   599→                <div className="space-y-2">
+   600→                  {report.recommendations.slice(0, 10).map((rec, i) => (
+   601→                    <div
+   602→                      key={rec.priority}
+   603→                      className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-muted/50 transition-colors"
+   604→                    >
+   605→                      <div
+   606→                        className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white ${
+   607→                          rec.impact === "Critical"
+   608→                            ? "bg-red-500"
+   609→                            : rec.impact === "High"
+   610→                              ? "bg-orange-500"
+   611→                              : "bg-amber-500"
+   612→                        }`}
+   613→                      >
+   614→                        {i + 1}
+   615→                      </div>
+   616→                      <span className="text-sm font-medium flex-1">{rec.title}</span>
+   617→                      <Badge
+   618→                        variant="outline"
+   619→                        className={`text-[10px] ${
+   620→                          rec.effort === "Small"
+   621→                            ? "text-emerald-600 border-emerald-300"
+   622→                            : rec.effort === "Medium"
+   623→                              ? "text-amber-600 border-amber-300"
+   624→                              : "text-red-600 border-red-300"
+   625→                        }`}
+   626→                      >
+   627→                        {rec.effort}
+   628→                      </Badge>
+   629→                    </div>
+   630→                  ))}
+   631→                </div>
+   632→              </CardContent>
+   633→            </Card>
+   634→
+   635→            {/* Tech Stack */}
+   636→            <Card>
+   637→              <CardHeader className="pb-3">
+   638→                <CardTitle className="text-sm flex items-center gap-2">
+   639→                  <Cpu className="h-4 w-4" />
+   640→                  Project Tech Stack
+   641→                </CardTitle>
+   642→              </CardHeader>
+   643→              <CardContent>
+   644→                <div className="flex flex-wrap gap-2">
+   645→                  {report.meta.techStack.map((tech) => (
+   646→                    <Badge key={tech} variant="secondary" className="text-xs">
+   647→                      {tech}
+   648→                    </Badge>
+   649→                  ))}
+   650→                </div>
+   651→              </CardContent>
+   652→            </Card>
+   653→          </TabsContent>
+   654→
+   655→          {/* ── Critical Tab ─────────────────────────────────────────────────── */}
+   656→          <TabsContent value="critical" className="space-y-4">
+   657→            <Card className="border-red-200 dark:border-red-900/50">
+   658→              <CardHeader className="pb-3">
+   659→                <CardTitle className="text-base flex items-center gap-2 text-red-600">
+   660→                  <ShieldX className="h-4 w-4" />
+   661→                  {report.criticalFindings.length} Critical Vulnerabilities
+   662→                </CardTitle>
+   663→                <CardDescription>
+   664→                  These must be fixed immediately. The first 7 issues block Pi Network deployment entirely.
+   665→                </CardDescription>
+   666→              </CardHeader>
+   667→              <CardContent>
+   668→                <div className="space-y-3">
+   669→                  {report.criticalFindings.map((issue, i) => (
+   670→                    <CriticalIssueCard key={issue.id} issue={issue} index={i} />
+   671→                  ))}
+   672→                </div>
+   673→              </CardContent>
+   674→            </Card>
+   675→
+   676→            {/* High Issues */}
+   677→            <Card className="border-orange-200 dark:border-orange-900/50">
+   678→              <CardHeader className="pb-3">
+   679→                <CardTitle className="text-sm flex items-center gap-2 text-orange-600">
+   680→                  <AlertTriangle className="h-4 w-4" />
+   681→                  {report.highIssues.length} High Severity Issues
+   682→                </CardTitle>
+   683→              </CardHeader>
+   684→              <CardContent>
+   685→                <div className="space-y-0.5 divide-y">
+   686→                  {report.highIssues.map((issue) => (
+   687→                    <IssueRow key={issue.id} issue={issue} severity="HIGH" />
+   688→                  ))}
+   689→                </div>
+   690→              </CardContent>
+   691→            </Card>
+   692→
+   693→            {/* Medium Issues */}
+   694→            <Card className="border-amber-200 dark:border-amber-900/50">
+   695→              <CardHeader className="pb-3">
+   696→                <CardTitle className="text-sm flex items-center gap-2 text-amber-600">
+   697→                  <ShieldAlert className="h-4 w-4" />
+   698→                  {report.mediumIssues.length} Medium Severity Issues
+   699→                </CardTitle>
+   700→              </CardHeader>
+   701→              <CardContent>
+   702→                <div className="space-y-0.5 divide-y">
+   703→                  {report.mediumIssues.map((issue) => (
+   704→                    <IssueRow key={issue.id} issue={issue} severity="MEDIUM" />
+   705→                  ))}
+   706→                </div>
+   707→              </CardContent>
+   708→            </Card>
+   709→          </TabsContent>
+   710→
+   711→          {/* ── Security Tab ─────────────────────────────────────────────────── */}
+   712→          <TabsContent value="security" className="space-y-4">
+   713→            {/* Security Categories */}
+   714→            <div className="grid md:grid-cols-2 gap-4">
+   715→              <Card>
+   716→                <CardHeader className="pb-3">
+   717→                  <CardTitle className="text-sm flex items-center gap-2">
+   718→                    <Eye className="h-4 w-4 text-red-500" />
+   719→                    XSS Vulnerabilities
+   720→                  </CardTitle>
+   721→                </CardHeader>
+   722→                <CardContent>
+   723→                  <div className="space-y-2">
+   724→                    {[
+   725→                      "b2b.js - innerHTML merchant data injection",
+   726→                      "hardware.js - receipt HTML injection",
+   727→                      "invoice.js - addItem DOMPurify bypass",
+   728→                      "deep-linking.js - URL param injection",
+   729→                      "ui-utils.js - iframe with arbitrary src",
+   730→                      "ui-utils.js - Modal.prompt() HTML injection",
+   731→                      "security.js - DOMPurify fallback insufficient",
+   732→                      "shift-management.js - report innerHTML injection",
+   733→                      "audit-logs.js - double HTML encoding bug",
+   734→                    ].map((v, i) => (
+   735→                      <div key={i} className="flex items-center gap-2 text-xs py-1">
+   736→                        <XCircle className="h-3 w-3 text-red-500 flex-shrink-0" />
+   737→                        <span>{v}</span>
+   738→                      </div>
+   739→                    ))}
+   740→                  </div>
+   741→                </CardContent>
+   742→              </Card>
+   743→
+   744→              <Card>
+   745→                <CardHeader className="pb-3">
+   746→                  <CardTitle className="text-sm flex items-center gap-2">
+   747→                    <Lock className="h-4 w-4 text-orange-500" />
+   748→                    Authentication & Authorization
+   749→                  </CardTitle>
+   750→                </CardHeader>
+   751→                <CardContent>
+   752→                  <div className="space-y-2">
+   753→                    {[
+   754→                      "KYB middleware - unauthenticated requests pass through",
+   755→                      "SSE notifications - zero authentication required",
+   756→                      "Blockchain data - no merchant ownership check",
+   757→                      "Rate limiting - bypassed via User-Agent header",
+   758→                      "KYC - always returns fake completed status",
+   759→                      "Refund auth - browser confirm() only, no server check",
+   760→                      "Pi tokens - stored raw in memory and Redis",
+   761→                    ].map((v, i) => (
+   762→                      <div key={i} className="flex items-center gap-2 text-xs py-1">
+   763→                        <XCircle className="h-3 w-3 text-orange-500 flex-shrink-0" />
+   764→                        <span>{v}</span>
+   765→                      </div>
+   766→                    ))}
+   767→                  </div>
+   768→                </CardContent>
+   769→              </Card>
+   770→
+   771→              <Card>
+   772→                <CardHeader className="pb-3">
+   773→                  <CardTitle className="text-sm flex items-center gap-2">
+   774→                    <Zap className="h-4 w-4 text-amber-500" />
+   775→                    Cryptography Issues
+   776→                  </CardTitle>
+   777→                </CardHeader>
+   778→                <CardContent>
+   779→                  <div className="space-y-2">
+   780→                    {[
+   781→                      "Hardcoded signing secret: 'super_secret_signing_key_change_me'",
+   782→                      "SHA256 instead of HMAC for subscription signatures",
+   783→                      "Fallback mnemonic: 55 bits vs required 128 bits entropy",
+   784→                      "Static PBKDF2 salts (same for all users)",
+   785→                      "PIN stored as plaintext in IndexedDB",
+   786→                      "No SRI on CDN resources (Chart.js, QRious, Font Awesome)",
+   787→                      "Unpkg.com script loaded without integrity check",
+   788→                    ].map((v, i) => (
+   789→                      <div key={i} className="flex items-center gap-2 text-xs py-1">
+   790→                        <XCircle className="h-3 w-3 text-amber-500 flex-shrink-0" />
+   791→                        <span>{v}</span>
+   792→                      </div>
+   793→                    ))}
+   794→                  </div>
+   795→                </CardContent>
+   796→              </Card>
+   797→
+   798→              <Card>
+   799→                <CardHeader className="pb-3">
+   800→                  <CardTitle className="text-sm flex items-center gap-2">
+   801→                    <FileWarning className="h-4 w-4 text-violet-500" />
+   802→                    Insecure Storage & Data Handling
+   803→                  </CardTitle>
+   804→                </CardHeader>
+   805→                <CardContent>
+   806→                  <div className="space-y-2">
+   807→                    {[
+   808→                      "Transaction data in localStorage (unencrypted)",
+   809→                      "Stellar public key in localStorage (no integrity)",
+   810→                      "Merchant ID fallback to 'anonymous'",
+   811→                      "Offline sync queue in plain localStorage",
+   812→                      "Canvas fingerprinting for device ID",
+   813→                      "Payment URL exposed in alert() on error",
+   814→                      "Invoice ID uses Math.random() not crypto API",
+   815→                    ].map((v, i) => (
+   816→                      <div key={i} className="flex items-center gap-2 text-xs py-1">
+   817→                        <XCircle className="h-3 w-3 text-violet-500 flex-shrink-0" />
+   818→                        <span>{v}</span>
+   819→                      </div>
+   820→                    ))}
+   821→                  </div>
+   822→                </CardContent>
+   823→              </Card>
+   824→            </div>
+   825→          </TabsContent>
+   826→
+   827→          {/* ── Architecture Tab ─────────────────────────────────────────────── */}
+   828→          <TabsContent value="architecture" className="space-y-4">
+   829→            <div className="grid md:grid-cols-2 gap-4">
+   830→              {/* Architecture Problems */}
+   831→              <Card>
+   832→                <CardHeader className="pb-3">
+   833→                  <CardTitle className="text-sm flex items-center gap-2">
+   834→                    <LayoutGrid className="h-4 w-4 text-red-500" />
+   835→                    Architecture Problems
+   836→                  </CardTitle>
+   837→                </CardHeader>
+   838→                <CardContent className="space-y-3">
+   839→                  {report.architectureProblems.map((prob, i) => (
+   840→                    <div key={i} className="p-3 rounded-lg bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900/50">
+   841→                      <h4 className="text-sm font-semibold mb-1">{prob.title}</h4>
+   842→                      <p className="text-xs text-muted-foreground">{prob.description}</p>
+   843→                    </div>
+   844→                  ))}
+   845→                </CardContent>
+   846→              </Card>
+   847→
+   848→              {/* Largest Files */}
+   849→              <Card>
+   850→                <CardHeader className="pb-3">
+   851→                  <CardTitle className="text-sm flex items-center gap-2">
+   852→                    <BarChart3 className="h-4 w-4 text-orange-500" />
+   853→                    Largest Files (Code Smell)
+   854→                  </CardTitle>
+   855→                </CardHeader>
+   856→                <CardContent className="space-y-2.5">
+   857→                  {report.codeQuality.largestFiles.map((f) => {
+   858→                    const maxSize = report.codeQuality.largestFiles[0].size;
+   859→                    const pct = (f.size / maxSize) * 100;
+   860→                    return (
+   861→                      <div key={f.file} className="space-y-1">
+   862→                        <div className="flex justify-between items-center">
+   863→                          <code className="text-xs font-mono text-muted-foreground truncate max-w-[220px]">
+   864→                            {f.file}
+   865→                          </code>
+   866→                          <span className="text-[10px] text-muted-foreground">
+   867→                            {(f.size / 1024).toFixed(0)}KB • {f.lines} lines
+   868→                          </span>
+   869→                        </div>
+   870→                        <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+   871→                          <div
+   872→                            className="h-full bg-gradient-to-r from-orange-400 to-red-500 rounded-full transition-all duration-700"
+   873→                            style={{ width: `${pct}%` }}
+   874→                          />
+   875→                        </div>
+   876→                      </div>
+   877→                    );
+   878→                  })}
+   879→                </CardContent>
+   880→              </Card>
+   881→
+   882→              {/* TODOs and Incomplete Code */}
+   883→              <Card>
+   884→                <CardHeader className="pb-3">
+   885→                  <CardTitle className="text-sm flex items-center gap-2">
+   886→                    <FileWarning className="h-4 w-4 text-amber-500" />
+   887→                    TODO/FIXME & Incomplete Code
+   888→                  </CardTitle>
+   889→                </CardHeader>
+   890→                <CardContent className="space-y-2">
+   891→                  {report.codeQuality.todoFixme.map((todo, i) => (
+   892→                    <div key={i} className="flex items-start gap-2 text-xs p-2 rounded bg-amber-50 dark:bg-amber-950/20">
+   893→                      <code className="font-mono text-amber-700 dark:text-amber-400 flex-shrink-0 w-28 truncate">
+   894→                        {todo.file}
+   895→                      </code>
+   896→                      <span className="text-muted-foreground">{todo.text}</span>
+   897→                    </div>
+   898→                  ))}
+   899→                  <Separator className="my-2" />
+   900→                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">
+   901→                    Empty/Incomplete Files
+   902→                  </p>
+   903→                  {report.codeQuality.emptyFiles.map((f, i) => (
+   904→                    <div key={i} className="flex items-center gap-2 text-xs text-muted-foreground">
+   905→                      <XCircle className="h-3 w-3 text-red-400" />
+   906→                      {f}
+   907→                    </div>
+   908→                  ))}
+   909→                  {report.codeQuality.incompleteFiles.map((f, i) => (
+   910→                    <div key={i} className="flex items-center gap-2 text-xs text-muted-foreground">
+   911→                      <AlertTriangle className="h-3 w-3 text-amber-400" />
+   912→                      {f}
+   913→                    </div>
+   914→                  ))}
+   915→                </CardContent>
+   916→              </Card>
+   917→
+   918→              {/* All Recommendations */}
+   919→              <Card>
+   920→                <CardHeader className="pb-3">
+   921→                  <CardTitle className="text-sm flex items-center gap-2">
+   922→                    <Target className="h-4 w-4 text-emerald-500" />
+   923→                    All Recommendations ({report.recommendations.length})
+   924→                  </CardTitle>
+   925→                </CardHeader>
+   926→                <CardContent>
+   927→                  <ScrollArea className="h-[500px]">
+   928→                    <div className="space-y-1.5">
+   929→                      {report.recommendations.map((rec) => (
+   930→                        <div
+   931→                          key={rec.priority}
+   932→                          className="flex items-center gap-2 text-xs py-1.5 px-2 rounded hover:bg-muted/50"
+   933→                        >
+   934→                          <span className="w-5 text-center font-bold text-muted-foreground">{rec.priority}</span>
+   935→                          <ArrowRight className={`h-3 w-3 flex-shrink-0 ${
+   936→                            rec.impact === "Critical" ? "text-red-500" : rec.impact === "High" ? "text-orange-500" : "text-amber-500"
+   937→                          }`} />
+   938→                          <span className="flex-1 truncate">{rec.title}</span>
+   939→                          <Badge
+   940→                            variant="outline"
+   941→                            className={`text-[9px] flex-shrink-0 ${
+   942→                              rec.effort === "Small"
+   943→                                ? "text-emerald-600"
+   944→                                : rec.effort === "Medium"
+   945→                                  ? "text-amber-600"
+   946→                                  : "text-red-600"
+   947→                            }`}
+   948→                          >
+   949→                            {rec.effort}
+   950→                          </Badge>
+   951→                        </div>
+   952→                      ))}
+   953→                    </div>
+   954→                  </ScrollArea>
+   955→                </CardContent>
+   956→              </Card>
+   957→            </div>
+   958→          </TabsContent>
+   959→
+   960→          {/* ── Pi Network Tab ───────────────────────────────────────────────── */}
+   961→          <TabsContent value="pi-network" className="space-y-4">
+   962→            <div className="grid md:grid-cols-2 gap-4">
+   963→              {/* Blocking Issues */}
+   964→              <Card className="border-red-200 dark:border-red-900/50 md:col-span-2">
+   965→                <CardHeader className="pb-3">
+   966→                  <CardTitle className="text-base flex items-center gap-2 text-red-600">
+   967→                    <XCircle className="h-5 w-5" />
+   968→                    {report.piNetworkCompliance.blockingIssues.length} Blocking Issues
+   969→                  </CardTitle>
+   970→                  <CardDescription>
+   971→                    These issues must ALL be resolved before Pi Network will approve the app
+   972→                  </CardDescription>
+   973→                </CardHeader>
+   974→                <CardContent>
+   975→                  <div className="grid sm:grid-cols-2 gap-3">
+   976→                    {report.piNetworkCompliance.blockingIssues.map((issue, i) => (
+   977→                      <div
+   978→                        key={i}
+   979→                        className="flex items-start gap-3 p-3 rounded-lg bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900/50"
+   980→                      >
+   981→                        <XCircle className="h-4 w-4 text-red-500 mt-0.5 flex-shrink-0" />
+   982→                        <p className="text-sm">{issue}</p>
+   983→                      </div>
+   984→                    ))}
+   985→                  </div>
+   986→                </CardContent>
+   987→              </Card>
+   988→
+   989→              {/* Deployment Issues */}
+   990→              <Card>
+   991→                <CardHeader className="pb-3">
+   992→                  <CardTitle className="text-sm flex items-center gap-2">
+   993→                    <Server className="h-4 w-4 text-orange-500" />
+   994→                    Deployment Issues
+   995→                  </CardTitle>
+   996→                </CardHeader>
+   997→                <CardContent className="space-y-2">
+   998→                  {report.piNetworkCompliance.deploymentIssues.map((issue, i) => (
+   999→                    <div key={i} className="flex items-start gap-2 text-xs p-2 rounded bg-orange-50 dark:bg-orange-950/20">
+  1000→                      <AlertTriangle className="h-3.5 w-3.5 text-orange-500 mt-0.5 flex-shrink-0" />
+  1001→                      <span>{issue}</span>
+  1002→                    </div>
+  1003→                  ))}
+  1004→                </CardContent>
+  1005→              </Card>
+  1006→
+  1007→              {/* Security Headers */}
+  1008→              <Card>
+  1009→                <CardHeader className="pb-3">
+  1010→                  <CardTitle className="text-sm flex items-center gap-2">
+  1011→                    <ShieldAlert className="h-4 w-4 text-amber-500" />
+  1012→                    Missing Security Headers
+  1013→                  </CardTitle>
+  1014→                </CardHeader>
+  1015→                <CardContent className="space-y-2">
+  1016→                  {report.piNetworkCompliance.securityHeaders.map((issue, i) => (
+  1017→                    <div key={i} className="flex items-start gap-2 text-xs p-2 rounded bg-amber-50 dark:bg-amber-950/20">
+  1018→                      <AlertTriangle className="h-3.5 w-3.5 text-amber-500 mt-0.5 flex-shrink-0" />
+  1019→                      <span>{issue}</span>
+  1020→                    </div>
+  1021→                  ))}
+  1022→                </CardContent>
+  1023→              </Card>
+  1024→
+  1025→              {/* Manifest Issues */}
+  1026→              <Card className="md:col-span-2">
+  1027→                <CardHeader className="pb-3">
+  1028→                  <CardTitle className="text-sm flex items-center gap-2">
+  1029→                    <FileWarning className="h-4 w-4 text-violet-500" />
+  1030→                    Manifest Compliance Issues
+  1031→                  </CardTitle>
+  1032→                </CardHeader>
+  1033→                <CardContent className="space-y-2">
+  1034→                  {report.piNetworkCompliance.manifestIssues.map((issue, i) => (
+  1035→                    <div key={i} className="flex items-start gap-2 text-xs p-2 rounded bg-violet-50 dark:bg-violet-950/20">
+  1036→                      <AlertTriangle className="h-3.5 w-3.5 text-violet-500 mt-0.5 flex-shrink-0" />
+  1037→                      <span>{issue}</span>
+  1038→                    </div>
+  1039→                  ))}
+  1040→                </CardContent>
+  1041→              </Card>
+  1042→
+  1043→              {/* Non-Custodial Claim Analysis */}
+  1044→              <Card className="md:col-span-2 border-red-200 dark:border-red-900/50">
+  1045→                <CardHeader className="pb-3">
+  1046→                  <CardTitle className="text-sm flex items-center gap-2 text-red-600">
+  1047→                    <ShieldX className="h-4 w-4" />
+  1048→                    Non-Custodial Claim Verification
+  1049→                  </CardTitle>
+  1050→                </CardHeader>
+  1051→                <CardContent>
+  1052→                  <div className="p-4 rounded-xl bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900/50">
+  1053→                    <div className="flex items-start gap-3">
+  1054→                      <div className="w-10 h-10 rounded-full bg-red-100 dark:bg-red-900/50 flex items-center justify-center flex-shrink-0">
+  1055→                        <XCircle className="h-5 w-5 text-red-600" />
+  1056→                      </div>
+  1057→                      <div>
+  1058→                        <h4 className="font-semibold text-sm text-red-700 dark:text-red-400 mb-2">
+  1059→                          CLAIM IS FALSE — System is Fundamentally Custodial
+  1060→                        </h4>
+  1061→                        <p className="text-xs text-muted-foreground leading-relaxed mb-3">
+  1062→                          The README, SECURITY.md, and manifest all claim this is a &ldquo;non-custodial&rdquo; system. 
+  1063→                          However, the backend deterministically derives ALL user Stellar secret keys from 
+  1064→                          <code className="mx-1 px-1 py-0.5 bg-red-100 dark:bg-red-900/50 rounded text-red-700 dark:text-red-400 font-mono text-[10px]">
+  1065→                            SHA256(SECRET_KEY:UID)
+  1066→                          </code>
+  1067→                          and handles all transaction signing server-side. If the master secret leaks, 
+  1068→                          every user wallet on the platform is compromised. This is the definition of a custodial system.
+  1069→                        </p>
+  1070→                        <div className="flex flex-wrap gap-2">
+  1071→                          <Badge className="bg-red-100 text-red-700 text-[10px] border-red-200">FALSE CLAIM</Badge>
+  1072→                          <Badge className="bg-red-100 text-red-700 text-[10px] border-red-200">SECURITY BY OBSCURITY</Badge>
+  1073→                          <Badge className="bg-red-100 text-red-700 text-[10px] border-red-200">SINGLE POINT OF FAILURE</Badge>
+  1074→                        </div>
+  1075→                      </div>
+  1076→                    </div>
+  1077→                  </div>
+  1078→                </CardContent>
+  1079→              </Card>
+  1080→            </div>
+  1081→          </TabsContent>
+  1082→        </Tabs>
+  1083→      </main>
+  1084→
+  1085→      {/* ── Footer ──────────────────────────────────────────────────────────── */}
+  1086→      <footer className="mt-12 border-t bg-white/50 dark:bg-slate-950/50 backdrop-blur-sm">
+  1087→        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
+  1088→          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+  1089→            <div className="text-xs text-muted-foreground">
+  1090→              <p className="font-medium mb-1">Ledgererp Security Audit Report</p>
+  1091→              <p>Generated on {new Date(report.meta.auditDate).toLocaleString()}</p>
+  1092→              <p className="mt-1">
+  1093→                {report.meta.totalFiles} files analyzed • {report.meta.totalLines} lines of code • {report.summary.totalIssues} issues found
+  1094→              </p>
+  1095→            </div>
+  1096→            <div className="flex items-center gap-2">
+  1097→              <Badge variant="outline" className="text-xs gap-1">
+  1098→                <ShieldX className="h-3 w-3 text-red-500" />
+  1099→                {report.summary.critical} Critical
+  1100→              </Badge>
+  1101→              <Badge variant="outline" className="text-xs gap-1">
+  1102→                <AlertTriangle className="h-3 w-3 text-orange-500" />
+  1103→                {report.summary.high} High
+  1104→              </Badge>
+  1105→              <Badge variant="outline" className="text-xs gap-1">
+  1106→                <ShieldAlert className="h-3 w-3 text-amber-500" />
+  1107→                {report.summary.medium} Medium
+  1108→              </Badge>
+  1109→            </div>
+  1110→          </div>
+  1111→        </div>
+  1112→      </footer>
+  1113→    </div>
+  1114→  );
+  1115→}
