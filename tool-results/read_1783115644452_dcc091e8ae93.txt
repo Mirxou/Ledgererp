@@ -1,0 +1,2002 @@
+     1→/**
+     2→ * Invoice Module - Create Invoice Workflow
+     3→ * Handles invoice creation, split payment calculation, and QR code generation
+     4→ */
+     5→import QRious from 'https://esm.sh/qrious@4.0.2';
+     6→import dbManager from './db.js';
+     7→import securityManager from './security.js';
+     8→import piAdapter from './pi-adapter.js';
+     9→
+    10→// Exchange Rates
+    11→// Exchange Rates
+    12→// RATE_MARKET_TEST removed for production
+    13→
+    14→const RATE_GCV = 314159.0; // $314,159 = 1 Pi (Global Consensus Value)
+    15→
+    16→/**
+    17→ * Format Pi amount with dynamic precision
+    18→ * If value >= 1: show 2 decimals (e.g., 10.50)
+    19→ * If value < 1: show up to 7 decimals (e.g., 0.0000015)
+    20→ * VALIDATION: Handles null, undefined, NaN, and invalid values
+    21→ */
+    22→function formatPiAmount(value) {
+    23→    // VALIDATION FIX: Check for null, undefined, NaN, or invalid values
+    24→    if (value === null || value === undefined || isNaN(value) || !isFinite(value)) {
+    25→        return '0';
+    26→    }
+    27→
+    28→    // Ensure value is a number
+    29→    const numValue = Number(value);
+    30→    if (isNaN(numValue) || !isFinite(numValue)) {
+    31→        return '0';
+    32→    }
+    33→
+    34→    if (numValue >= 1) {
+    35→        return numValue.toFixed(2);
+    36→    } else {
+    37→        // For values < 1, show up to 7 decimal places, removing trailing zeros
+    38→        const formatted = numValue.toFixed(7);
+    39→        return formatted.replace(/\.?0+$/, ''); // Remove trailing zeros
+    40→    }
+    41→}
+    42→
+    43→class InvoiceManager {
+    44→    constructor() {
+    45→        this.modal = null;
+    46→        this.items = [];
+    47→        this.useGCV = false;
+    48→        // REAL PRODUCTION: Use global market price or 0 if not yet loaded
+    49→        this.exchangeRate = typeof window.piMarketPrice !== 'undefined' ? window.piMarketPrice : 0;
+    50→        // If price is 0, we will try to fetch it or wait for ticker
+    51→
+    52→        this.editingInvoiceId = null; // Track if we're editing an invoice
+    53→        this.currentInvoiceId = null; // Track current invoice ID (for QR generation)
+    54→        this.pendingPayment = null; // HACKATHON 2025: Store payment for Pi.createPayment() (Blind_Lounge pattern)
+    55→        // PERFORMANCE FIX: Debounce timer for calculateTotals
+    56→        this.calculateTotalsDebounceTimer = null;
+    57→        // MEMORY LEAK FIX: Store event listeners and timeouts for cleanup
+    58→        this.popstateListener = null;
+    59→        this.modalClickListener = null;
+    60→        this.setupTimeoutId = null;
+    61→        this.calculateCloseModalTimeoutId = null;
+    62→        this.currencies = ['PI', 'USDC', 'USD'];
+    63→        this.currentCurrency = 'PI';
+    64→        this.usdcRate = 1.0; // 1 USDC = $1 (Stablecoin)
+    65→    }
+    66→
+    67→    /**
+    68→     * STATE MANAGEMENT FIX: Helper method to get dbManager consistently
+    69→     */
+    70→    _getDbManager() {
+    71→        return window.dbManager || dbManager;
+    72→    }
+    73→
+    74→    /**
+    75→     * STATE MANAGEMENT FIX: Helper method to get securityManager consistently
+    76→     */
+    77→    _getSecurityManager() {
+    78→        return window.securityManager || securityManager;
+    79→    }
+    80→
+    81→    /**
+    82→     * Get wallet address from merchant data
+    83→     * SECURITY FIX: Get wallet from database instead of hardcoded value
+    84→     */
+    85→    async _getWalletAddress(merchantId) {
+    86→        try {
+    87→            const currentDbManager = this._getDbManager();
+    88→            if (!currentDbManager || !merchantId) {
+    89→                throw new Error('Merchant wallet address not available');
+    90→            }
+    91→
+    92→            const merchant = await currentDbManager.getMerchant(merchantId);
+    93→            if (merchant && merchant.walletAddress) {
+    94→                return merchant.walletAddress;
+    95→            }
+    96→
+    97→            // Wallet address not found - should not happen in production
+    98→            console.error('Merchant wallet address not found!');
+    99→            throw new Error('Merchant wallet address not configured. Please set up your wallet address.');
+   100→        } catch (error) {
+   101→            console.error('Error getting wallet address:', error);
+   102→            throw error;
+   103→        }
+   104→    }
+   105→
+   106→    /**
+   107→     * Initialize invoice manager
+   108→     */
+   109→    async initialize() {
+   110→        this.modal = document.getElementById('invoice-modal');
+   111→        if (!this.modal) {
+   112→            console.error('Invoice modal not found');
+   113→            return;
+   114→        }
+   115→
+   116→        // Setup event listeners
+   117→        this.setupEventListeners();
+   118→
+   119→        // Initialize exchange rate (default to GCV)
+   120→        this.useGCV = true;
+   121→        this.exchangeRate = RATE_GCV;
+   122→        this.currentCurrency = 'PI';
+   123→
+   124→        // Setup currency selector
+   125→        const currencySelector = document.getElementById('invoice-currency-selector');
+   126→        if (currencySelector) {
+   127→            currencySelector.addEventListener('change', (e) => {
+   128→                this.currentCurrency = e.target.value;
+   129→                this.calculateTotals();
+   130→            });
+   131→        }
+   132→    }
+   133→
+   134→    /**
+   135→     * Setup event listeners for modal
+   136→     */
+   137→    setupEventListeners() {
+   138→        // Close modal buttons
+   139→        const closeBtn = document.getElementById('close-modal-btn');
+   140→        const cancelBtn = document.getElementById('cancel-invoice-btn');
+   141→
+   142→        if (closeBtn) {
+   143→            closeBtn.addEventListener('click', () => this.closeModal());
+   144→        }
+   145→        if (cancelBtn) {
+   146→            cancelBtn.addEventListener('click', () => this.closeModal());
+   147→        }
+   148→
+   149→        // Add item button
+   150→        const addItemBtn = document.getElementById('add-item-btn');
+   151→        if (addItemBtn) {
+   152→            addItemBtn.addEventListener('click', () => this.addItem());
+   153→        }
+   154→
+   155→        // Scan Barcode button (Req #34)
+   156→        const scanBarcodeBtn = document.getElementById('scan-barcode-btn');
+   157→        if (scanBarcodeBtn && window.hardwareManager) {
+   158→            // ERROR HANDLING FIX: Add proper error handling for async operation
+   159→            scanBarcodeBtn.addEventListener('click', async () => {
+   160→                try {
+   161→                    await this.scanBarcode();
+   162→                } catch (error) {
+   163→                    console.error('Error scanning barcode:', error);
+   164→                    if (window.Toast) {
+   165→                        Toast.error('Failed to scan barcode: ' + (error.message || 'Unknown error'));
+   166→                    }
+   167→                }
+   168→            });
+   169→        }
+   170→
+   171→        // Exchange Rate Radio Buttons
+   172→        const rateGCV = document.getElementById('rate-gcv');
+   173→        const rateCustom = document.getElementById('rate-custom');
+   174→        const customRateInput = document.getElementById('custom-rate-input');
+   175→
+   176→        if (rateGCV) {
+   177→            rateGCV.addEventListener('change', () => {
+   178→                this.useGCV = true;
+   179→                this.exchangeRate = RATE_GCV;
+   180→                if (customRateInput) customRateInput.disabled = true;
+   181→                this.calculateTotals();
+   182→            });
+   183→        }
+   184→
+   185→        if (rateCustom) {
+   186→            rateCustom.addEventListener('change', () => {
+   187→                this.useGCV = false;
+   188→                if (customRateInput) {
+   189→                    customRateInput.disabled = false;
+   190→                    this.exchangeRate = parseFloat(customRateInput.value) || (typeof window.piMarketPrice !== 'undefined' ? window.piMarketPrice : 0);
+   191→                }
+   192→                this.calculateTotals();
+   193→            });
+   194→        }
+   195→
+   196→        if (customRateInput) {
+   197→            customRateInput.addEventListener('input', () => {
+   198→                if (!this.useGCV) {
+   199→                    this.exchangeRate = parseFloat(customRateInput.value) || 0;
+   200→                    this.debouncedCalculateTotals();
+   201→                }
+   202→            });
+   203→        }
+   204→
+   205→        // Cash Paid Input
+   206→        const cashPaidInput = document.getElementById('cash-paid-input');
+   207→        if (cashPaidInput) {
+   208→            // PERFORMANCE FIX: Debounce calculateTotals to avoid excessive recalculations on every keystroke
+   209→            cashPaidInput.addEventListener('input', () => this.debouncedCalculateTotals());
+   210→        }
+   211→
+   212→        // Save Draft button
+   213→        const saveDraftBtn = document.getElementById('btn-save-draft');
+   214→        if (saveDraftBtn) {
+   215→            saveDraftBtn.addEventListener('click', () => this.saveDraft());
+   216→        }
+   217→
+   218→        // Generate QR button
+   219→        const generateQRBtn = document.getElementById('btn-generate-qr');
+   220→        if (generateQRBtn) {
+   221→            generateQRBtn.addEventListener('click', () => this.generatePaymentQR());
+   222→        }
+   223→
+   224→        // Print Receipt button (Req #34)
+   225→        const printReceiptBtn = document.getElementById('btn-print-receipt');
+   226→        if (printReceiptBtn) {
+   227→            printReceiptBtn.addEventListener('click', () => this.printReceipt());
+   228→        }
+   229→
+   230→        // Copy Link for Chat button (Chat Integration)
+   231→        const copyLinkBtn = document.getElementById('btn-copy-link');
+   232→        if (copyLinkBtn) {
+   233→            copyLinkBtn.addEventListener('click', () => this.copyInvoiceLinkForChat());
+   234→        }
+   235→
+   236→        // Form submit (legacy support)
+   237→        const form = document.getElementById('invoice-form');
+   238→        if (form) {
+   239→            form.addEventListener('submit', (e) => {
+   240→                e.preventDefault();
+   241→                this.saveDraft(); // Default to save draft on form submit
+   242→            });
+   243→        }
+   244→
+   245→        // Close modal when clicking outside
+   246→        // MEMORY LEAK FIX: Store listener for cleanup
+   247→        if (this.modal) {
+   248→            this.modalClickListener = (e) => {
+   249→                if (e.target === this.modal) {
+   250→                    this.closeModal();
+   251→                }
+   252→            };
+   253→            this.modal.addEventListener('click', this.modalClickListener);
+   254→        }
+   255→    }
+   256→
+   257→    /**
+   258→     * Open invoice modal
+   259→     */
+   260→    /**
+   261→     * Open invoice modal
+   262→     * @param {boolean} clearCurrentInvoice - If true, clears currentInvoiceId to start fresh
+   263→     */
+   264→    openModal(clearCurrentInvoice = false) {
+   265→        if (!this.modal) {
+   266→            console.error('Modal not initialized');
+   267→            return;
+   268→        }
+   269→
+   270→        // Clear current invoice ID if explicitly requested
+   271→        if (clearCurrentInvoice) {
+   272→            this.currentInvoiceId = null;
+   273→            console.log('🆕 Starting new invoice (cleared currentInvoiceId)');
+   274→        }
+   275→
+   276→        // Reset form if needed - BUT skip if editing (editingInvoiceId is set)
+   277→        // FIX: Don't reset form when editing - it will be populated after modal opens
+   278→        if (!this.editingInvoiceId && !this.currentInvoiceId) {
+   279→            this.resetForm();
+   280→            this.addItem();
+   281→        } else if (this.editingInvoiceId) {
+   282→            console.log('✏️ Editing invoice:', this.editingInvoiceId, '- skipping form reset');
+   283→            // Don't reset form - it will be populated with invoice data after modal opens
+   284→        } else if (this.currentInvoiceId) {
+   285→            console.log('📝 Continuing with existing invoice:', this.currentInvoiceId);
+   286→        }
+   287→
+   288→        // Push history state for Back button support
+   289→        if (!this.isInvoiceOpen) {
+   290→            history.pushState({ invoiceOpen: true }, '', '#invoice');
+   291→            this.isInvoiceOpen = true;
+   292→        }
+   293→
+   294→        // Show modal with animation
+   295→        // FIX: Ensure modal content is visible
+   296→        this.modal.showModal();
+   297→        this.modal.classList.add('slide-up-enter');
+   298→
+   299→        // FIX: Ensure modal content has proper styling
+   300→        const modalContent = this.modal.querySelector('.modal-content');
+   301→        if (modalContent) {
+   302→            modalContent.style.display = 'block';
+   303→            modalContent.style.background = 'var(--modal-bg, #fff)';
+   304→            modalContent.style.color = 'var(--text-color, #333)';
+   305→        }
+   306→
+   307→        // Remove animation class after it completes
+   308→        // MEMORY LEAK FIX: Store timeout ID for cleanup
+   309→        if (this.setupTimeoutId) {
+   310→            clearTimeout(this.setupTimeoutId);
+   311→        }
+   312→        this.setupTimeoutId = setTimeout(() => {
+   313→            this.modal.classList.remove('slide-up-enter');
+   314→            this.setupTimeoutId = null;
+   315→        }, 300);
+   316→
+   317→        // Bind popstate listener if not already done
+   318→        if (!this.popstateListener) {
+   319→            this.popstateListener = (event) => {
+   320→                // If back button hit and we are open, close
+   321→                if (this.isInvoiceOpen) {
+   322→                    this.closeModal(true); // true = from history
+   323→                }
+   324→            };
+   325→            window.addEventListener('popstate', this.popstateListener);
+   326→        }
+   327→    }
+   328→
+   329→    /**
+   330→     * Close invoice modal
+   331→     * @param {boolean} isHistoryEvent - true if closed by browser back button
+   332→     */
+   333→    closeModal(isHistoryEvent = false) {
+   334→        // MEMORY LEAK FIX: Clear existing timeout before setting new one
+   335→        if (this.closeModalTimeoutId) {
+   336→            clearTimeout(this.closeModalTimeoutId);
+   337→        }
+   338→
+   339→        if (this.modal) {
+   340→            // Animate exit
+   341→            this.modal.classList.add('slide-down-exit');
+   342→
+   343→            // Wait for animation to finish before native close
+   344→            this.closeModalTimeoutId = setTimeout(() => {
+   345→                this.modal.close();
+   346→                this.modal.classList.remove('slide-down-exit');
+   347→                this.closeModalTimeoutId = null;
+   348→            }, 250);
+   349→        }
+   350→
+   351→        // Reset button visibility
+   352→        const saveDraftBtn = document.getElementById('btn-save-draft');
+   353→        const generateQRBtn = document.getElementById('btn-generate-qr');
+   354→        if (saveDraftBtn) saveDraftBtn.style.display = '';
+   355→        if (generateQRBtn) generateQRBtn.style.display = '';
+   356→
+   357→        // Re-enable inputs
+   358→        const customerNameInput = document.getElementById('customer-name');
+   359→        if (customerNameInput) customerNameInput.disabled = false;
+   360→
+   361→        this.resetForm();
+   362→        this.editingInvoiceId = null;
+   363→        this.currentInvoiceId = null;
+   364→
+   365→        // MEMORY LEAK FIX: Remove popstate listener when modal closes
+   366→        if (this.popstateListener) {
+   367→            window.removeEventListener('popstate', this.popstateListener);
+   368→            this.popstateListener = null;
+   369→        }
+   370→
+   371→        // MEMORY LEAK FIX: Remove modal click listener
+   372→        if (this.modal && this.modalClickListener) {
+   373→            this.modal.removeEventListener('click', this.modalClickListener);
+   374→            this.modalClickListener = null;
+   375→        }
+   376→
+   377→        // Handle History State
+   378→        // If closed via UI (X btn), we must pop the history state manually
+   379→        // to keep browser history clean.
+   380→        if (!isHistoryEvent && this.isInvoiceOpen) {
+   381→            if (history.state && history.state.invoiceOpen) {
+   382→                history.back();
+   383→            }
+   384→        }
+   385→        this.isInvoiceOpen = false;
+   386→    }
+   387→
+   388→    /**
+   389→     * Reset form to initial state
+   390→     */
+   391→    resetForm() {
+   392→        this.items = [];
+   393→        // XSS FIX: Use textContent = '' or removeChild for safe clearing
+   394→        const itemsList = document.getElementById('items-list');
+   395→        if (itemsList) {
+   396→            // Safe: clearing innerHTML with empty string is safe
+   397→            itemsList.innerHTML = '';
+   398→        }
+   399→
+   400→        const customerName = document.getElementById('customer-name');
+   401→        if (customerName) {
+   402→            customerName.value = '';
+   403→        }
+   404→
+   405→        const externalRefInput = document.getElementById('external-ref-input');
+   406→        if (externalRefInput) {
+   407→            externalRefInput.value = '';
+   408→        }
+   409→
+   410→        const cashPaidInput = document.getElementById('cash-paid-input');
+   411→        if (cashPaidInput) {
+   412→            cashPaidInput.value = '0';
+   413→        }
+   414→
+   415→        // Reset exchange rate to default (Real Market Price)
+   416→        const rateGCV = document.getElementById('rate-gcv');
+   417→        const rateCustom = document.getElementById('rate-custom');
+   418→        const customRateInput = document.getElementById('custom-rate-input');
+   419→
+   420→        if (rateGCV) rateGCV.checked = false;
+   421→        if (rateCustom) rateCustom.checked = true;
+   422→
+   423→        // Use current real global price if available
+   424→        const currentRealPrice = typeof window.piMarketPrice !== 'undefined' ? window.piMarketPrice : 0;
+   425→
+   426→        if (customRateInput) {
+   427→            customRateInput.value = currentRealPrice > 0 ? currentRealPrice : '';
+   428→            customRateInput.disabled = false;
+   429→        }
+   430→        this.useGCV = false;
+   431→        this.exchangeRate = currentRealPrice;
+   432→
+   433→        // Clear editing state
+   434→        this.editingInvoiceId = null;
+   435→
+   436→        const qrContainer = document.getElementById('qr-container');
+   437→        if (qrContainer) {
+   438→            qrContainer.style.display = 'none';
+   439→        }
+   440→
+   441→        this.calculateTotals();
+   442→    }
+   443→
+   444→    /**
+   445→     * Add new item row
+   446→     * @param {string} name - Item name (optional)
+   447→     * @param {number} pricePi - Item price in Pi (optional)
+   448→     * @param {number} qty - Item quantity (optional, defaults to 1)
+   449→     */
+   450→    addItem(name = '', pricePi = 0, qty = 1) {
+   451→        const itemsList = document.getElementById('items-list');
+   452→        if (!itemsList) return;
+   453→
+   454→        // COLLISION FIX: Use timestamp + random to prevent ID collisions
+   455→        const itemId = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+   456→        const itemDiv = document.createElement('div');
+   457→        itemDiv.className = 'item-row';
+   458→        itemDiv.style.cssText = 'display: flex; gap: 10px; margin-bottom: 10px; align-items: center;';
+   459→        itemDiv.dataset.itemId = itemId;
+   460→
+   461→        // XSS FIX: Sanitize user input before using in innerHTML
+   462→        const sanitizedName = typeof DOMPurify !== 'undefined' ? DOMPurify.sanitize(name || '') : (name || '');
+   463→        const sanitizedPrice = pricePi || '';
+   464→
+   465→        itemDiv.innerHTML = `
+   466→            <input type="text" class="item-name" placeholder="Item name" value="${sanitizedName}"
+   467→                   style="flex: 2; padding: 8px; border: 1px solid #ddd; border-radius: 5px;">
+   468→            <div style="flex: 1; display: flex; align-items: center; gap: 5px; padding: 0 5px;">
+   469→                <input type="number" class="item-price" placeholder="Price (π)" step="any" min="0" value="${sanitizedPrice}"
+   470→                       style="flex: 1; padding: 8px; border: 1px solid #ddd; border-radius: 5px;">
+   471→                <span style="color: #9c27b0; font-weight: bold; font-size: 16px;">π</span>
+   472→            </div>
+   473→            <input type="number" class="item-qty" placeholder="Qty" min="1" value="${qty || 1}"
+   474→                   style="flex: 1; padding: 8px; border: 1px solid #ddd; border-radius: 5px;">
+   475→            <button type="button" class="remove-item-btn" style="padding: 8px 15px; background: #f44336; color: white; border: none; border-radius: 5px; cursor: pointer;">
+   476→                Remove
+   477→            </button>
+   478→        `;
+   479→
+   480→        itemsList.appendChild(itemDiv);
+   481→
+   482→        // Add event listeners for this item
+   483→        const priceInput = itemDiv.querySelector('.item-price');
+   484→        const qtyInput = itemDiv.querySelector('.item-qty');
+   485→        const removeBtn = itemDiv.querySelector('.remove-item-btn');
+   486→
+   487→        if (priceInput) {
+   488→            // PERFORMANCE FIX: Debounce calculateTotals for better performance
+   489→            priceInput.addEventListener('input', () => this.debouncedCalculateTotals());
+   490→        }
+   491→        if (qtyInput) {
+   492→            // PERFORMANCE FIX: Debounce calculateTotals for better performance
+   493→            qtyInput.addEventListener('input', () => this.debouncedCalculateTotals());
+   494→        }
+   495→        if (removeBtn) {
+   496→            removeBtn.addEventListener('click', () => {
+   497→                itemDiv.remove();
+   498→                this.calculateTotals();
+   499→            });
+   500→        }
+   501→    }
+   502→
+   503→    /**
+   504→     * PERFORMANCE FIX: Debounced version of calculateTotals
+   505→     * Prevents excessive recalculations during rapid input changes
+   506→     */
+   507→    debouncedCalculateTotals() {
+   508→        if (this.calculateTotalsDebounceTimer) {
+   509→            clearTimeout(this.calculateTotalsDebounceTimer);
+   510→        }
+   511→        this.calculateTotalsDebounceTimer = setTimeout(() => {
+   512→            this.calculateTotals();
+   513→        }, 150); // 150ms delay - good balance between responsiveness and performance
+   514→    }
+   515→
+   516→    /**
+   517→     * Calculate totals based on Pi-First logic
+   518→     * Formula: (Total Items Pi - Cash Paid Pi Equivalent) + 0.01 Network Fee
+   519→     */
+   520→    calculateTotals() {
+   521→        // Get all items (prices are in Pi)
+   522→        const itemRows = document.querySelectorAll('.item-row');
+   523→        let totalItemsPi = 0;
+   524→
+   525→        itemRows.forEach(row => {
+   526→            const priceInput = row.querySelector('.item-price');
+   527→            const qtyInput = row.querySelector('.item-qty');
+   528→
+   529→            // VALIDATION FIX: Ensure parseFloat/parseInt return valid numbers
+   530→            const pricePi = parseFloat(priceInput?.value || 0) || 0;
+   531→            const qty = parseInt(qtyInput?.value || 1) || 1;
+   532→
+   533→            // VALIDATION FIX: Check for NaN or Infinity before adding
+   534→            if (isFinite(pricePi) && isFinite(qty) && pricePi >= 0 && qty > 0) {
+   535→                totalItemsPi += pricePi * qty;
+   536→            }
+   537→        });
+   538→
+   539→        // Get cash paid (in Fiat)
+   540→        const cashPaidInput = document.getElementById('cash-paid-input');
+   541→        // VALIDATION FIX: Ensure parseFloat returns a valid number
+   542→        const cashPaidFiat = parseFloat(cashPaidInput?.value || 0) || 0;
+   543→
+   544→        // Convert cash paid to Pi equivalent
+   545→        // VALIDATION FIX: Prevent division by zero or invalid exchange rate
+   546→        if (!this.exchangeRate || this.exchangeRate <= 0 || !isFinite(this.exchangeRate)) {
+   547→            console.warn('Invalid exchange rate detected:', this.exchangeRate, '- Using default global price');
+   548→            this.exchangeRate = typeof window.piMarketPrice !== 'undefined' ? window.piMarketPrice : 0; // Fallback to global
+   549→        }
+   550→        const cashPaidPi = cashPaidFiat / this.exchangeRate;
+   551→
+   552→        // Calculate subtotal (after cash deduction)
+   553→        const subtotalPi = Math.max(0, totalItemsPi - cashPaidPi); // Ensure non-negative
+   554→
+   555→        // Add network fee
+   556→        const totalPiWithFee = subtotalPi + 0.01;
+   557→
+   558→        // Calculate Fiat equivalent for tax purposes only
+   559→        const totalFiatEquivalent = totalItemsPi * this.exchangeRate;
+   560→
+   561→        // Update UI with proper formatting
+   562→        const totalItemsPiEl = document.getElementById('total-items-pi');
+   563→        const cashDeductionPiEl = document.getElementById('cash-deduction-pi');
+   564→        const cashPaidPiEquivalentEl = document.getElementById('cash-paid-pi-equivalent');
+   565→        const subtotalPiEl = document.getElementById('subtotal-pi');
+   566→        const totalPiWithFeeEl = document.getElementById('total-pi-with-fee');
+   567→        const totalFiatEl = document.getElementById('total-fiat');
+   568→
+   569→        // Currency Formatting helper
+   570→        const formatAmount = (val) => {
+   571→            if (this.currentCurrency === 'PI') return formatPiAmount(val);
+   572→            return val.toFixed(2);
+   573→        };
+   574→        const currencySymbol = this.currentCurrency === 'PI' ? 'π' : (this.currentCurrency === 'USD' ? '$' : 'USDC ');
+   575→
+   576→        const formattedTotal = formatPiAmount(totalPiWithFee);
+   577→
+   578→        if (totalItemsPiEl) {
+   579→            totalItemsPiEl.textContent = `π${formattedTotalItems}`;
+   580→        }
+   581→
+   582→        if (cashDeductionPiEl) {
+   583→            cashDeductionPiEl.textContent = `-π${formattedCashDeduction}`;
+   584→        }
+   585→
+   586→        if (cashPaidPiEquivalentEl) {
+   587→            cashPaidPiEquivalentEl.textContent = `-π${formattedCashDeduction}`;
+   588→        }
+   589→
+   590→        if (subtotalPiEl) {
+   591→            subtotalPiEl.textContent = `π${formattedSubtotal}`;
+   592→        }
+   593→
+   594→        if (totalPiWithFeeEl) {
+   595→            totalPiWithFeeEl.textContent = `π${formattedTotal}`;
+   596→        }
+   597→
+   598→        // Fiat equivalent (for tax purposes only)
+   599→        if (totalFiatEl) {
+   600→            // VALIDATION FIX: Check for NaN or Infinity before formatting
+   601→            const fiatValue = isFinite(totalFiatEquivalent) ? totalFiatEquivalent : 0;
+   602→            totalFiatEl.textContent = `$${fiatValue.toFixed(2)}`;
+   603→        }
+   604→    }
+   605→
+   606→    /**
+   607→     * Save invoice as draft (without generating QR)
+   608→     */
+   609→    async saveDraft() {
+   610→        try {
+   611→            // Validate inputs
+   612→            const customerName = document.getElementById('customer-name')?.value.trim();
+   613→            if (!customerName) {
+   614→                Toast.warning('Please enter customer name');
+   615→                return;
+   616→            }
+   617→
+   618→            // Get items (prices are in Pi)
+   619→            const itemRows = document.querySelectorAll('.item-row');
+   620→            const items = [];
+   621→            let totalItemsPi = 0;
+   622→
+   623→            itemRows.forEach(row => {
+   624→                const nameInput = row.querySelector('.item-name');
+   625→                const priceInput = row.querySelector('.item-price');
+   626→                const qtyInput = row.querySelector('.item-qty');
+   627→
+   628→                const name = nameInput?.value?.trim() || '';
+   629→                // VALIDATION FIX: Ensure parseFloat/parseInt return valid numbers
+   630→                const pricePi = parseFloat(priceInput?.value || 0) || 0;
+   631→                const qty = parseInt(qtyInput?.value || 1) || 1;
+   632→
+   633→                // VALIDATION FIX: Check for NaN, Infinity, and valid values
+   634→                if (name && isFinite(pricePi) && isFinite(qty) && pricePi > 0 && qty > 0) {
+   635→                    items.push({ name, pricePi, qty });
+   636→                    totalItemsPi += pricePi * qty;
+   637→                }
+   638→            });
+   639→
+   640→            if (items.length === 0) {
+   641→                Toast.warning('Please add at least one item');
+   642→                return;
+   643→            }
+   644→
+   645→            // Get cash paid (in Fiat)
+   646→            const cashPaidInput = document.getElementById('cash-paid-input');
+   647→            const cashPaidFiat = parseFloat(cashPaidInput?.value || 0) || 0;
+   648→
+   649→            // Convert cash paid to Pi equivalent
+   650→            // VALIDATION FIX: Prevent division by zero or invalid exchange rate
+   651→            if (!this.exchangeRate || this.exchangeRate <= 0 || !isFinite(this.exchangeRate)) {
+   652→                console.warn('Invalid exchange rate detected in saveDraft:', this.exchangeRate, '- Using default global price');
+   653→                this.exchangeRate = typeof window.piMarketPrice !== 'undefined' ? window.piMarketPrice : 0; // Fallback to default
+   654→            }
+   655→            const cashPaidPi = cashPaidFiat / this.exchangeRate;
+   656→
+   657→            // Calculate subtotal (after cash deduction)
+   658→            const subtotalPi = Math.max(0, totalItemsPi - cashPaidPi);
+   659→
+   660→            // Add network fee
+   661→            const totalPiWithFee = subtotalPi + 0.01;
+   662→
+   663→            // Determine invoice ID: Use existing ID if editing or already saved, otherwise generate new
+   664→            // SECURITY: Generate unguessable Invoice ID (Memo Randomization)
+   665→            // Format: INV-{TimestampHex}-{Random4Chars}
+   666→            function generateSecureInvoiceId() {
+   667→                const timestamp = Date.now();
+   668→                const timestampHex = timestamp.toString(16).toUpperCase();
+   669→                // Generate 4 random hex characters
+   670→                const randomChars = Math.random().toString(16).substring(2, 6).toUpperCase();
+   671→                return `INV-${timestampHex}-${randomChars}`;
+   672→            }
+   673→
+   674→            const invoiceId = this.editingInvoiceId || this.currentInvoiceId || generateSecureInvoiceId();
+   675→
+   676→            // STATE MANAGEMENT FIX: Use helper method for consistency
+   677→            const currentDbManager = this._getDbManager();
+   678→            if (!currentDbManager || typeof currentDbManager.getCurrentMerchantId !== 'function') {
+   679→                throw new Error('Database manager not available. Please refresh the page.');
+   680→            }
+   681→
+   682→            // Get merchant ID from database
+   683→            const merchantId = await currentDbManager.getCurrentMerchantId();
+   684→            if (!merchantId) {
+   685→                throw new Error('Merchant ID not found. Please authenticate or set up your merchant account.');
+   686→            }
+   687→
+   688→            // Get external reference ID (optional)
+   689→            const externalRefInput = document.getElementById('external-ref-input');
+   690→            const externalRef = externalRefInput?.value.trim() || null;
+   691→
+   692→            // Create memo with Invoice ID (for linking QR to invoice)
+   693→            // STATE MANAGEMENT FIX: Use helper method for consistency
+   694→            const currentSecurityManager = this._getSecurityManager();
+   695→            if (!currentSecurityManager || typeof currentSecurityManager.sanitizeMemo !== 'function') {
+   696→                throw new Error('Security manager not available. Please refresh the page.');
+   697→            }
+   698→            const memo = currentSecurityManager.sanitizeMemo(invoiceId);
+   699→
+   700→            // Create invoice record
+   701→            const invoiceData = {
+   702→                invoiceId: invoiceId,
+   703→                merchantId: merchantId,
+   704→                amount: totalPiWithFee,
+   705→                currency: 'PI',
+   706→                memo: memo,
+   707→                status: (this.editingInvoiceId || this.currentInvoiceId) ? 'pending' : 'draft', // Draft for new, pending for updates
+   708→                customerName: customerName,
+   709→                items: items.map(item => ({ name: item.name, pricePi: item.pricePi, qty: item.qty })),
+   710→                cashPaidFiat: cashPaidFiat,
+   711→                cashPaidPi: cashPaidPi,
+   712→                totalItemsPi: totalItemsPi,
+   713→                exchangeRate: this.exchangeRate,
+   714→                externalRef: externalRef
+   715→            };
+   716→
+   717→            // Ensure database is initialized
+   718→            if (!currentDbManager.piStorage) {
+   719→                await currentDbManager.initialize();
+   720→            }
+   721→
+   722→            // Check if invoice already exists (editing or previously saved)
+   723→            const existingInvoiceId = this.editingInvoiceId || this.currentInvoiceId;
+   724→
+   725→            if (existingInvoiceId) {
+   726→                // Update existing invoice (keep same Invoice ID)
+   727→                await currentDbManager.updateInvoice(existingInvoiceId, {
+   728→                    ...invoiceData,
+   729→                    invoiceId: existingInvoiceId, // Keep original ID
+   730→                    status: 'pending', // Change to pending when saved/updated
+   731→                    updatedAt: new Date().toISOString()
+   732→                });
+   733→                this.currentInvoiceId = existingInvoiceId; // Keep track of current invoice
+   734→                console.log('✅ Invoice updated (same ID):', existingInvoiceId);
+   735→
+   736→                // Req #35: Log audit event (currentDbManager already declared above)
+   737→                await currentDbManager.logAuditEvent(
+   738→                    'Invoice_Updated',
+   739→                    'invoice',
+   740→                    existingInvoiceId,
+   741→                    { totalPi: totalPiWithFee, itemCount: items.length },
+   742→                    'cashier',
+   743→                    'user'
+   744→                );
+   745→            } else {
+   746→                // Create new invoice (currentDbManager already declared above)
+   747→                await currentDbManager.createInvoice(invoiceData);
+   748→                this.currentInvoiceId = invoiceId; // Track new invoice
+   749→                console.log('✅ Invoice saved as draft:', invoiceId);
+   750→
+   751→                // Req #35: Log audit event (currentDbManager already declared above)
+   752→                await currentDbManager.logAuditEvent(
+   753→                    'Invoice_Created',
+   754→                    'invoice',
+   755→                    invoiceId,
+   756→                    { totalPi: totalPiWithFee, itemCount: items.length, customerName: customerName },
+   757→                    'cashier',
+   758→                    'user'
+   759→                );
+   760→
+   761→                // SECURITY: Register invoice with backend for verification
+   762→                if (navigator.onLine) {
+   763→                    try {
+   764→                        // VALIDATION FIX: Safe JSON.stringify with error handling
+   765→                        let requestBody;
+   766→                        try {
+   767→                            requestBody = JSON.stringify({
+   768→                                invoice_id: invoiceId,
+   769→                                invoice_data: {
+   770→                                    amount: totalPiWithFee,
+   771→                                    merchantId: merchantId,
+   772→                                    walletAddress: await this._getWalletAddress(merchantId),
+   773→                                    status: 'draft',
+   774→                                    customerName: customerName
+   775→                                }
+   776→                            });
+   777→                        } catch (jsonError) {
+   778→                            console.error('Error stringifying invoice data:', jsonError);
+   779→                            // Skip registration if JSON.stringify fails (circular reference, etc.)
+   780→                            throw jsonError;
+   781→                        }
+   782→
+   783→                        const response = await fetch('/api/blockchain/register-invoice', {
+   784→                            method: 'POST',
+   785→                            headers: { 'Content-Type': 'application/json' },
+   786→                            body: requestBody
+   787→                        });
+   788→                        // ERROR HANDLING FIX: Check response status properly
+   789→                        if (response.ok) {
+   790→                            console.log('✅ Invoice registered with blockchain service');
+   791→                        } else {
+   792→                            // Log non-OK responses for debugging
+   793→                            const errorText = await response.text().catch(() => 'Unknown error');
+   794→                            console.warn('⚠️ Backend registration failed:', response.status, errorText);
+   795→                        }
+   796→                    } catch (error) {
+   797→                        console.warn('⚠️ Failed to register invoice with backend:', error);
+   798→                        // Non-critical error, continue
+   799→                    }
+   800→                } else {
+   801→                    console.log('ℹ️ Offline: Skipping backend invoice registration. Will sync when online.');
+   802→                }
+   803→            }
+   804→
+   805→            // Show success message
+   806→            // Show success message
+   807→            Toast.success(`Invoice saved! ID: ${this.currentInvoiceId}`);
+   808→
+   809→            // Optional: Show modal details if needed, but Toast is cleaner
+   810→            // alert(`✅ Invoice saved successfully!\n\nInvoice ID: ${this.currentInvoiceId}\nNet Payable: π${formatPiAmount(totalPiWithFee)}\n\nYou can now generate the payment QR code.`);
+   811→
+   812→            // Refresh dashboard
+   813→            setTimeout(async () => {
+   814→                if (window.renderInvoices) {
+   815→                    await window.renderInvoices();
+   816→                }
+   817→                if (window.renderStats) {
+   818→                    await window.renderStats();
+   819→                }
+   820→            }, 500);
+   821→        } catch (error) {
+   822→            console.error('Error saving invoice:', error);
+   823→            // ERROR HANDLING IMPROVEMENT: Use ErrorHandler for user-friendly messages
+   824→            if (window.ErrorHandler) {
+   825→                window.ErrorHandler.showError(error, 'invoice_save', 'en');
+   826→            } else {
+   827→                Toast.error('Error saving invoice: ' + error.message);
+   828→            }
+   829→        }
+   830→    }
+   831→
+   832→
+   833→    /**
+   834→     * Generate Payment QR Code (after invoice is saved)
+   835→     */
+   836→    async generatePaymentQR() {
+   837→        try {
+   838→            // First, ensure invoice is saved
+   839→            if (!this.currentInvoiceId && !this.editingInvoiceId) {
+   840→                // Auto-save first
+   841→                await this.saveDraft();
+   842→                // Wait a moment for save to complete
+   843→                await new Promise(resolve => setTimeout(resolve, 200));
+   844→            }
+   845→
+   846→            // Get invoice ID
+   847→            const invoiceId = this.currentInvoiceId || this.editingInvoiceId;
+   848→            if (!invoiceId) {
+   849→                Toast.warning('Please save the invoice first');
+   850→                return;
+   851→            }
+   852→
+   853→            // Fetch invoice from database to get current data
+   854→            // STATE MANAGEMENT FIX: Use helper method for consistency
+   855→            const currentDbManager = this._getDbManager();
+   856→            if (!currentDbManager) {
+   857→                throw new Error('Database manager not available. Please refresh the page.');
+   858→            }
+   859→            if (!currentDbManager.piStorage) {
+   860→                await currentDbManager.initialize();
+   861→            }
+   862→
+   863→            const invoice = await currentDbManager.getInvoice(invoiceId);
+   864→            if (!invoice) {
+   865→                Toast.error('Invoice not found. Please save the invoice first.');
+   866→                return;
+   867→            }
+   868→
+   869→            // Generate QR code with Invoice ID in memo
+   870→            await this.generateQRCode(invoice.amount, invoice.memo, invoice.merchantId, invoiceId);
+   871→
+   872→            console.log('✅ Payment QR generated for invoice:', invoiceId);
+   873→        } catch (error) {
+   874→            console.error('Error generating payment QR:', error);
+   875→            // ERROR HANDLING IMPROVEMENT: Use ErrorHandler for user-friendly messages
+   876→            if (window.ErrorHandler) {
+   877→                window.ErrorHandler.showError(error, 'qr_generation', 'en');
+   878→            } else {
+   879→                Toast.error('Error generating QR code: ' + error.message);
+   880→            }
+   881→        }
+   882→    }
+   883→
+   884→    /**
+   885→     * Generate invoice and QR code (Legacy method - kept for compatibility)
+   886→     */
+   887→    async generateInvoice() {
+   888→        try {
+   889→            // Validate inputs
+   890→            // Validate inputs
+   891→            const customerName = document.getElementById('customer-name')?.value.trim();
+   892→            if (!customerName) {
+   893→                Toast.warning('Please enter customer name');
+   894→                return;
+   895→            }
+   896→
+   897→            // Get items (prices are in Pi)
+   898→            const itemRows = document.querySelectorAll('.item-row');
+   899→            const items = [];
+   900→            let totalItemsPi = 0;
+   901→
+   902→            itemRows.forEach(row => {
+   903→                const nameInput = row.querySelector('.item-name');
+   904→                const priceInput = row.querySelector('.item-price');
+   905→                const qtyInput = row.querySelector('.item-qty');
+   906→
+   907→                const name = nameInput?.value?.trim() || '';
+   908→                // VALIDATION FIX: Ensure parseFloat/parseInt return valid numbers
+   909→                const pricePi = parseFloat(priceInput?.value || 0) || 0;
+   910→                const qty = parseInt(qtyInput?.value || 1) || 1;
+   911→
+   912→                // VALIDATION FIX: Check for NaN, Infinity, and valid values
+   913→                if (name && isFinite(pricePi) && isFinite(qty) && pricePi > 0 && qty > 0) {
+   914→                    items.push({ name, pricePi, qty });
+   915→                    totalItemsPi += pricePi * qty;
+   916→                }
+   917→            });
+   918→
+   919→            if (items.length === 0) {
+   920→                Toast.warning('Please add at least one item');
+   921→                return;
+   922→            }
+   923→
+   924→            // Get cash paid (in Fiat)
+   925→            const cashPaidInput = document.getElementById('cash-paid-input');
+   926→            const cashPaidFiat = parseFloat(cashPaidInput?.value || 0) || 0;
+   927→
+   928→            // Convert cash paid to Pi equivalent
+   929→            // VALIDATION FIX: Prevent division by zero or invalid exchange rate
+   930→            if (!this.exchangeRate || this.exchangeRate <= 0 || !isFinite(this.exchangeRate)) {
+   931→                console.warn('Invalid exchange rate detected in saveDraft:', this.exchangeRate, '- Using default global price');
+   932→                this.exchangeRate = typeof window.piMarketPrice !== 'undefined' ? window.piMarketPrice : 0; // Fallback to default
+   933→            }
+   934→            const cashPaidPi = cashPaidFiat / this.exchangeRate;
+   935→
+   936→            // Calculate subtotal (after cash deduction)
+   937→            const subtotalPi = Math.max(0, totalItemsPi - cashPaidPi);
+   938→
+   939→            // Add network fee
+   940→            const totalPiWithFee = subtotalPi + 0.01;
+   941→
+   942→            // SECURITY: Generate unguessable Invoice ID (Memo Randomization)
+   943→            // Format: INV-{TimestampHex}-{Random4Chars}
+   944→            function generateSecureInvoiceId() {
+   945→                const timestamp = Date.now();
+   946→                const timestampHex = timestamp.toString(16).toUpperCase();
+   947→                // Generate 4 random hex characters
+   948→                const randomChars = Math.random().toString(16).substring(2, 6).toUpperCase();
+   949→                return `INV-${timestampHex}-${randomChars}`;
+   950→            }
+   951→
+   952→            const invoiceId = generateSecureInvoiceId();
+   953→
+   954→            // STATE MANAGEMENT FIX: Use helper method for consistency (single declaration)
+   955→            const currentDbManager = this._getDbManager();
+   956→            if (!currentDbManager || typeof currentDbManager.getCurrentMerchantId !== 'function') {
+   957→                throw new Error('Database manager not available. Please refresh the page.');
+   958→            }
+   959→
+   960→            // Get merchant ID from Pi authentication
+   961→            const merchantId = await currentDbManager.getCurrentMerchantId();
+   962→            if (!merchantId) {
+   963→                throw new Error('Merchant ID not found. Please authenticate or set up your merchant account.');
+   964→            }
+   965→
+   966→            // Get external reference ID (optional)
+   967→            const externalRefInput = document.getElementById('external-ref-input');
+   968→            const externalRef = externalRefInput?.value.trim() || null;
+   969→
+   970→            // Sanitize memo (Req #11)
+   971→            // STATE MANAGEMENT FIX: Use helper method for consistency
+   972→            const currentSecurityManager = this._getSecurityManager();
+   973→            if (!currentSecurityManager || typeof currentSecurityManager.sanitizeMemo !== 'function') {
+   974→                throw new Error('Security manager not available. Please refresh the page.');
+   975→            }
+   976→            // VALIDATION FIX: Check customerName length before substring
+   977→            const customerNamePrefix = customerName && customerName.length > 0 ? customerName.substring(0, 10) : 'CUSTOMER';
+   978→            const memo = currentSecurityManager.sanitizeMemo(`${invoiceId}-${customerNamePrefix}`);
+   979→
+   980→            // Create invoice record (always in Pi)
+   981→            const invoiceData = {
+   982→                invoiceId: invoiceId,
+   983→                merchantId: merchantId,
+   984→                amount: totalPiWithFee,
+   985→                currency: 'PI', // Always Pi
+   986→                memo: memo,
+   987→                status: 'pending',
+   988→                customerName: customerName,
+   989→                items: items.map(item => ({ name: item.name, pricePi: item.pricePi, qty: item.qty })),
+   990→                cashPaidFiat: cashPaidFiat,
+   991→                cashPaidPi: cashPaidPi,
+   992→                totalItemsPi: totalItemsPi,
+   993→                exchangeRate: this.exchangeRate,
+   994→                externalRef: externalRef // External reference / paper invoice ID
+   995→            };
+   996→
+   997→            // Ensure database is initialized before saving
+   998→            if (!currentDbManager.piStorage) {
+   999→                console.log('Database not initialized, initializing now...');
+  1000→                await currentDbManager.initialize();
+  1001→            }
+  1002→
+  1003→            // Check if we're editing an existing invoice
+  1004→            if (this.editingInvoiceId) {
+  1005→                // Update existing invoice
+  1006→                const finalInvoiceId = this.editingInvoiceId; // Save before clearing
+  1007→                await currentDbManager.updateInvoice(this.editingInvoiceId, {
+  1008→                    ...invoiceData,
+  1009→                    invoiceId: this.editingInvoiceId, // Keep original ID
+  1010→                    updatedAt: new Date().toISOString()
+  1011→                });
+  1012→                console.log('✅ Invoice updated:', finalInvoiceId);
+  1013→
+  1014→                // Generate QR code for updated invoice
+  1015→                await this.generateQRCode(totalPiWithFee, memo, merchantId);
+  1016→
+  1017→                // Show success message
+  1018→                // Show success message
+  1019→                Toast.success(`Invoice updated! ID: ${finalInvoiceId}`);
+  1020→                // alert(`✅ Invoice updated successfully!\n\nInvoice ID: ${finalInvoiceId}\nNet Payable: π${formatPiAmount(totalPiWithFee)}`);
+  1021→
+  1022→                // Clear editing state
+  1023→                this.editingInvoiceId = null;
+  1024→
+  1025→                // Close modal
+  1026→                this.closeModal();
+  1027→
+  1028→                // Refresh dashboard after a short delay
+  1029→                setTimeout(async () => {
+  1030→                    if (window.renderInvoices) {
+  1031→                        await window.renderInvoices();
+  1032→                    }
+  1033→                    if (window.renderStats) {
+  1034→                        await window.renderStats();
+  1035→                    }
+  1036→                }, 1000);
+  1037→                return; // Exit early for update
+  1038→            } else {
+  1039→                // Create new invoice
+  1040→                // STATE MANAGEMENT FIX: Use helper method for consistency
+  1041→                const currentDbManager = this._getDbManager();
+  1042→                await currentDbManager.createInvoice(invoiceData);
+  1043→                console.log('✅ Invoice created:', invoiceId);
+  1044→
+  1045→                // Generate QR code (always Pi payment)
+  1046→                // Generate QR code
+  1047→                await this.generateQRCode(totalPiWithFee, memo, merchantId);
+  1048→
+  1049→                // Show success message
+  1050→                const successMsg = `Invoice created! ID: ${invoiceId}`;
+  1051→
+  1052→                Toast.success(successMsg);
+  1053→
+  1054→                // Close modal
+  1055→                this.closeModal();
+  1056→
+  1057→                // Refresh dashboard after a short delay
+  1058→                setTimeout(async () => {
+  1059→                    if (window.renderInvoices) {
+  1060→                        await window.renderInvoices();
+  1061→                    }
+  1062→                    if (window.renderStats) {
+  1063→                        await window.renderStats();
+  1064→                    }
+  1065→                }, 1000);
+  1066→            }
+  1067→        } catch (error) {
+  1068→            console.error('Error generating invoice:', error);
+  1069→            // ERROR HANDLING IMPROVEMENT: Use ErrorHandler for user-friendly messages
+  1070→            if (window.ErrorHandler) {
+  1071→                window.ErrorHandler.showError(error, 'invoice_creation', 'en');
+  1072→            } else {
+  1073→                Toast.error('Error creating invoice: ' + error.message);
+  1074→            }
+  1075→        }
+  1076→    }
+  1077→
+  1078→
+  1079→    /**
+  1080→     * Generate QR code for Pi payment
+  1081→     * HACKATHON 2025 PATTERN: Following Blind_Lounge pattern - Use Pi.createPayment() directly
+  1082→     * @param {number} amountPi - Amount in Pi
+  1083→     * @param {string} memo - Payment memo (will include Invoice ID)
+  1084→     * @param {string} merchantId - Merchant ID
+  1085→     * @param {string} invoiceId - Invoice ID (optional, will be added to memo if provided)
+  1086→     */
+  1087→    async generateQRCode(amountPi, memo, merchantId, invoiceId = null) {
+  1088→        try {
+  1089→            // HACKATHON 2025 PATTERN: Use Pi.createPayment() directly (Blind_Lounge pattern)
+  1090→            // This follows the pattern used by Hackathon 2025 winners
+  1091→
+  1092→            // Get Pi Adapter
+  1093→            const currentPiAdapter = window.piAdapter;
+  1094→            if (!currentPiAdapter || !currentPiAdapter.user) {
+  1095→                throw new Error('Pi authentication required. Please authenticate with Pi Network first.');
+  1096→            }
+  1097→
+  1098→            // Get wallet address from merchant data using helper method
+  1099→            // SECURITY FIX: Get wallet from database, not hardcoded
+  1100→            const walletAddress = await this._getWalletAddress(merchantId);
+  1101→
+  1102→            // Generate memo with Invoice ID (for linking QR to invoice)
+  1103→            // Format: InvoiceID (max 28 bytes for Stellar memo)
+  1104→            let paymentMemo = memo;
+  1105→            if (invoiceId) {
+  1106→                // Use Invoice ID as memo (ensure it fits in 28 bytes)
+  1107→                const invoiceMemo = invoiceId.length <= 28 ? invoiceId : invoiceId.substring(0, 28);
+  1108→                paymentMemo = securityManager.sanitizeMemo(invoiceMemo);
+  1109→                console.log('🔗 Using Invoice ID in memo:', invoiceId);
+  1110→            }
+  1111→
+  1112→            // HACKATHON 2025 PATTERN: Blind_Lounge style - Generate QR URL for display
+  1113→            // Generate Pi payment URL for QR Code display (for scanning/display)
+  1114→            const formattedAmount = formatPiAmount(amountPi);
+  1115→            const paymentUrl = `pi://pay?recipient=${walletAddress}&amount=${formattedAmount}&memo=${encodeURIComponent(paymentMemo)}`;
+  1116→
+  1117→            console.log('🔗 Payment URL (Hackathon 2025 pattern):', paymentUrl);
+  1118→            console.log('📋 Invoice ID in memo:', invoiceId || 'N/A');
+  1119→            console.log('💳 Following Hackathon 2025 winner pattern (Blind_Lounge): Using Pi.createPayment() directly');
+  1120→
+  1121→            // Get QR container and canvas
+  1122→            const qrContainer = document.getElementById('qr-container');
+  1123→            const qrCodeCanvas = document.getElementById('qr-code-canvas');
+  1124→
+  1125→            if (!qrContainer) {
+  1126→                console.error('QR container not found');
+  1127→                return;
+  1128→            }
+  1129→
+  1130→            // Show QR container FIRST (before generating QR)
+  1131→            qrContainer.style.display = 'block';
+  1132→
+  1133→            // Get or create canvas element
+  1134→            let canvas = qrCodeCanvas;
+  1135→            if (!canvas) {
+  1136→                // Create canvas if it doesn't exist
+  1137→                canvas = document.createElement('canvas');
+  1138→                canvas.id = 'qr-code-canvas';
+  1139→                canvas.style.cssText = 'max-width: 256px; height: auto; display: block; margin: 0 auto;';
+  1140→
+  1141→                // Find the qr-code div and replace it with canvas, or append to container
+  1142→                const qrCodeDiv = document.getElementById('qr-code');
+  1143→                if (qrCodeDiv) {
+  1144→                    qrCodeDiv.innerHTML = '';
+  1145→                    qrCodeDiv.appendChild(canvas);
+  1146→                } else {
+  1147→                    // If qr-code div doesn't exist, append directly to container
+  1148→                    qrContainer.appendChild(canvas);
+  1149→                }
+  1150→            }
+  1151→
+  1152→            // Clear canvas before generating new QR code
+  1153→            // Note: QRious will handle canvas clearing automatically
+  1154→
+  1155→            // Generate QR code using QRious library
+  1156→            try {
+  1157→                new QRious({
+  1158→                    element: canvas,
+  1159→                    value: paymentUrl,
+  1160→                    size: 256,
+  1161→                    background: 'white',
+  1162→                    foreground: 'black',
+  1163→                    level: 'M'
+  1164→                });
+  1165→            } catch (qrError) {
+  1166→                console.error('QRious error:', qrError);
+  1167→                // Fallback: Try to create QR code manually
+  1168→                const ctx = canvas.getContext('2d');
+  1169→                if (ctx) {
+  1170→                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+  1171→                    // Try QRious again with fresh canvas
+  1172→                    canvas.width = 256;
+  1173→                    canvas.height = 256;
+  1174→                    new QRious({
+  1175→                        element: canvas,
+  1176→                        value: paymentUrl,
+  1177→                        size: 256,
+  1178→                        background: 'white',
+  1179→                        foreground: 'black',
+  1180→                        level: 'M'
+  1181→                    });
+  1182→                }
+  1183→            }
+  1184→
+  1185→            // Scroll to QR code
+  1186→            setTimeout(() => {
+  1187→                qrContainer.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  1188→            }, 100);
+  1189→
+  1190→            // HACKATHON 2025 PATTERN (Blind_Lounge): Store payment data for direct Pi.createPayment() integration
+  1191→            // Following Hackathon 2025 winner pattern - All payments use Pi.createPayment() directly
+  1192→            if (invoiceId) {
+  1193→                this.pendingPayment = {
+  1194→                    invoiceId: invoiceId,
+  1195→                    amountPi: amountPi,
+  1196→                    memo: paymentMemo,
+  1197→                    merchantId: merchantId,
+  1198→                    walletAddress: walletAddress,
+  1199→                    timestamp: Date.now()
+  1200→                };
+  1201→                console.log('💳 Payment data stored for Pi.createPayment() (Hackathon 2025 pattern):', this.pendingPayment);
+  1202→
+  1203→                // HACKATHON 2025 PATTERN: Automatically initiate Pi.createPayment() when QR is generated
+  1204→                // This follows Blind_Lounge pattern - direct SDK integration
+  1205→                try {
+  1206→                    await this.initiatePiPayment(this.pendingPayment);
+  1207→                } catch (error) {
+  1208→                    console.warn('⚠️ Could not initiate Pi.createPayment() automatically:', error);
+  1209→                    // QR code still works for manual scanning
+  1210→                }
+  1211→            }
+  1212→
+  1213→            console.log('✅ QR code generated (Hackathon 2025 pattern):', paymentUrl);
+  1214→            console.log('QR Code URL:', paymentUrl);
+  1215→        } catch (error) {
+  1216→            console.error('Error generating QR code:', error);
+  1217→            console.error('Error details:', error.stack);
+  1218→            alert('Error generating QR code: ' + error.message + '\n\nPayment URL: ' + paymentUrl);
+  1219→        }
+  1220→    }
+  1221→
+  1222→    /**
+  1223→     * Edit an existing invoice (only if status is 'pending')
+  1224→     */
+  1225→    async editInvoice(invoiceId) {
+  1226→        try {
+  1227→            // STATE MANAGEMENT FIX: Use helper method for consistency
+  1228→            const currentDbManager = this._getDbManager();
+  1229→            if (!currentDbManager) {
+  1230→                throw new Error('Database manager not available. Please refresh the page.');
+  1231→            }
+  1232→            if (!currentDbManager.piStorage) {
+  1233→                await currentDbManager.initialize();
+  1234→            }
+  1235→
+  1236→            // Get invoice from blockchain
+  1237→            const invoice = await currentDbManager.getInvoice(invoiceId);
+  1238→
+  1239→            if (!invoice) {
+  1240→                Toast.error('Invoice not found');
+  1241→                return;
+  1242→            }
+  1243→
+  1244→            // Allow editing for both 'pending' and 'draft' invoices
+  1245→            if (invoice.status !== 'pending' && invoice.status !== 'draft') {
+  1246→                Toast.warning('Only pending or draft invoices can be edited');
+  1247→                return;
+  1248→            }
+  1249→
+  1250→            // Log invoice data for debugging
+  1251→            console.log('📋 Invoice data loaded:', invoice);
+  1252→            console.log('📋 Invoice items:', invoice.items);
+  1253→
+  1254→            // Set editing state FIRST (before opening modal)
+  1255→            this.editingInvoiceId = invoiceId;
+  1256→
+  1257→            // Open modal first (it will skip resetForm because editingInvoiceId is set)
+  1258→            this.openModal();
+  1259→
+  1260→            // Wait for modal to be fully rendered and DOM to be ready
+  1261→            await new Promise(resolve => setTimeout(resolve, 100));
+  1262→
+  1263→            // Now populate modal with invoice data
+  1264→            console.log('🔧 Populating form fields...');
+  1265→
+  1266→            // Populate Customer Name
+  1267→            const customerNameInput = document.getElementById('customer-name');
+  1268→            if (customerNameInput) {
+  1269→                customerNameInput.value = invoice.customerName || '';
+  1270→                console.log('✅ Customer name set:', invoice.customerName);
+  1271→            } else {
+  1272→                console.error('❌ Customer name input not found!');
+  1273→            }
+  1274→
+  1275→            // Populate External Reference
+  1276→            const externalRefInput = document.getElementById('external-ref-input');
+  1277→            if (externalRefInput) {
+  1278→                externalRefInput.value = invoice.externalRef || '';
+  1279→                console.log('✅ External ref set:', invoice.externalRef);
+  1280→            }
+  1281→
+  1282→            // Set exchange rate
+  1283→            const rateGCV = document.getElementById('rate-gcv');
+  1284→            const rateCustom = document.getElementById('rate-custom');
+  1285→            const customRateInput = document.getElementById('custom-rate-input');
+  1286→
+  1287→            if (invoice.exchangeRate === RATE_GCV) {
+  1288→                if (rateGCV) rateGCV.checked = true;
+  1289→                if (rateCustom) rateCustom.checked = false;
+  1290→                if (customRateInput) customRateInput.disabled = true;
+  1291→                this.useGCV = true;
+  1292→                this.exchangeRate = RATE_GCV;
+  1293→                console.log('✅ Exchange rate set to GCV');
+  1294→            } else {
+  1295→                if (rateGCV) rateGCV.checked = false;
+  1296→                if (rateCustom) rateCustom.checked = true;
+  1297→                if (customRateInput) {
+  1298→                    customRateInput.value = invoice.exchangeRate || (typeof window.piMarketPrice !== 'undefined' ? window.piMarketPrice : 0);
+  1299→                    customRateInput.disabled = false;
+  1300→                }
+  1301→                this.useGCV = false;
+  1302→                this.exchangeRate = invoice.exchangeRate || (typeof window.piMarketPrice !== 'undefined' ? window.piMarketPrice : 0);
+  1303→                console.log('✅ Exchange rate set to custom:', this.exchangeRate);
+  1304→            }
+  1305→
+  1306→            // Clear existing items FIRST
+  1307→            this.items = [];
+  1308→            const itemsList = document.getElementById('items-list');
+  1309→            if (itemsList) {
+  1310→                itemsList.innerHTML = '';
+  1311→                console.log('✅ Items list cleared');
+  1312→            } else {
+  1313→                console.error('❌ Items list not found!');
+  1314→            }
+  1315→
+  1316→            // Add items from invoice (with actual values)
+  1317→            if (invoice.items && invoice.items.length > 0) {
+  1318→                console.log(`📦 Adding ${invoice.items.length} items...`);
+  1319→                invoice.items.forEach((item, index) => {
+  1320→                    // Use the actual saved values
+  1321→                    const itemName = item.name || '';
+  1322→                    const itemPrice = item.pricePi || 0;
+  1323→                    const itemQty = item.qty || 1;
+  1324→                    console.log(`  Item ${index + 1}: ${itemName}, Price: ${itemPrice}, Qty: ${itemQty}`);
+  1325→                    this.addItem(itemName, itemPrice, itemQty);
+  1326→                });
+  1327→                console.log('✅ All items added');
+  1328→            } else {
+  1329→                console.warn('⚠️ No items found in invoice, adding empty row');
+  1330→                // Add at least one empty item row if no items found
+  1331→                this.addItem();
+  1332→            }
+  1333→
+  1334→            // Set cash paid
+  1335→            const cashPaidInput = document.getElementById('cash-paid-input');
+  1336→            if (cashPaidInput) {
+  1337→                cashPaidInput.value = invoice.cashPaidFiat || 0;
+  1338→                console.log('✅ Cash paid set:', invoice.cashPaidFiat);
+  1339→            } else {
+  1340→                console.error('❌ Cash paid input not found!');
+  1341→            }
+  1342→
+  1343→            // Update button text to "Update Invoice"
+  1344→            // FIX: Use correct button ID (btn-generate-qr, not generate-qr-btn)
+  1345→            const generateBtn = document.getElementById('btn-generate-qr');
+  1346→            if (generateBtn) {
+  1347→                generateBtn.textContent = 'Update Invoice';
+  1348→                console.log('✅ Button text updated to "Update Invoice"');
+  1349→            } else {
+  1350→                // Not critical - button might not be visible yet or modal not fully rendered
+  1351→                console.warn('⚠️ Generate button not found (may not be rendered yet)');
+  1352→            }
+  1353→
+  1354→            // Recalculate totals after populating all fields
+  1355→            setTimeout(() => {
+  1356→                this.calculateTotals();
+  1357→                console.log('✅ Totals recalculated');
+  1358→            }, 150);
+  1359→
+  1360→            console.log('✅ Invoice loaded for editing:', invoiceId);
+  1361→        } catch (error) {
+  1362→            console.error('Error editing invoice:', error);
+  1363→            alert('Error loading invoice: ' + error.message);
+  1364→            // Reset editing state on error
+  1365→            this.editingInvoiceId = null;
+  1366→        }
+  1367→    }
+  1368→
+  1369→    /**
+  1370→     * Delete an invoice (only if status is 'pending')
+  1371→     */
+  1372→    async deleteInvoice(invoiceId) {
+  1373→        try {
+  1374→            const confirmed = await Modal.confirm('Are you sure you want to delete this invoice? This action cannot be undone.');
+  1375→            if (!confirmed) {
+  1376→                return;
+  1377→            }
+  1378→
+  1379→            // STATE MANAGEMENT FIX: Use helper method for consistency
+  1380→            const currentDbManager = this._getDbManager();
+  1381→            if (!currentDbManager) {
+  1382→                throw new Error('Database manager not available. Please refresh the page.');
+  1383→            }
+  1384→            if (!currentDbManager.piStorage) {
+  1385→                await currentDbManager.initialize();
+  1386→            }
+  1387→
+  1388→            // Get invoice to check status
+  1389→            const invoice = await currentDbManager.getInvoice(invoiceId);
+  1390→
+  1391→            if (!invoice) {
+  1392→                Toast.error('Invoice not found');
+  1393→                return;
+  1394→            }
+  1395→
+  1396→            // Allow deleting for both 'pending' and 'draft' invoices
+  1397→            if (invoice.status !== 'pending' && invoice.status !== 'draft') {
+  1398→                Toast.warning('Only pending or draft invoices can be deleted');
+  1399→                return;
+  1400→            }
+  1401→
+  1402→            // Req #35: Log audit event BEFORE deletion
+  1403→            await currentDbManager.logAuditEvent(
+  1404→                'Invoice_Deleted',
+  1405→                'invoice',
+  1406→                invoiceId,
+  1407→                {
+  1408→                    amount: invoice.amount,
+  1409→                    status: invoice.status,
+  1410→                    reason: 'User requested deletion'
+  1411→                },
+  1412→                'cashier',
+  1413→                'user'
+  1414→            );
+  1415→
+  1416→            // Delete invoice (currentDbManager already declared above)
+  1417→            await currentDbManager.deleteInvoice(invoiceId);
+  1418→
+  1419→            console.log('✅ Invoice deleted:', invoiceId);
+  1420→
+  1421→            if (window.renderStats) {
+  1422→                await window.renderStats();
+  1423→            }
+  1424→
+  1425→            Toast.success('Invoice deleted successfully');
+  1426→        } catch (error) {
+  1427→            console.error('Error deleting invoice:', error);
+  1428→            Toast.error('Error deleting invoice: ' + error.message);
+  1429→        }
+  1430→    }
+  1431→
+  1432→    /**
+  1433→     * Show QR code for an existing invoice
+  1434→     */
+  1435→    async showQRCode(invoiceId) {
+  1436→        try {
+  1437→            console.log('🔍 Showing QR for invoice:', invoiceId);
+  1438→
+  1439→            // STATE MANAGEMENT FIX: Use helper method for consistency
+  1440→            const currentDbManager = this._getDbManager();
+  1441→            if (!currentDbManager) {
+  1442→                throw new Error('Database manager not available. Please refresh the page.');
+  1443→            }
+  1444→            if (!currentDbManager.piStorage) {
+  1445→                await currentDbManager.initialize();
+  1446→            }
+  1447→
+  1448→            // Get invoice from blockchain
+  1449→            const invoice = await currentDbManager.getInvoice(invoiceId);
+  1450→
+  1451→            if (!invoice) {
+  1452→                Toast.error('Invoice not found');
+  1453→                return;
+  1454→            }
+  1455→
+  1456→            console.log('📋 Invoice found:', invoice);
+  1457→
+  1458→            // Set current invoice ID
+  1459→            this.currentInvoiceId = invoiceId;
+  1460→
+  1461→            // Open modal to show QR
+  1462→            this.openModal();
+  1463→
+  1464→            // Wait for modal to be ready
+  1465→            await new Promise(resolve => setTimeout(resolve, 100));
+  1466→
+  1467→            // Populate form with invoice data (read-only mode)
+  1468→            const customerNameInput = document.getElementById('customer-name');
+  1469→            if (customerNameInput) {
+  1470→                customerNameInput.value = invoice.customerName || '';
+  1471→                customerNameInput.disabled = true; // Read-only
+  1472→            }
+  1473→
+  1474→            // Hide save buttons, show QR only
+  1475→            const saveDraftBtn = document.getElementById('btn-save-draft');
+  1476→            const generateQRBtn = document.getElementById('btn-generate-qr');
+  1477→            if (saveDraftBtn) saveDraftBtn.style.display = 'none';
+  1478→            if (generateQRBtn) generateQRBtn.style.display = 'none';
+  1479→
+  1480→            // Generate QR code with Invoice ID in memo
+  1481→            await this.generateQRCode(invoice.amount, invoice.memo, invoice.merchantId, invoiceId);
+  1482→
+  1483→            console.log('✅ QR code displayed for invoice:', invoiceId);
+  1484→        } catch (error) {
+  1485→            console.error('Error showing QR code:', error);
+  1486→            alert('Error showing QR code: ' + error.message);
+  1487→        }
+  1488→    }
+  1489→
+  1490→
+  1491→    /**
+  1492→     * Refund a paid invoice
+  1493→     * Subtracts amount from daily totals and marks invoice as refunded
+  1494→     * SECURITY: Checks if invoice is from a closed shift (requires owner permission)
+  1495→     */
+  1496→    async refundInvoice(invoiceId) {
+  1497→        try {
+  1498→            // STATE MANAGEMENT FIX: Use helper method for consistency
+  1499→            const currentDbManager = this._getDbManager();
+  1500→            if (!currentDbManager) {
+  1501→                throw new Error('Database manager not available. Please refresh the page.');
+  1502→            }
+  1503→            if (!currentDbManager.piStorage) {
+  1504→                await currentDbManager.initialize();
+  1505→            }
+  1506→
+  1507→            const invoice = await currentDbManager.getInvoice(invoiceId);
+  1508→
+  1509→            if (!invoice) {
+  1510→                alert('Invoice not found');
+  1511→                return;
+  1512→            }
+  1513→
+  1514→            if (invoice.status !== 'paid') {
+  1515→                alert('Only paid invoices can be refunded');
+  1516→                return;
+  1517→            }
+  1518→
+  1519→            // SECURITY CHECK: Check if invoice is from a closed shift (currentDbManager already declared above)
+  1520→            const lastShiftClosure = await currentDbManager.getSetting('lastShiftClosure');
+  1521→            if (lastShiftClosure) {
+  1522→                const closureDate = new Date(lastShiftClosure.value);
+  1523→                const invoiceDate = new Date(invoice.createdAt);
+  1524→
+  1525→                if (invoiceDate < closureDate) {
+  1526→                    // Invoice is from a closed shift - require owner permission
+  1527→                    const isOwner = confirm(
+  1528→                        `⚠️ SECURITY WARNING\n\n` +
+  1529→                        `This invoice is from a CLOSED SHIFT (${closureDate.toLocaleDateString()}).\n\n` +
+  1530→                        `Refunding it will affect historical records.\n\n` +
+  1531→                        `Are you the OWNER with proper authorization?\n\n` +
+  1532→                        `Click OK only if you have owner-level permissions.`
+  1533→                    );
+  1534→
+  1535→                    if (!isOwner) {
+  1536→                        alert('Refund cancelled. Only owners can refund invoices from closed shifts.');
+  1537→                        return;
+  1538→                    }
+  1539→
+  1540→                    // Double confirmation for closed shift refunds
+  1541→                    const doubleConfirm = confirm(
+  1542→                        `FINAL CONFIRMATION\n\n` +
+  1543→                        `You are about to refund an invoice from a closed shift.\n\n` +
+  1544→                        `This action cannot be easily undone.\n\n` +
+  1545→                        `Proceed?`
+  1546→                    );
+  1547→
+  1548→                    if (!doubleConfirm) {
+  1549→                        return;
+  1550→                    }
+  1551→                }
+  1552→            }
+  1553→
+  1554→            const reason = prompt('Enter refund reason (optional):') || 'No reason provided';
+  1555→
+  1556→            if (!confirm(
+  1557→                `Refund Invoice ${invoiceId}?\n\n` +
+  1558→                `Amount: π${this.formatPiAmount(invoice.amount)}\n` +
+  1559→                `Cash: $${(invoice.cashPaidFiat || 0).toFixed(2)}\n\n` +
+  1560→                `This will:\n` +
+  1561→                `1. Mark invoice as REFUNDED\n` +
+  1562→                `2. Subtract amount from daily totals\n` +
+  1563→                `3. Record refund in history`
+  1564→            )) {
+  1565→                return;
+  1566→            }
+  1567→
+  1568→            // Update invoice status to refunded (currentDbManager already declared above)
+  1569→            if (!currentDbManager.piStorage) {
+  1570→                await currentDbManager.initialize();
+  1571→            }
+  1572→
+  1573→            // Update invoice
+  1574→            await currentDbManager.updateInvoice(invoiceId, {
+  1575→                status: 'refunded',
+  1576→                updatedAt: new Date().toISOString(),
+  1577→                refundReason: reason,
+  1578→                refundedAt: new Date().toISOString()
+  1579→            });
+  1580→
+  1581→            // COLLISION FIX: Generate refund ID once and reuse
+  1582→            const refundId = `REF-${Date.now()}-${Math.random().toString(36).substring(2, 9).toUpperCase()}`;
+  1583→
+  1584→            // Record refund on blockchain (currentDbManager already declared above)
+  1585→            await currentDbManager.saveRefund({
+  1586→                refundId: refundId,
+  1587→                invoiceId: invoiceId,
+  1588→                amount: invoice.amount,
+  1589→                reason: reason,
+  1590→                createdAt: new Date().toISOString()
+  1591→            });
+  1592→
+  1593→            // Refresh dashboard to update stats (which will subtract refunded amounts)
+  1594→            if (window.renderInvoices) {
+  1595→                await window.renderInvoices();
+  1596→            }
+  1597→            if (window.renderStats) {
+  1598→                await window.renderStats();
+  1599→            }
+  1600→
+  1601→            // Use the refundId generated above
+  1602→            alert(`✅ Invoice refunded successfully!\n\nRefund ID: ${refundId}\nAmount: π${this.formatPiAmount(invoice.amount)}`);
+  1603→            console.log('✅ Invoice refunded:', invoiceId);
+  1604→        } catch (error) {
+  1605→            console.error('Error refunding invoice:', error);
+  1606→            alert('Error refunding invoice: ' + error.message);
+  1607→        }
+  1608→    }
+  1609→
+  1610→    async voidInvoice(invoiceId) {
+  1611→        try {
+  1612→            if (!confirm('Are you sure you want to void this invoice? This will create a reversal entry.')) {
+  1613→                return;
+  1614→            }
+  1615→
+  1616→            // STATE MANAGEMENT FIX: Use helper method for consistency
+  1617→            const currentDbManager = this._getDbManager();
+  1618→            if (!currentDbManager) {
+  1619→                throw new Error('Database manager not available. Please refresh the page.');
+  1620→            }
+  1621→            if (!currentDbManager.piStorage) {
+  1622→                await currentDbManager.initialize();
+  1623→            }
+  1624→
+  1625→            // Get invoice
+  1626→            const invoice = await currentDbManager.getInvoice(invoiceId);
+  1627→
+  1628→            if (!invoice) {
+  1629→                alert('Invoice not found');
+  1630→                return;
+  1631→            }
+  1632→
+  1633→            if (invoice.status !== 'paid') {
+  1634→                alert('Only paid invoices can be voided');
+  1635→                return;
+  1636→            }
+  1637→
+  1638→            // Update invoice status to 'voided' - currentDbManager already declared above
+  1639→            await currentDbManager.updateInvoice(invoiceId, {
+  1640→                status: 'voided',
+  1641→                updatedAt: new Date().toISOString()
+  1642→            });
+  1643→
+  1644→            console.log('✅ Invoice voided:', invoiceId);
+  1645→
+  1646→            if (window.renderStats) {
+  1647→                await window.renderStats();
+  1648→            }
+  1649→
+  1650→            alert('Invoice voided successfully');
+  1651→        } catch (error) {
+  1652→            console.error('Error voiding invoice:', error);
+  1653→            alert('Error voiding invoice: ' + error.message);
+  1654→        }
+  1655→    }
+  1656→
+  1657→    /**
+  1658→     * Req #40: Print Receipt (Universal Printing Support)
+  1659→     * Supports both Bluetooth and System Printers
+  1660→     */
+  1661→    async printReceipt() {
+  1662→        try {
+  1663→            // Get current invoice data
+  1664→            const invoiceId = this.currentInvoiceId || this.editingInvoiceId;
+  1665→
+  1666→            if (!invoiceId) {
+  1667→                // Try to get from form
+  1668→                const invoiceIdInput = document.getElementById('invoice-id-display');
+  1669→                if (!invoiceIdInput || !invoiceIdInput.textContent) {
+  1670→                    alert('Please create or open an invoice first.');
+  1671→                    return;
+  1672→                }
+  1673→            }
+  1674→
+  1675→            // Ensure database is initialized
+  1676→            // STATE MANAGEMENT FIX: Use helper method for consistency
+  1677→            const currentDbManager = this._getDbManager();
+  1678→            if (!currentDbManager) {
+  1679→                throw new Error('Database manager not available. Please refresh the page.');
+  1680→            }
+  1681→            if (!currentDbManager.piStorage) {
+  1682→                await currentDbManager.initialize();
+  1683→            }
+  1684→
+  1685→            // Get invoice from blockchain
+  1686→            const invoice = await currentDbManager.getInvoice(invoiceId);
+  1687→
+  1688→            if (!invoice) {
+  1689→                alert('Invoice not found. Please save the invoice first.');
+  1690→                return;
+  1691→            }
+  1692→
+  1693→            // Get merchant info (for shop name) - currentDbManager already declared above
+  1694→            const merchant = await currentDbManager.getMerchant(await currentDbManager.getCurrentMerchantId());
+  1695→            const shopName = merchant?.name || 'Ledger ERP Store';
+  1696→
+  1697→            // Prepare receipt data
+  1698→            const receiptData = {
+  1699→                shopName: shopName,
+  1700→                invoiceId: invoice.invoiceId,
+  1701→                date: invoice.createdAt || new Date().toISOString(),
+  1702→                customerName: invoice.customerName || 'Walk-in',
+  1703→                items: invoice.items || [],
+  1704→                totalPi: invoice.amount || 0,
+  1705→                cashPaid: invoice.cashPaidFiat || 0,
+  1706→                qrCode: true // Indicate QR code should be shown
+  1707→            };
+  1708→
+  1709→            // Check if hardwareManager is available
+  1710→            if (!window.hardwareManager) {
+  1711→                alert('Hardware manager not available. Please refresh the page.');
+  1712→                return;
+  1713→            }
+  1714→
+  1715→            // Print using hardware manager (handles both Bluetooth and System printers)
+  1716→            await window.hardwareManager.printReceipt(receiptData);
+  1717→
+  1718→            // Req #44: Human-Friendly Success Message
+  1719→            this.showSuccessToast('تمت الطباعة بنجاح', 'تم إرسال الإيصال إلى الطابعة.');
+  1720→        } catch (error) {
+  1721→            console.error('Error printing receipt:', error);
+  1722→
+  1723→            // Req #44: Human-Friendly Error Messages
+  1724→            let errorTitle = 'فشلت الطباعة';
+  1725→            let errorMessage = 'حدث خطأ أثناء الطباعة. ';
+  1726→
+  1727→            if (error.message.includes('not connected') || error.message.includes('Bluetooth')) {
+  1728→                errorMessage += 'تأكد من اتصال الطابعة وتفعيل البلوتوث.';
+  1729→            } else if (error.message.includes('System')) {
+  1730→                errorMessage += 'تأكد من تثبيت الطابعة في النظام واختيارها كطابعة افتراضية.';
+  1731→            } else {
+  1732→                errorMessage += error.message;
+  1733→            }
+  1734→
+  1735→            this.showErrorToast(errorTitle, errorMessage);
+  1736→        }
+  1737→    }
+  1738→
+  1739→    /**
+  1740→     * Req #44: Human-Friendly Success Toast
+  1741→     */
+  1742→    showSuccessToast(title, message) {
+  1743→        const toast = document.createElement('div');
+  1744→        toast.style.cssText = `
+  1745→            position: fixed;
+  1746→            top: 20px;
+  1747→            right: 20px;
+  1748→            background: #4CAF50;
+  1749→            color: white;
+  1750→            padding: 15px 20px;
+  1751→            border-radius: 5px;
+  1752→            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+  1753→            z-index: 100000;
+  1754→            max-width: 400px;
+  1755→            animation: slideInRight 0.3s ease-out;
+  1756→        `;
+  1757→
+  1758→        // SECURITY: Sanitize title and message to prevent XSS
+  1759→        const safeTitle = typeof title === 'string' ? title.replace(/<[^>]*>/g, '').replace(/&/g, '&').replace(/</g, '<').replace(/>/g, '>') : String(title);
+  1760→        const safeMessage = typeof message === 'string' ? message.replace(/<[^>]*>/g, '').replace(/&/g, '&').replace(/</g, '<').replace(/>/g, '>') : String(message);
+  1761→
+  1762→        // Use textContent to safely set content
+  1763→        const titleDiv = document.createElement('div');
+  1764→        titleDiv.style.cssText = 'font-weight: bold; margin-bottom: 5px;';
+  1765→        titleDiv.textContent = `✅ ${safeTitle}`;
+  1766→
+  1767→        const messageDiv = document.createElement('div');
+  1768→        messageDiv.style.cssText = 'font-size: 14px; opacity: 0.9;';
+  1769→        messageDiv.textContent = safeMessage;
+  1770→
+  1771→        toast.appendChild(titleDiv);
+  1772→        toast.appendChild(messageDiv);
+  1773→
+  1774→        document.body.appendChild(toast);
+  1775→
+  1776→        setTimeout(() => {
+  1777→            toast.style.animation = 'slideOutRight 0.3s ease-out';
+  1778→            // MEMORY LEAK FIX: Use remove() with fallback for older browsers
+  1779→            setTimeout(() => {
+  1780→                if (toast.parentElement) {
+  1781→                    toast.parentElement.removeChild(toast);
+  1782→                } else if (toast.remove && typeof toast.remove === 'function') {
+  1783→                    toast.remove();
+  1784→                }
+  1785→            }, 300);
+  1786→        }, 3000);
+  1787→    }
+  1788→
+  1789→    /**
+  1790→     * Req #44: Human-Friendly Error Toast
+  1791→     */
+  1792→    showErrorToast(title, message) {
+  1793→        const toast = document.createElement('div');
+  1794→        toast.style.cssText = `
+  1795→            position: fixed;
+  1796→            top: 20px;
+  1797→            right: 20px;
+  1798→            background: #f44336;
+  1799→            color: white;
+  1800→            padding: 15px 20px;
+  1801→            border-radius: 5px;
+  1802→            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+  1803→            z-index: 100000;
+  1804→            max-width: 400px;
+  1805→            animation: slideInRight 0.3s ease-out;
+  1806→        `;
+  1807→
+  1808→        // SECURITY: Sanitize title and message to prevent XSS
+  1809→        const safeTitle = typeof title === 'string' ? title.replace(/<[^>]*>/g, '').replace(/&/g, '&').replace(/</g, '<').replace(/>/g, '>') : String(title);
+  1810→        const safeMessage = typeof message === 'string' ? message.replace(/<[^>]*>/g, '').replace(/&/g, '&').replace(/</g, '<').replace(/>/g, '>') : String(message);
+  1811→
+  1812→        // Use textContent to safely set content
+  1813→        const titleDiv = document.createElement('div');
+  1814→        titleDiv.style.cssText = 'font-weight: bold; margin-bottom: 5px;';
+  1815→        titleDiv.textContent = `❌ ${safeTitle}`;
+  1816→
+  1817→        const messageDiv = document.createElement('div');
+  1818→        messageDiv.style.cssText = 'font-size: 14px; opacity: 0.9;';
+  1819→        messageDiv.textContent = safeMessage;
+  1820→
+  1821→        toast.appendChild(titleDiv);
+  1822→        toast.appendChild(messageDiv);
+  1823→
+  1824→        document.body.appendChild(toast);
+  1825→
+  1826→        setTimeout(() => {
+  1827→            toast.style.animation = 'slideOutRight 0.3s ease-out';
+  1828→            // MEMORY LEAK FIX: Use remove() with fallback for older browsers
+  1829→            setTimeout(() => {
+  1830→                if (toast.parentElement) {
+  1831→                    toast.parentElement.removeChild(toast);
+  1832→                } else if (toast.remove && typeof toast.remove === 'function') {
+  1833→                    toast.remove();
+  1834→                }
+  1835→            }, 300);
+  1836→        }, 5000);
+  1837→    }
+  1838→
+  1839→    /**
+  1840→     * Chat Integration - Copy Invoice Link for Pi Chat
+  1841→     * Creates a friendly message with invoice link ready to paste in chat
+  1842→     */
+  1843→    async copyInvoiceLinkForChat() {
+  1844→        try {
+  1845→            // Get current invoice ID
+  1846→            let invoiceId = this.currentInvoiceId || this.editingInvoiceId;
+  1847→
+  1848→            if (!invoiceId) {
+  1849→                // Try to get from form or auto-save first
+  1850→                const invoiceIdDisplay = document.getElementById('invoice-id-display');
+  1851→                if (invoiceIdDisplay && invoiceIdDisplay.textContent) {
+  1852→                    invoiceId = invoiceIdDisplay.textContent.trim();
+  1853→                } else {
+  1854→                    // Auto-save invoice first
+  1855→                    await this.saveDraft();
+  1856→                    invoiceId = this.currentInvoiceId;
+  1857→                }
+  1858→            }
+  1859→
+  1860→            if (!invoiceId) {
+  1861→                this.showErrorToast('خطأ', 'يرجى حفظ الفاتورة أولاً قبل نسخ الرابط.');
+  1862→                return;
+  1863→            }
+  1864→
+  1865→            // Ensure database is initialized
+  1866→            // STATE MANAGEMENT FIX: Use helper method for consistency
+  1867→            const currentDbManager = this._getDbManager();
+  1868→            if (!currentDbManager) {
+  1869→                throw new Error('Database manager not available. Please refresh the page.');
+  1870→            }
+  1871→            if (!currentDbManager.piStorage) {
+  1872→                await currentDbManager.initialize();
+  1873→            }
+  1874→
+  1875→            // Get invoice from blockchain
+  1876→            const invoice = await currentDbManager.getInvoice(invoiceId);
+  1877→
+  1878→            if (!invoice) {
+  1879→                this.showErrorToast('خطأ', 'الفاتورة غير موجودة. يرجى حفظ الفاتورة أولاً.');
+  1880→                return;
+  1881→            }
+  1882→
+  1883→            // Format amount
+  1884→            const amountFormatted = formatPiAmount(invoice.amount);
+  1885→
+  1886→            // Generate shareable link (use deep linking manager if available, otherwise create web link)
+  1887→            let shareLink;
+  1888→            if (window.deepLinkingManager) {
+  1889→                const linkData = window.deepLinkingManager.generateInvoiceLink(invoiceId);
+  1890→                shareLink = linkData.webLink; // Use web link for chat (more universal)
+  1891→            } else {
+  1892→                // Fallback: create web link manually
+  1893→                shareLink = `${window.location.origin}?invoice_id=${encodeURIComponent(invoiceId)}`;
+  1894→            }
+  1895→
+  1896→            // Create friendly message for chat
+  1897→            const customerName = invoice.customerName || 'Customer';
+  1898→            const chatMessage = `Hello! Here is your invoice #${invoiceId} for ${amountFormatted} Pi.\n\nPay here: ${shareLink}`;
+  1899→
+  1900→            // Copy to clipboard
+  1901→            // ERROR HANDLING FIX: Proper error handling for clipboard operations
+  1902→            try {
+  1903→                if (navigator.clipboard && navigator.clipboard.writeText) {
+  1904→                    await navigator.clipboard.writeText(chatMessage);
+  1905→                } else {
+  1906→                    // Fallback for older browsers (deprecated but still needed for compatibility)
+  1907→                    const textArea = document.createElement('textarea');
+  1908→                    textArea.value = chatMessage;
+  1909→                    textArea.style.position = 'fixed';
+  1910→                    textArea.style.left = '-9999px'; // Better than opacity:0 for accessibility
+  1911→                    textArea.style.opacity = '0';
+  1912→                    document.body.appendChild(textArea);
+  1913→                    textArea.select();
+  1914→                    textArea.setSelectionRange(0, chatMessage.length); // For mobile devices
+  1915→
+  1916→                    // ERROR HANDLING FIX: Check if execCommand succeeded
+  1917→                    const copySuccess = document.execCommand('copy');
+  1918→                    document.body.removeChild(textArea);
+  1919→
+  1920→                    if (!copySuccess) {
+  1921→                        throw new Error('Failed to copy using execCommand');
+  1922→                    }
+  1923→                }
+  1924→            } catch (clipboardError) {
+  1925→                console.error('Clipboard API error:', clipboardError);
+  1926→                throw new Error('Failed to copy to clipboard. Please copy manually.');
+  1927→            }
+  1928→
+  1929→            // Show success toast
+  1930→            this.showSuccessToast('تم النسخ!', 'تم نسخ رابط الفاتورة. الصقه في Pi Chat أو أي تطبيق دردشة.');
+  1931→
+  1932→            console.log('✅ Invoice link copied for chat:', invoiceId);
+  1933→        } catch (error) {
+  1934→            console.error('Error copying invoice link for chat:', error);
+  1935→            this.showErrorToast('خطأ', 'فشل نسخ رابط الفاتورة: ' + error.message);
+  1936→        }
+  1937→    }
+  1938→
+  1939→    /**
+  1940→     * HACKATHON 2025 PATTERN: Initiate Pi.createPayment() directly (Blind_Lounge pattern)
+  1941→     * This method follows the pattern used by Hackathon 2025 winners
+  1942→     * @param {Object} paymentData - Payment data stored from generateQRCode
+  1943→     */
+  1944→    async initiatePiPayment(paymentData) {
+  1945→        try {
+  1946→            // Get Pi Adapter
+  1947→            const currentPiAdapter = window.piAdapter;
+  1948→            if (!currentPiAdapter || !currentPiAdapter.user) {
+  1949→                console.warn('⚠️ Pi authentication not available - QR code can still be scanned manually');
+  1950→                return { success: false, error: 'Pi authentication required' };
+  1951→            }
+  1952→
+  1953→            // Validate payment data
+  1954→            if (!paymentData || !paymentData.amountPi || !paymentData.memo || !paymentData.walletAddress) {
+  1955→                throw new Error('Invalid payment data');
+  1956→            }
+  1957→
+  1958→            console.log('💳 Initiating Pi.createPayment() (Strict Compliance)...');
+  1959→
+  1960→            // HACKATHON 2025 PATTERN: Use Pi.createPayment() directly
+  1961→            // COMPLIANCE FIXME: Must call BACKEND endpoints for standard 4-step flow
+  1962→            const paymentResult = await currentPiAdapter.createPiPayment(
+  1963→                paymentData.amountPi,
+  1964→                paymentData.memo,
+  1965→                paymentData.walletAddress,
+  1966→                // onReadyForServerApproval (Step 2)
+  1967→                async (paymentId) => {
+  1968→                    console.log('⏳ Server Approval Requested:', paymentId);
+  1969→                    try {
+  1970→                        const response = await fetch('/api/blockchain/approve', {
+  1971→                            method: 'POST',
+  1972→                            headers: { 'Content-Type': 'application/json' },
+  1973→                            body: JSON.stringify({ payment_id: paymentId })
+  1974→                        });
+  1975→
+  1976→                        if (!response.ok) {
+  1977→                            const errorText = await response.text();
+  1978→                            throw new Error(`Server approval failed: ${errorText}`);
+  1979→                        }
+  1980→                        console.log('✅ Server Approved:', paymentId);
+  1981→                        // Standard Pi SDK flow: The SDK waits for this promise to resolve
+  1982→                    } catch (error) {
+  1983→                        console.error('❌ Server Approval Error:', error);
+  1984→                        throw error; // Propagate to SDK to cancel payment
+  1985→                    }
+  1986→                },
+  1987→                // onReadyForServerCompletion (Step 4)
+  1988→                async (paymentId, txid) => {
+  1989→                    console.log('⏳ Server Completion Requested:', { paymentId, txid });
+  1990→                    try {
+  1991→                        // 1. Call Backend to finalize
+  1992→                        const response = await fetch('/api/blockchain/complete', {
+  1993→                            method: 'POST',
+  1994→                            headers: { 'Content-Type': 'application/json' },
+  1995→                            body: JSON.stringify({ payment_id: paymentId, txid: txid })
+  1996→                        });
+  1997→
+  1998→                        if (!response.ok) {
+  1999→                            const errorText = await response.text();
+  2000→                            throw new Error(`Server completion failed: ${errorText}`);
+
+[showing lines 1-2000 of 2054; use offset=2001 with limit to continue reading]

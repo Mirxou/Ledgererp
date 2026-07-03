@@ -1,0 +1,21 @@
+{
+  "code": 200,
+  "data": {
+    "description": "",
+    "html": "<html><head><meta name=\"color-scheme\" content=\"light dark\"></head><body><pre style=\"word-wrap: break-word; white-space: pre-wrap;\">[\n  {\n    \"name\": \"__init__.py\",\n    \"path\": \"app/services/__init__.py\",\n    \"sha\": \"e66bce08ef320803b149c6e8d3dc825e96062145\",\n    \"size\": 19,\n    \"url\": \"https://api.github.com/repos/Mirxou/Ledgererp/contents/app/services/__init__.py?ref=main\",\n    \"html_url\": \"https://github.com/Mirxou/Ledgererp/blob/main/app/services/__init__.py\",\n    \"git_url\": \"https://api.github.com/repos/Mirxou/Ledgererp/git/blobs/e66bce08ef320803b149c6e8d3dc825e96062145\",\n    \"download_url\": \"https://raw.githubusercontent.com/Mirxou/Ledgererp/main/app/services/__init__.py\",\n    \"type\": \"file\",\n    \"_links\": {\n      \"self\": \"https://api.github.com/repos/Mirxou/Ledgererp/contents/app/services/__init__.py?ref=main\",\n      \"git\": \"https://api.github.com/repos/Mirxou/Ledgererp/git/blobs/e66bce08ef320803b149c6e8d3dc825e96062145\",\n      \"html\": \"https://github.com/Mirxou/Ledgererp/blob/main/app/services/__init__.py\"\n    }\n  },\n  {\n    \"name\": \"blockchain.py\",\n    \"path\": \"app/services/blockchain.py\",\n    \"sha\": \"36fd98b29bc1227cd777efaee9ec9cc21e71a073\",\n    \"size\": 30193,\n    \"url\": \"https://api.github.com/repos/Mirxou/Ledgererp/contents/app/services/blockchain.py?ref=main\",\n    \"html_url\": \"https://github.com/Mirxou/Ledgererp/blob/main/app/services/blockchain.py\",\n    \"git_url\": \"https://api.github.com/repos/Mirxou/Ledgererp/git/blobs/36fd98b29bc1227cd777efaee9ec9cc21e71a073\",\n    \"download_url\": \"https://raw.githubusercontent.com/Mirxou/Ledgererp/main/app/services/blockchain.py\",\n    \"type\": \"file\",\n    \"_links\": {\n      \"self\": \"https://api.github.com/repos/Mirxou/Ledgererp/contents/app/services/blockchain.py?ref=main\",\n      \"git\": \"https://api.github.com/repos/Mirxou/Ledgererp/git/blobs/36fd98b29bc1227cd777efaee9ec9cc21e71a073\",\n      \"html\": \"https://github.com/Mirxou/Ledgererp/blob/main/app/services/blockchain.py\"\n    }\n  },\n  {\n    \"name\": \"market.py\",\n    \"path\": \"app/services/market.py\",\n    \"sha\": \"b94095be7dc46d82a492561b40ff1d0e78601599\",\n    \"size\": 4915,\n    \"url\": \"https://api.github.com/repos/Mirxou/Ledgererp/contents/app/services/market.py?ref=main\",\n    \"html_url\": \"https://github.com/Mirxou/Ledgererp/blob/main/app/services/market.py\",\n    \"git_url\": \"https://api.github.com/repos/Mirxou/Ledgererp/git/blobs/b94095be7dc46d82a492561b40ff1d0e78601599\",\n    \"download_url\": \"https://raw.githubusercontent.com/Mirxou/Ledgererp/main/app/services/market.py\",\n    \"type\": \"file\",\n    \"_links\": {\n      \"self\": \"https://api.github.com/repos/Mirxou/Ledgererp/contents/app/services/market.py?ref=main\",\n      \"git\": \"https://api.github.com/repos/Mirxou/Ledgererp/git/blobs/b94095be7dc46d82a492561b40ff1d0e78601599\",\n      \"html\": \"https://github.com/Mirxou/Ledgererp/blob/main/app/services/market.py\"\n    }\n  }\n]\n</pre></body></html>",
+    "httpStatus": 200,
+    "httpStatusText": "",
+    "publishedTime": "Thu, 12 Mar 2026 02:31:20 GMT",
+    "title": "",
+    "url": "https://api.github.com/repos/Mirxou/Ledgererp/contents/app/services",
+    "usage": {
+      "tokens": 959
+    }
+  },
+  "meta": {
+    "usage": {
+      "tokens": 959
+    }
+  },
+  "status": 20000
+}

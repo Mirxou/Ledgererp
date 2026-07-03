@@ -1,0 +1,20 @@
+{
+  "code": 200,
+  "data": {
+    "description": "",
+    "html": "<html><head><meta name=\"color-scheme\" content=\"light dark\"></head><body><pre style=\"word-wrap: break-word; white-space: pre-wrap;\"># Pi Ledger - Python Dependencies\n# Install with: pip install -r requirements.txt\n\n# Web Framework\nfastapi\nuvicorn[standard]\nstarlette\n\n# Request Handling\npython-multipart\naiohttp\nanyio\n\n# Configuration & Validation (Req #45: Strict Config)\npydantic\npydantic-settings  # Required for strict config validation\n\n# Security & Authentication\nsqlalchemy\npython-jose[cryptography]\npasslib[bcrypt]\n\n# Blockchain (Stellar SDK for Pi Network)\nstellar-sdk\n\n# Environment Variables\npython-dotenv\n\n# PDF Generation (Req #21: AML Reports)\nreportlab\nPyPDF2\n\n# Utilities\npython-dateutil\n\n# Testing\nrequests\npytest\npytest-cov\nhttpx\nplaywright\n\n# Optional Development Tools (for scripts)\nPillow  # For update_logo.py\npyngrok  # For start_ngrok.py (development only)\n\n# Performance Optimization (Phase 1 - 2025)\nredis  # For caching and performance optimization</pre></body></html>",
+    "httpStatus": 200,
+    "httpStatusText": "",
+    "title": "",
+    "url": "https://raw.githubusercontent.com/Mirxou/Ledgererp/main/requirements.txt",
+    "usage": {
+      "tokens": 252
+    }
+  },
+  "meta": {
+    "usage": {
+      "tokens": 252
+    }
+  },
+  "status": 20000
+}

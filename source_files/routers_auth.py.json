@@ -1,0 +1,20 @@
+{
+  "code": 200,
+  "data": {
+    "description": "",
+    "html": "<html><head><meta name=\"color-scheme\" content=\"light dark\"></head><body><pre style=\"word-wrap: break-word; white-space: pre-wrap;\">from fastapi import APIRouter, Request, Response, HTTPException, Depends\nfrom typing import Dict, Any\nimport logging\nfrom app.core.security import verify_pi_access_token, verify_pi_token, create_session_token\nfrom app.core.config import settings\n\nlogger = logging.getLogger(__name__)\n\nrouter = APIRouter()\n\n@router.post(\"/login\")\nasync def login(request: Request, response: Response):\n    \"\"\"\n    Exchange Pi Access Token for a secure JWT session cookie.\n    Req #2: Auth Logic Enhancement\n    \"\"\"\n    try:\n        data = await request.json()\n        access_token = data.get(\"accessToken\")\n        \n        if not access_token:\n            raise HTTPException(status_code=400, detail=\"Missing accessToken\")\n            \n        # 1. Verify token with Pi Network (or cache)\n        user_data = await verify_pi_access_token(access_token)\n        \n        # 2. Create JWT Session (with IP/UA binding)\n        session_token = create_session_token({\n            \"uid\": user_data.get(\"uid\"),\n            \"username\": user_data.get(\"username\"),\n            \"accessToken\": access_token\n        }, request)\n        \n        # 3. Set Secure HttpOnly Cookie\n        is_secure = settings.ENVIRONMENT == \"production\"\n        \n        response.set_cookie(\n            key=\"pi_session\",\n            value=session_token,\n            httponly=True,\n            secure=is_secure,\n            samesite=\"strict\",\n            max_age=900, \n            path=\"/\"\n        )\n        \n        return {\n            \"status\": \"success\",\n            \"user\": {\n                \"username\": user_data.get(\"username\"),\n                \"uid\": user_data.get(\"uid\")\n            }\n        }\n        \n    except HTTPException:\n        raise\n    except Exception as e:\n        logger.error(f\"Login error: {e}\")\n        raise HTTPException(status_code=401, detail=\"Authentication failed\")\n\n@router.post(\"/logout\")\nasync def logout(response: Response):\n    \"\"\"Clear the session cookie\"\"\"\n    response.delete_cookie(\"pi_session\")\n    return {\"status\": \"success\", \"message\": \"Logged out\"}\n\n@router.get(\"/me\")\nasync def get_me(user_data: Dict[str, Any] = Depends(verify_pi_token)):\n    \"\"\"Check current session (Uses Dependency with Hijacking protection)\"\"\"\n    return {\n        \"status\": \"success\",\n        \"user\": {\n            \"username\": user_data.get(\"username\"),\n            \"uid\": user_data.get(\"uid\")\n        }\n    }\n</pre></body></html>",
+    "httpStatus": 200,
+    "httpStatusText": "",
+    "title": "",
+    "url": "https://raw.githubusercontent.com/Mirxou/Ledgererp/main/app/routers/auth.py",
+    "usage": {
+      "tokens": 542
+    }
+  },
+  "meta": {
+    "usage": {
+      "tokens": 542
+    }
+  },
+  "status": 20000
+}

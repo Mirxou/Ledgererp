@@ -1,0 +1,20 @@
+{
+  "code": 200,
+  "data": {
+    "description": "",
+    "html": "<html><head><meta name=\"color-scheme\" content=\"light dark\"></head><body><pre style=\"word-wrap: break-word; white-space: pre-wrap;\">/*    /index.html   200\n\n# Redirect old /static/ paths to new paths (for cache compatibility)\n/static/js/*    /js/:splat   301\n/static/libs/*    /libs/:splat   301\n/static/css/*    /css/:splat   301\n/static/*.html    /:splat.html   301\n/static/*.json    /:splat.json   301\n/static/*.png    /:splat.png   301\n/static/*.ico    /:splat.ico   301\n</pre></body></html>",
+    "httpStatus": 200,
+    "httpStatusText": "",
+    "title": "",
+    "url": "https://raw.githubusercontent.com/Mirxou/Ledgererp/main/static/_redirects",
+    "usage": {
+      "tokens": 157
+    }
+  },
+  "meta": {
+    "usage": {
+      "tokens": 157
+    }
+  },
+  "status": 20000
+}

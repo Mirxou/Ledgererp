@@ -1,0 +1,611 @@
+{
+  "files_analyzed": [
+    "invoice.js", "security.js", "hardware.js", "pi-storage.js", "pi-adapter.js",
+    "db.js", "auto-lock.js", "sw.js", "offline-sync.js", "account-settings.js",
+    "audit-logs.js", "b2b.js", "bug-reporting.js", "csv-import.js", "data-export.js",
+    "deep-linking.js", "error-handler.js", "image-compression.js", "lifecycle.js",
+    "market-ticker.js", "plugins.js", "product-manager.js", "push-service.js",
+    "reports.js", "shift-management.js", "subscription-manager.js", "ui-utils.js"
+  ],
+  "critical_issues": [
+    {
+      "file": "b2b.js",
+      "line_approx": 81,
+      "severity": "CRITICAL",
+      "category": "XSS - Stored",
+      "title": "Unsanitized merchant data injected via innerHTML",
+      "description": "In showMarket(), merchant.name, merchant.location, merchant.category, and merchant.description from the backend are directly interpolated into innerHTML template literals without any sanitization. A compromised or malicious backend response could inject arbitrary script tags. Additionally, line 100 uses onclick=\"b2bDirectory.connectMerchant('${merchant.merchantId}')\" which enables attribute injection via a crafted merchantId value.",
+      "recommendation": "Sanitize all merchant fields using DOMPurify or create DOM elements with textContent. Use addEventListener instead of inline onclick with string interpolation."
+    },
+    {
+      "file": "hardware.js",
+      "line_approx": 161,
+      "severity": "CRITICAL",
+      "category": "XSS - Stored/DOM",
+      "title": "Receipt HTML injection via unsanitized receiptData fields",
+      "description": "formatReceiptHTML() builds HTML via template literals and sets it via innerHTML (line 161: printContainer.innerHTML = receiptHTML). Fields receiptData.shopName, receiptData.customerName, receiptData.invoiceId are interpolated directly. If a merchant sets their shop name to '<img src=x onerror=alert(1)>', this executes in the print container context. The system printer dialog renders this HTML.",
+      "recommendation": "Use DOM API to build receipt elements, or sanitize all receiptData fields with DOMPurify before interpolation. At minimum, escape <, >, & in all user-controlled fields."
+    },
+    {
+      "file": "invoice.js",
+      "line_approx": 465,
+      "severity": "CRITICAL",
+      "category": "XSS - DOM",
+      "title": "XSS in addItem() via DOMPurify fallback bypass",
+      "description": "addItem() uses innerHTML to create item rows. It attempts DOMPurify sanitization but falls back to raw name if DOMPurify is undefined (line 462: const sanitizedName = typeof DOMPurify !== 'undefined' ? DOMPurify.sanitize(name || '') : (name || '')). The sanitized value is placed in an HTML attribute (value=\\\"${sanitizedName}\\\"). If DOMPurify fails to load, an item name like 'a\\\" onfocus=alert(1) autofocus=\\\"' would break out of the attribute.",
+      "recommendation": "Never use innerHTML for user-controlled input. Use document.createElement() and set .value property directly. Or use DOMPurify with ALLOWED_TAGS:[] and always throw if unavailable."
+    },
+    {
+      "file": "auto-lock.js",
+      "line_approx": 181,
+      "severity": "CRITICAL",
+      "category": "Insecure Storage",
+      "title": "PIN stored and compared in plaintext",
+      "description": "verifyPIN() compares the user-entered PIN directly against the stored PIN from IndexedDB: 'return pin === storedPIN'. The PIN is stored unhashed. Any script with IndexedDB access can read the plaintext PIN. The code comment explicitly acknowledges this: 'In production, use bcrypt or similar to verify PIN // For now, simple comparison (NOT SECURE - replace in production)'.",
+      "recommendation": "Hash the PIN with a strong KDF (PBKDF2/argon2) before storing. Compare hashes, never plaintext. Use the Web Crypto API's PBKDF2 with a random salt per PIN."
+    },
+    {
+      "file": "pi-storage.js",
+      "line_approx": 203,
+      "severity": "CRITICAL",
+      "category": "Runtime Crash / Denial of Service",
+      "title": "btoa(String.fromCharCode(...compressed)) will crash on large data",
+      "description": "The compress() method uses spread operator on a potentially large Uint8Array: 'btoa(String.fromCharCode(...compressed))'. For data exceeding ~100KB, this will throw 'Maximum call stack size exceeded' because each byte becomes a function argument. Similarly in encryptData() at security.js line 181: 'btoa(String.fromCharCode(...combined))'.",
+      "recommendation": "Use a chunked approach: convert the Uint8Array to a string using a loop or TextDecoder, then btoa the result. Or use a library like base64-js."
+    },
+    {
+      "file": "security.js",
+      "line_approx": 16,
+      "severity": "CRITICAL",
+      "category": "Weak Cryptography",
+      "title": "Fallback mnemonic uses only 24 words (~55 bits entropy vs required 128)",
+      "description": "The fallback WORD_LIST has only 24 words. generateMnemonicWords() uses crypto.getRandomValues() but with modulo 24, giving only ~4.58 bits of entropy per word. A 12-word mnemonic from this list has ~55 bits total entropy vs the BIP-39 standard of ~128 bits. This means the fallback can be brute-forced in feasible time.",
+      "recommendation": "If ethers.js is unavailable, the system should refuse to generate mnemonics entirely rather than falling back to an insecure word list. Throw an error requiring ethers.js."
+    },
+    {
+      "file": "security.js",
+      "line_approx": 244,
+      "severity": "CRITICAL",
+      "category": "Weak Cryptography",
+      "title": "Hardcoded static salts for vault and device encryption",
+      "description": "createVaultBackup() uses salt: encoder.encode('pi-ledger-vault-salt') and exportKeyShard() uses salt: encoder.encode('pi-ledger-device-salt'). These are fixed, publicly visible strings used as PBKDF2 salts. All vaults encrypted with the same password will use the same salt, enabling precomputation/rainbow table attacks.",
+      "recommendation": "Generate a random 16-byte salt for each encryption operation and store it alongside the ciphertext (prepended or as a field)."
+    },
+    {
+      "file": "pi-adapter.js",
+      "line_approx": 37,
+      "severity": "CRITICAL",
+      "category": "postMessage Vulnerability",
+      "title": "postMessage to parent with wildcard origin '*'",
+      "description": "window.parent.postMessage(JSON.stringify({...}), '*') sends the SDK communication request to ANY parent frame regardless of origin. If the app is embedded in a malicious iframe, the message (containing the app's internal ID and timestamp) can be intercepted. Also, no message event listener is set up to verify responses.",
+      "recommendation": "Use the specific expected origin (e.g., 'https://app-cdn.minepi.com') instead of '*'. Set up a message event listener that validates event.origin."
+    },
+    {
+      "file": "invoice.js",
+      "line_approx": 1527,
+      "severity": "CRITICAL",
+      "category": "Authorization Bypass",
+      "title": "Refund authorization for closed shifts uses confirm() dialog only",
+      "description": "refundInvoice() checks if an invoice is from a closed shift and supposedly requires 'owner permission'. However, the 'authorization' is just a browser confirm() dialog (line 1527: const isOwner = confirm(...)). Any user (cashier role) can click OK to bypass this check. There is no frontend or backend role verification.",
+      "recommendation": "Verify the user's role from the session/backend before allowing the refund. Send the user's role with the refund request and validate server-side."
+    },
+    {
+      "file": "invoice.js",
+      "line_approx": 1094,
+      "severity": "CRITICAL",
+      "category": "Pi SDK Integration Bug",
+      "title": "piAdapter.user is never set - payment initiation always fails",
+      "description": "PiAdapter.authenticate() stores the user as this.currentUser (line 125), but initiatePiPayment() checks currentPiAdapter.user (line 1094). The property 'user' is never assigned. Similarly, pi-storage.js checks this.piAdapter.user (line 35) and this.piAdapter.accessToken (line 273), but PiAdapter never sets these properties. This means: (a) PiStorage.initialize() always throws 'Pi authentication required', (b) generateQRCode() always throws 'Pi authentication required', and (c) all blockchain storage operations fail.",
+      "recommendation": "Add this.user = authResult.user and this.accessToken = authResult.accessToken to PiAdapter.authenticate(). Update pi-storage.js to use this.piAdapter.currentUser."
+    },
+    {
+      "file": "sw.js",
+      "line_approx": 23,
+      "severity": "CRITICAL",
+      "category": "Supply Chain / Cache Poisoning",
+      "title": "External CDN resources cached without Subresource Integrity (SRI)",
+      "description": "The service worker caches external resources: 'https://cdn.jsdelivr.net/npm/chart.js', 'https://esm.sh/qrious@4.0.2', 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css'. No integrity hashes are checked. If any CDN is compromised or serves malicious content via MITM, the SW will cache and serve it indefinitely even after the CDN is fixed (stale-while-revalidate strategy).",
+      "recommendation": "Add SRI checks before caching. Use cache.addAll() with requests that include integrity metadata, or fetch manually and verify hashes before caching."
+    },
+    {
+      "file": "subscription-manager.js",
+      "line_approx": 197,
+      "severity": "CRITICAL",
+      "category": "Runtime Error",
+      "title": "ReferenceError: closeUpgradeModal is not defined (lines 197-200)",
+      "description": "Lines 197-200 have 'window.closeUpgradeModal = closeUpgradeModal;' repeated twice, but closeUpgradeModal is never defined as a standalone variable/function in the file scope. It was defined as 'window.closeUpgradeModal = function() {...}' on line 146, so referencing the bare identifier 'closeUpgradeModal' will throw ReferenceError. Additionally, the duplicate assignment on lines 197 and 200 is dead code.",
+      "recommendation": "Remove lines 197-200 entirely (the function is already assigned to window on line 146)."
+    }
+  ],
+  "high_issues": [
+    {
+      "file": "deep-linking.js",
+      "line_approx": 141,
+      "severity": "HIGH",
+      "category": "XSS - Reflected",
+      "title": "invoiceId from URL params injected into innerHTML",
+      "description": "showDeepLinkNotification() creates a div and sets innerHTML with 'Invoice ID: ${invoiceId}' where invoiceId comes from URL query parameters (line 66). An attacker could craft a URL like ?invoice_id=<img src=x onerror=alert(1)> to execute script.",
+      "recommendation": "Use textContent instead of innerHTML for the invoice ID display."
+    },
+    {
+      "file": "offline-sync.js",
+      "line_approx": 8,
+      "severity": "HIGH",
+      "category": "Insecure Storage",
+      "title": "Sync queue with transaction data stored in localStorage unencrypted",
+      "description": "The offline sync queue is stored as plain JSON in localStorage under key 'pi_ledger_sync_queue'. This contains transaction data (action, data, timestamp) which could include invoice details, amounts, and merchant IDs. localStorage is accessible to any script in the same origin and is not encrypted at rest.",
+      "recommendation": "Store the sync queue in IndexedDB (which the app already uses via Dexie) and encrypt sensitive fields before storage."
+    },
+    {
+      "file": "pi-storage.js",
+      "line_approx": 75,
+      "severity": "HIGH",
+      "category": "Insecure Storage",
+      "title": "Stellar public key stored in localStorage without integrity protection",
+      "description": "The Stellar public key from the backend is stored in localStorage (line 122). A malicious script or XSS could replace this key, causing the frontend to use a different account. There's no integrity verification when reading it back.",
+      "recommendation": "Store in IndexedDB with the rest of the app data, or sign the public key value with a session-derived key to detect tampering."
+    },
+    {
+      "file": "ui-utils.js",
+      "line_approx": 140,
+      "severity": "HIGH",
+      "category": "XSS - Potential",
+      "title": "Modal.show() allows iframe tag with arbitrary src",
+      "description": "The ALLOWED_TAGS list includes 'iframe' and ALLOWED_ATTR includes 'src'. The showIframe() method passes any URL directly into an iframe src attribute. While DOMPurify sanitizes the content, allowing iframes with arbitrary src can enable clickjacking or phishing within the app context.",
+      "recommendation": "Remove 'iframe' from ALLOWED_TAGS, or validate URLs against an allowlist in showIframe(). If iframe is needed, add a CSP sandbox attribute."
+    },
+    {
+      "file": "ui-utils.js",
+      "line_approx": 252,
+      "severity": "HIGH",
+      "category": "XSS - Potential",
+      "title": "Modal.prompt() passes message as HTML with isHtml:true",
+      "description": "Modal.prompt() sets content as `<p>${message}</p><input ...>` and passes isHtml: true. The message parameter from account-settings.js confirmDeleteAccount() contains user-controlled confirmation text. While the current callers use hardcoded strings, any future caller passing user input would enable XSS.",
+      "recommendation": "Set message via textContent on the <p> element rather than interpolating into the HTML template."
+    },
+    {
+      "file": "invoice.js",
+      "line_approx": 578,
+      "severity": "HIGH",
+      "category": "Runtime Error",
+      "title": "Undefined variables formattedTotalItems, formattedCashDeduction, formattedSubtotal",
+      "description": "calculateTotals() references formattedTotalItems (line 579), formattedCashDeduction (line 583, 587), and formattedSubtotal (line 591) but these variables are never defined within the method. This causes ReferenceError on every call to calculateTotals(), breaking the entire invoice UI.",
+      "recommendation": "Define these variables using formatPiAmount() before they are referenced, e.g., 'const formattedTotalItems = formatPiAmount(totalItemsPi);'."
+    },
+    {
+      "file": "invoice.js",
+      "line_approx": 2031,
+      "severity": "HIGH",
+      "category": "Runtime Error",
+      "title": "Reference to undefined variable 'date' in payment error handler",
+      "description": "In the onError callback of initiatePiPayment(): 'window.Toast.error(\\'Payment error: \\' + (error.message || date));'. The variable 'date' is not defined in scope, causing ReferenceError. Should be 'error.message'.",
+      "recommendation": "Change 'date' to 'error.message' or just 'String(error)'."
+    },
+    {
+      "file": "invoice.js",
+      "line_approx": 1218,
+      "severity": "HIGH",
+      "category": "Information Disclosure",
+      "title": "Payment URL shown in alert() on error",
+      "description": "generateQRCode() catch block uses alert() to display: 'Error generating QR code: ' + error.message + '\\n\\nPayment URL: ' + paymentUrl. The payment URL contains the merchant wallet address and amount. Using alert() is also blocked by CSP in Pi Browser.",
+      "recommendation": "Use Toast.error() instead of alert(). Never expose payment URLs in error messages."
+    },
+    {
+      "file": "db.js",
+      "line_approx": 229,
+      "severity": "HIGH",
+      "category": "Insecure Fallback",
+      "title": "getCurrentMerchantId() falls back to localStorage value or 'anonymous'",
+      "description": "If piAdapter is not authenticated, getCurrentMerchantId() returns localStorage.getItem('user_uid') or 'anonymous'. This means unauthenticated users can potentially access/modify data under the 'anonymous' ID, and a manipulated localStorage user_uid could impersonate another merchant.",
+      "recommendation": "Throw an error if piAdapter.currentUser is not available rather than falling back to localStorage. Never allow 'anonymous' as a merchant ID for data operations."
+    },
+    {
+      "file": "market-ticker.js",
+      "line_approx": 12,
+      "severity": "HIGH",
+      "category": "Supply Chain Risk",
+      "title": "Direct WebSocket connection to Bitget without backend proxy",
+      "description": "The market ticker connects directly to 'wss://ws.bitget.com/v2/ws/public' from the frontend. This bypasses any backend validation or CORS protections. A MITM attack on the WebSocket connection could inject fake price data, causing invoices to be generated at incorrect exchange rates, leading to financial loss.",
+      "recommendation": "Route all market data through the backend API. The backend should fetch and validate prices, and the frontend should only consume from the backend endpoint (which already exists at /api/market/pi-price)."
+    },
+    {
+      "file": "sw.js",
+      "line_approx": 72,
+      "severity": "HIGH",
+      "category": "Data Staleness",
+      "title": "API responses cached and served stale for /status and /list endpoints",
+      "description": "The SW caches responses from /status and /list API endpoints. When online, the stale-while-revalidate strategy means users see old data until the revalidation completes. For a financial application, this means users may see outdated invoice/payment status.",
+      "recommendation": "Use network-first strategy for all API endpoints, or at minimum don't cache any financial data endpoints."
+    },
+    {
+      "file": "pi-storage.js",
+      "line_approx": 206,
+      "severity": "HIGH",
+      "category": "Deprecated API / Compatibility",
+      "title": "Use of deprecated escape()/unescape() functions",
+      "description": "compress() and decompress() use btoa(unescape(encodeURIComponent(...))) and decodeURIComponent(escape(atob(...))). The escape() and unescape() functions are deprecated and may not handle all Unicode characters correctly (they only handle Latin-1 supplement).",
+      "recommendation": "Use TextEncoder/TextDecoder with proper base64 conversion functions instead of the deprecated escape/unescape."
+    },
+    {
+      "file": "hardware.js",
+      "line_approx": 500,
+      "severity": "HIGH",
+      "category": "Supply Chain Risk",
+      "title": "Dynamically loads script from unpkg.com without SRI",
+      "description": "loadBarcodeLibrary() creates a script element with src='https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js' without Subresource Integrity check. A compromised unpkg CDN could serve malicious code that gets full page access.",
+      "recommendation": "Either bundle the library locally or add integrity and crossorigin attributes to the script tag."
+    },
+    {
+      "file": "security.js",
+      "line_approx": 308,
+      "severity": "HIGH",
+      "category": "XSS - Incomplete Sanitization",
+      "title": "DOMPurify fallback regex is insufficient",
+      "description": "When DOMPurify is not loaded, sanitizeInput() falls back to removing <script> tags and all HTML tags. However, this doesn't handle: (1) event handler attributes like onerror=, onload=, (2) javascript: URLs, (3) SVG-based XSS, (4) CSS expression() attacks. This fallback is trivially bypassable.",
+      "recommendation": "If DOMPurify is unavailable, refuse to render any HTML at all. Return plain text only. Never provide a 'best effort' HTML sanitizer."
+    }
+  ],
+  "medium_issues": [
+    {
+      "file": "invoice.js",
+      "line_approx": 2054,
+      "severity": "MEDIUM",
+      "category": "Code Quality - File Size",
+      "title": "invoice.js is 86KB / 2054 lines - massive God class",
+      "description": "InvoiceManager handles: invoice CRUD, QR code generation, payment initiation (Pi SDK), receipt printing, toast notifications, deep linking, clipboard operations, and more. This violates Single Responsibility Principle and makes testing, maintenance, and code review extremely difficult.",
+      "recommendation": "Split into: InvoiceCRUD, InvoicePayment, InvoiceUI, InvoiceReceipt modules."
+    },
+    {
+      "file": "invoice.js",
+      "line_approx": 666,
+      "severity": "MEDIUM",
+      "category": "Weak Randomness",
+      "title": "Invoice ID generation uses Math.random() instead of crypto API",
+      "description": "generateSecureInvoiceId() uses Math.random().toString(16) for the random component. Math.random() is not cryptographically secure. While the timestamp adds some unpredictability, the random portion is predictable.",
+      "recommendation": "Use crypto.getRandomValues(new Uint8Array(4)) and convert to hex for the random component."
+    },
+    {
+      "file": "invoice.js",
+      "line_approx": 887,
+      "severity": "MEDIUM",
+      "category": "Code Duplication",
+      "title": "generateInvoice() is near-identical copy of saveDraft()",
+      "description": "The legacy generateInvoice() method (lines 887-1076) duplicates ~90% of the code in saveDraft() (lines 609-830). Both methods validate inputs, calculate totals, generate IDs, save to DB, and register with blockchain. Only minor differences exist.",
+      "recommendation": "Remove generateInvoice() entirely or have it call saveDraft() with a 'generateQR' flag."
+    },
+    {
+      "file": "security.js",
+      "line_approx": 564,
+      "severity": "MEDIUM",
+      "category": "Fingerprinting / Privacy",
+      "title": "Canvas fingerprinting for device identification",
+      "description": "getDeviceId() creates a canvas element and uses its toDataURL() output as a fingerprint. This is a well-known tracking technique that may violate privacy regulations. The fingerprint is deterministic and doesn't change, making it a persistent identifier.",
+      "recommendation": "Use a randomly generated UUID stored in IndexedDB instead of canvas fingerprinting."
+    },
+    {
+      "file": "db.js",
+      "line_approx": 98,
+      "severity": "MEDIUM",
+      "category": "Architecture Bug",
+      "title": "syncWithBlockchain uses string concatenation for table name",
+      "description": "Line 98: 'await this.db[task.entityType + \\\"s\\\"]' - Pluralizes entity type by appending 's'. This works for 'invoice' -> 'invoices' but fails for 'product' -> 'products' (which it handles) and will break for any entity type where the plural isn't simply + 's' (e.g., 'shift' -> 'shifts' works, but 'settings' would become 'settingss').",
+      "recommendation": "Use a mapping object: { invoice: 'invoices', product: 'products', setting: 'settings' }."
+    },
+    {
+      "file": "db.js",
+      "line_approx": 57,
+      "severity": "MEDIUM",
+      "category": "Performance",
+      "title": "Sync interval runs every 30 seconds unconditionally",
+      "description": "startSyncLoop() sets a 30-second interval that tries to sync all pending items to the blockchain. Even when there are no pending items, it still queries IndexedDB every 30 seconds. On mobile devices, this causes unnecessary battery drain and CPU usage.",
+      "recommendation": "Only start the sync interval when there are pending items in the syncQueue. Stop it when the queue is empty."
+    },
+    {
+      "file": "lifecycle.js",
+      "line_approx": 218,
+      "severity": "MEDIUM",
+      "category": "Memory Leak",
+      "title": "setInterval never cleared in startUpdateCheck()",
+      "description": "startUpdateCheck() creates a setInterval but never stores or returns the interval ID, making it impossible to clear. If called multiple times, multiple intervals stack up.",
+      "recommendation": "Store the interval ID in a class property and clear it in a destroy/dispose method."
+    },
+    {
+      "file": "market-ticker.js",
+      "line_approx": 62,
+      "severity": "MEDIUM",
+      "category": "Memory Leak / Resource Leak",
+      "title": "WebSocket reconnection has no backoff or max retry limit",
+      "description": "On WebSocket close, it reconnects after 5s (line 63). There's no exponential backoff, no max retry count, and the old WebSocket object may not be properly garbage collected. Combined with the 30s REST fallback interval, this creates multiple concurrent reconnection attempts.",
+      "recommendation": "Implement exponential backoff with jitter and a maximum retry count. Null-check this.ws before creating a new one."
+    },
+    {
+      "file": "offline-sync.js",
+      "line_approx": 43,
+      "severity": "MEDIUM",
+      "category": "Error Handling",
+      "title": "processQueue silently swallows errors and loses failed items context",
+      "description": "processQueue() catches errors per-item but only pushes to remainingQueue. There's no retry limit, no error reporting to the user about permanently failed items, and items that consistently fail will remain in the queue forever, causing the queue to grow unbounded.",
+      "recommendation": "Add a max retry count per item. After N retries, move to a 'failed' state and notify the user. Consider a dead letter queue."
+    },
+    {
+      "file": "audit-logs.js",
+      "line_approx": 131,
+      "severity": "MEDIUM",
+      "category": "XSS - Incomplete Sanitization",
+      "title": "HTML entity encoding is applied twice in wrong order",
+      "description": "Error message sanitization on line 131 does: .replace(/</g, '<') AFTER .replace(/</g, '<'), meaning the first replacement creates &lt; which is then replaced again. The order should be: encode & first, then < and >. This actually produces literal '&lt;' text in the DOM.",
+      "recommendation": "Fix the order: first replace & with &amp;, then < with &lt;, then > with &gt;."
+    },
+    {
+      "file": "account-settings.js",
+      "line_approx": 345,
+      "severity": "MEDIUM",
+      "category": "Race Condition",
+      "title": "deleteAccount sets href and immediately calls reload()",
+      "description": "Lines 345-346: window.location.href = '/'; window.location.reload(); Setting href triggers navigation, and reload() immediately after may not execute or may cause a double-load race condition.",
+      "recommendation": "Use only window.location.href = '/' (which already triggers a reload) or window.location.replace('/')."
+    },
+    {
+      "file": "bug-reporting.js",
+      "line_approx": 171,
+      "severity": "MEDIUM",
+      "category": "Overly Broad Sanitization",
+      "title": "Error sanitization regexes are too broad, redacting legitimate data",
+      "description": "Patterns like /key/i, /address/i, /token/i will redact legitimate error messages containing words like 'keyboard', 'addressed', 'tokenize'. This makes debugging impossible.",
+      "recommendation": "Use more specific patterns like /private.?key/i, /wallet.?address/i, /access.?token/i, or use word boundary matching."
+    },
+    {
+      "file": "data-export.js",
+      "line_approx": 20,
+      "severity": "MEDIUM",
+      "category": "XSS - Potential",
+      "title": "Shop name from DOM used in export without sanitization",
+      "description": "getExportData() reads document.getElementById('shop-name')?.textContent. While textContent is safe, the exported data includes this value in JSON/PDF/CSV. If the shop name was previously set via an XSS-vulnerable path, the exported data carries the payload.",
+      "recommendation": "Sanitize the shop name at the point of storage, not just at display time."
+    },
+    {
+      "file": "reports.js",
+      "line_approx": 78,
+      "severity": "MEDIUM",
+      "category": "Hardcoded Data",
+      "title": "Growth rate is hardcoded to 15.4% placeholder",
+      "description": "aggregateData() returns growthRate: 15.4 with comment 'Placeholder for MVP'. This means reports show fake growth data to merchants.",
+      "recommendation": "Calculate actual growth rate from historical invoice data, or display 'N/A' if not available."
+    },
+    {
+      "file": "shift-management.js",
+      "line_approx": 202,
+      "severity": "MEDIUM",
+      "category": "XSS - Template Injection",
+      "title": "Report text injected via innerHTML in template literal",
+      "description": "showReportModal() sets modal.innerHTML with ${report} where report is a generated string. While the current report content is controlled, if any future report includes user data (e.g., customer names), it would be XSS-vulnerable.",
+      "recommendation": "Use a <pre> element with textContent for the report display."
+    },
+    {
+      "file": "subscription-manager.js",
+      "line_approx": 186,
+      "severity": "MEDIUM",
+      "category": "Performance",
+      "title": "Quote update interval runs every 15s while modal is open",
+      "description": "startQuoteUpdate() fetches /api/subscription/quote every 15 seconds. This is aggressive polling that creates unnecessary network requests and backend load.",
+      "recommendation": "Increase interval to 60s or use Server-Sent Events / WebSocket for price updates."
+    },
+    {
+      "file": "csv-import.js",
+      "line_approx": 52,
+      "severity": "MEDIUM",
+      "category": "Incomplete Code",
+      "title": "File is truncated/incomplete (52 lines)",
+      "description": "csv-import.js ends abruptly at line 52 in the middle of a <pre> element inside the modal template. The CSV parsing logic, file input handling, and import functionality are missing.",
+      "recommendation": "Complete the CSV import implementation including: file input handling, CSV parsing, validation, and batch product creation."
+    },
+    {
+      "file": "shift-management.js",
+      "line_approx": 206,
+      "severity": "MEDIUM",
+      "category": "Incomplete Code",
+      "title": "File is truncated/incomplete (206 lines)",
+      "description": "shift-management.js ends mid-template-literal at line 207. The modal HTML, close button, and print/download functionality for the shift report are missing.",
+      "recommendation": "Complete the shift report modal with close button, print option, and proper HTML closing."
+    }
+  ],
+  "low_issues": [
+    {
+      "file": "invoice.js",
+      "line_approx": 10,
+      "severity": "LOW",
+      "category": "Dead Code / Commented Out",
+      "title": "Duplicate 'Exchange Rates' comment and RATE_MARKET_TEST comment",
+      "description": "Lines 10-12 have duplicate 'Exchange Rates' comments and a 'RATE_MARKET_TEST removed for production' comment. Line 14 has an unrealistic GCV value of 314159.0 ($314,159 per Pi)."
+    },
+    {
+      "file": "invoice.js",
+      "line_approx": 810,
+      "severity": "LOW",
+      "category": "Dead Code",
+      "title": "Commented-out alert() call left in code",
+      "description": "Line 810: A commented-out alert() with invoice details was left in the code, suggesting incomplete cleanup."
+    },
+    {
+      "file": "invoice.js",
+      "line_approx": 1020,
+      "severity": "LOW",
+      "category": "Dead Code",
+      "title": "Another commented-out alert() in generateInvoice()",
+      "description": "Line 1020 has a commented-out alert showing invoice details."
+    },
+    {
+      "file": "invoice.js",
+      "line_approx": 1559,
+      "severity": "LOW",
+      "category": "UX Issue",
+      "title": "Refund reason uses prompt() - blocked by CSP in Pi Browser",
+      "description": "Line 1554: const reason = prompt('Enter refund reason (optional):'). The prompt() function is blocked by strict CSP policies and may not work in Pi Browser."
+    },
+    {
+      "file": "invoice.js",
+      "line_approx": 1602,
+      "severity": "LOW",
+      "category": "Undefined Method",
+      "title": "this.formatPiAmount() called but not a class method",
+      "description": "Line 1602 uses this.formatPiAmount() but formatPiAmount is a standalone function, not a class method. This will throw TypeError."
+    },
+    {
+      "file": "pi-adapter.js",
+      "line_approx": 99,
+      "severity": "LOW",
+      "category": "Information Logging",
+      "title": "Access token length logged to console",
+      "description": "Line 99 logs the access token length. While not the token itself, this reveals information about the token format to anyone with console access."
+    },
+    {
+      "file": "pi-storage.js",
+      "line_approx": 78,
+      "severity": "LOW",
+      "category": "Information Logging",
+      "title": "Stellar public key prefix logged to console",
+      "description": "Lines 78-82 log the first 8 characters of the Stellar public key. This could help an attacker with console access narrow down brute-force attempts."
+    },
+    {
+      "file": "hardware.js",
+      "line_approx": 540,
+      "severity": "LOW",
+      "category": "UX Issue",
+      "title": "showErrorToast falls back to alert()",
+      "description": "Line 541: If window.Toast is not available, uses alert() which is blocked by CSP in Pi Browser."
+    },
+    {
+      "file": "auto-lock.js",
+      "line_approx": 96,
+      "severity": "LOW",
+      "category": "Performance",
+      "title": "Console.log on every timeout reset may cause performance issues",
+      "description": "resetTimeout() logs to console on every activity event. With events like mousemove firing hundreds of times per second, this creates excessive console output."
+    },
+    {
+      "file": "ui-utils.js",
+      "line_approx": 114,
+      "severity": "LOW",
+      "category": "Event Listener Leak",
+      "title": "popstate listener added inside Modal.init() without cleanup",
+      "description": "Each call to Modal.init() adds a new popstate listener. While there's a guard (if !document.getElementById...), the listener is added inside the guard, so it's actually safe. However, the listener is never removed."
+    },
+    {
+      "file": "push-service.js",
+      "line_approx": 42,
+      "severity": "LOW",
+      "category": "XSS - Minor",
+      "title": "innerHTML used for button text update",
+      "description": "Line 42: btn.innerHTML = '<i class=\\\"fas fa-check\\\"></i> Alerts Active'. The content is hardcoded so not exploitable, but using innerHTML for text updates is a bad pattern."
+    },
+    {
+      "file": "bug-reporting.js",
+      "line_approx": 244,
+      "severity": "LOW",
+      "category": "UX Issue",
+      "title": "Uses alert() for validation instead of Toast",
+      "description": "Line 244: alert('Please describe the issue.') - Should use the Toast system for consistency and because alert() is blocked by CSP."
+    },
+    {
+      "file": "plugins.js",
+      "line_approx": 1,
+      "severity": "LOW",
+      "category": "Incomplete Code",
+      "title": "Plugin system is a bare stub with no security model",
+      "description": "PluginManager only registers plugins and dispatches events. There's no sandboxing, no permission system, no code isolation, no input validation. Any registered plugin's onEvent handler runs with full page access."
+    },
+    {
+      "file": "product-manager.js",
+      "line_approx": 82,
+      "severity": "LOW",
+      "category": "Performance",
+      "title": "getProduct() loads ALL products to find one",
+      "description": "getProduct() calls getProducts() which returns all products, then filters client-side. Should use IndexedDB query by productId for O(1) lookup."
+    },
+    {
+      "file": "deep-linking.js",
+      "line_approx": 50,
+      "severity": "LOW",
+      "category": "Deprecated API",
+      "title": "Uses deprecated document.execCommand('copy')",
+      "description": "The clipboard fallback uses document.execCommand('copy') which is deprecated. While used as a fallback for older browsers, it may be removed from browsers entirely."
+    },
+    {
+      "file": "multiple files",
+      "line_approx": 0,
+      "severity": "LOW",
+      "category": "Global Namespace Pollution",
+      "title": "Many modules export to window globals",
+      "description": "invoiceManager, dbManager, piAdapter, hardwareManager, securityManager, Toast, Modal, SubscriptionManager, MarketTicker, PushService, PluginManager, and more are all attached to window. This creates potential naming collisions and makes dependency injection impossible.",
+      "recommendation": "Use ES module imports exclusively. Only expose a single app namespace object to window if needed for HTML onclick handlers."
+    }
+  ],
+  "code_quality_score": 35,
+  "security_score": 18,
+  "pi_compliance_score": 40,
+  "overall_score": 28,
+  "summary": "The Ledgererp frontend codebase suffers from severe security vulnerabilities. Multiple critical XSS vectors exist due to unsanitized innerHTML usage across b2b.js, hardware.js, deep-linking.js, and invoice.js. The Pi SDK integration is fundamentally broken - PiAdapter stores auth data as 'currentUser' but all consumers reference 'user'/'accessToken', meaning blockchain storage and payment flows are non-functional. The security module uses weak fallback cryptography (24-word list with 55-bit entropy vs required 128-bit), hardcoded salts for vault encryption, and an insufficient DOMPurify fallback regex. The auto-lock module stores PINs in plaintext. The service worker caches external CDN resources without SRI checks, enabling supply chain attacks. invoice.js is a 2054-line God class that should be split into at least 4 modules. Two files (csv-import.js, shift-management.js) are truncated/incomplete. The undefined variable bug in calculateTotals() (formattedTotalItems, formattedCashDeduction, formattedSubtotal) breaks the entire invoice calculation UI. A ReferenceError in subscription-manager.js (closeUpgradeModal) breaks the upgrade flow. Despite many 'SECURITY FIX' and 'XSS FIX' comments showing awareness, the fixes are inconsistent and several vectors remain open. The codebase has clearly undergone iterative security improvements but needs a systematic security review pass.",
+  "invoice_js_specific": {
+    "issues": [
+      {
+        "title": "Undefined variables crash calculateTotals()",
+        "line_approx": 578,
+        "severity": "CRITICAL",
+        "description": "formattedTotalItems, formattedCashDeduction, formattedSubtotal are referenced but never defined"
+      },
+      {
+        "title": "Undefined 'date' variable in payment error handler",
+        "line_approx": 2031,
+        "severity": "HIGH"
+      },
+      {
+        "title": "XSS via DOMPurify fallback bypass in addItem()",
+        "line_approx": 462,
+        "severity": "CRITICAL"
+      },
+      {
+        "title": "piAdapter.user never set - payments always fail",
+        "line_approx": 1094,
+        "severity": "CRITICAL"
+      },
+      {
+        "title": "Weak Math.random() for invoice IDs",
+        "line_approx": 666,
+        "severity": "MEDIUM"
+      },
+      {
+        "title": "90% code duplication between saveDraft() and generateInvoice()",
+        "line_approx": 887,
+        "severity": "MEDIUM"
+      },
+      {
+        "title": "Owner authorization bypass via confirm() for refunds",
+        "line_approx": 1527,
+        "severity": "CRITICAL"
+      },
+      {
+        "title": "this.formatPiAmount() called but is standalone function",
+        "line_approx": 1602,
+        "severity": "LOW"
+      },
+      {
+        "title": "Payment URL exposed in alert() on error",
+        "line_approx": 1218,
+        "severity": "HIGH"
+      },
+      {
+        "title": "Multiple commented-out alert() calls (dead code)",
+        "lines": [810, 1020],
+        "severity": "LOW"
+      }
+    ],
+    "size_too_large": true,
+    "should_split": true,
+    "suggested_splits": [
+      "invoice-crud.js - Invoice create/read/update/delete, saveDraft, editInvoice, deleteInvoice",
+      "invoice-payment.js - QR generation, Pi.createPayment() flow, payment callbacks",
+      "invoice-ui.js - Modal management, form handling, event listeners, addItem, calculateTotals",
+      "invoice-receipt.js - Receipt printing, chat link copy, toast helpers"
+    ]
+  }
+}

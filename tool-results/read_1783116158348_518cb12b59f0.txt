@@ -1,0 +1,743 @@
+     1→"""
+     2→Blockchain Service - Dual-Mode Listener & Circuit Breaker
+     3→Req #18: Singleton Listener (Backend-only verification)
+     4→Req #22: Dual-Mode Polling (Local Node -> Public API fallback)
+     5→Req #23: Circuit Breaker (Hibernation Mode on 500/503)
+     6→SECURITY: Strict Verification Logic - Anti-Fraud & Anti-Replay
+     7→"""
+     8→import asyncio
+     9→import aiohttp
+    10→import logging
+    11→from enum import Enum
+    12→from typing import Optional, Dict, Any, Tuple, List
+    13→from datetime import datetime, timedelta
+    14→import hashlib
+    15→import os
+    16→
+    17→from app.core.security import PI_API_BASE, PI_API_KEY
+    18→
+    19→logger = logging.getLogger(__name__)
+    20→
+    21→class NodeMode(Enum):
+    22→    LOCAL = "local"
+    23→    PUBLIC = "public"
+    24→    HIBERNATION = "hibernation"
+    25→
+    26→class CircuitBreaker:
+    27→    """Circuit Breaker pattern for API resilience"""
+    28→    def __init__(self, failure_threshold: int = 5, timeout: int = 60):
+    29→        self.failure_threshold = failure_threshold
+    30→        self.timeout = timeout
+    31→        self.failure_count = 0
+    32→        self.last_failure_time: Optional[datetime] = None
+    33→        self.state = "closed"  # closed, open, half_open
+    34→    
+    35→    def record_success(self):
+    36→        """Reset on successful request"""
+    37→        self.failure_count = 0
+    38→        self.state = "closed"
+    39→    
+    40→    def record_failure(self):
+    41→        """Record failure and check if circuit should open"""
+    42→        self.failure_count += 1
+    43→        self.last_failure_time = datetime.now()
+    44→        
+    45→        if self.failure_count >= self.failure_threshold:
+    46→            self.state = "open"
+    47→            logger.warning(f"Circuit breaker OPENED after {self.failure_count} failures")
+    48→    
+    49→    def can_attempt(self) -> bool:
+    50→        """Check if request can be attempted"""
+    51→        if self.state == "closed":
+    52→            return True
+    53→        
+    54→        if self.state == "open":
+    55→            if self.last_failure_time:
+    56→                elapsed = (datetime.now() - self.last_failure_time).total_seconds()
+    57→                if elapsed >= self.timeout:
+    58→                    self.state = "half_open"
+    59→                    return True
+    60→            return False
+    61→        
+    62→        return True  # half_open
+    63→
+    64→class BlockchainService:
+    65→    """
+    66→    Req #18: Singleton Listener - Only backend polls blockchain
+    67→    Req #22: Dual-Mode Polling with fallback
+    68→    Req #23: Circuit Breaker for resilience
+    69→    """
+    70→    
+    71→    def __init__(
+    72→        self,
+    73→        local_node_url: str = "http://localhost:31400",
+    74→        public_api_url: str = "https://api.minepi.com",
+    75→        check_interval: int = 5
+    76→    ):
+    77→        """
+    78→        Initialize the blockchain service
+    79→        """
+    80→        self.local_node_url = local_node_url
+    81→        self.public_api_url = public_api_url
+    82→        self.check_interval = check_interval
+    83→        
+    84→        self.current_mode = NodeMode.LOCAL
+    85→        self.is_running = False
+    86→        self._listener_task: Optional[asyncio.Task] = None
+    87→        
+    88→        # Req #23: Circuit Breaker
+    89→        self.pi_api_breaker = CircuitBreaker(failure_threshold=5, timeout=60)
+    90→        
+    91→        # State management
+    92→        self.pending_transactions: Dict[str, Dict[str, Any]] = {}  # txhash -> data
+    93→        self.used_transactions: Dict[str, datetime] = {} # Anti-replay cache
+    94→        self.registered_invoices: Dict[str, Dict[str, Any]] = {} # invoice_id -> data
+    95→        
+    96→        # Metrics (Legacy support or simple tracking)
+    97→        self.processed_count = 0
+    98→        self.failed_count = 0
+    99→        self.circuit_breaker_open = False
+   100→
+   101→    SUBSCRIPTION_KEY = "pi_ledger_sub"
+   102→    
+   103→    async def verify_subscription_on_chain(self, account_id: str, stellar_data_service: 'StellarAccountData') -> Dict[str, Any]:
+   104→        """
+   105→        Verify if a merchant has a valid 'Pro' subscription stored on-chain.
+   106→        
+   107→        Args:
+   108→            account_id: Merchant's Stellar Public Key
+   109→            stellar_data_service: Instance of StellarAccountData to fetch data
+   110→            
+   111→        Returns:
+   112→            Dict with subscription status
+   113→        """
+   114→        import json
+   115→        
+   116→        try:
+   117→            # 1. Fetch data from blockchain
+   118→            data_str = await stellar_data_service.get_account_data(account_id, self.SUBSCRIPTION_KEY)
+   119→            
+   120→            if not data_str:
+   121→                return {"is_pro": False, "reason": "No subscription data found"}
+   122→                
+   123→            # 2. Parse JSON
+   124→            # Structure: {"tier": "pro", "expiry": "ISO_DATE", "signature": "..."}
+   125→            try:
+   126→                sub_data = json.loads(data_str)
+   127→            except json.JSONDecodeError:
+   128→                return {"is_pro": False, "reason": "Corrupt subscription data"}
+   129→            
+   130→            # 3. Check Expiry
+   131→            expiry_str = sub_data.get("expiry")
+   132→            if not expiry_str:
+   133→                return {"is_pro": False, "reason": "Invalid subscription data (no expiry)"}
+   134→                
+   135→            try:
+   136→                # Handle potentially missing timezone or Z
+   137→                if expiry_str.endswith('Z'):
+   138→                    expiry_str = expiry_str[:-1]
+   139→                expiry_date = datetime.fromisoformat(expiry_str)
+   140→                
+   141→                if datetime.now() > expiry_date:
+   142→                    return {"is_pro": False, "expiry": expiry_str, "reason": "Subscription expired"}
+   143→            except ValueError:
+   144→                 return {"is_pro": False, "reason": "Invalid date format"}
+   145→                
+   146→            # 4. Verify Signature
+   147→            provided_signature = sub_data.get("signature")
+   148→            if not provided_signature:
+   149→                 return {"is_pro": False, "reason": "Unsigned subscription data"}
+   150→            
+   151→            # Reconstruct payload for verification (remove signature from dict)
+   152→            verify_payload = sub_data.copy()
+   153→            del verify_payload["signature"]
+   154→            
+   155→            # Serialize exactly as the signer did (sort_keys=True)
+   156→            payload_str = json.dumps(verify_payload, sort_keys=True)
+   157→            
+   158→            # Secret (Must match backend)
+   159→            signing_secret = os.getenv("LICENSE_SIGNING_SECRET", "super_secret_signing_key_change_me")
+   160→            expected_signature = hashlib.sha256(f"{payload_str}{signing_secret}".encode()).hexdigest()
+   161→            
+   162→            if provided_signature != expected_signature:
+   163→                return {"is_pro": False, "reason": "Invalid signature - Data tampering detected"}
+   164→
+   165→            return {
+   166→                "is_pro": True, 
+   167→                "tier": sub_data.get("tier"), 
+   168→                "expiry": sub_data.get("expiry")
+   169→            }
+   170→            
+   171→        except Exception as e:
+   172→            logger.error(f"Subscription verification error: {e}")
+   173→            return {"is_pro": False, "reason": f"Verification error: {str(e)}"}
+   174→    
+   175→    @staticmethod
+   176→    def validate_memo(memo: str) -> Tuple[bool, Optional[str], int]:
+   177→        """
+   178→        Req #16: Validate Stellar Memo is within 28 bytes limit.
+   179→        
+   180→        Args:
+   181→            memo: The memo string to validate
+   182→            
+   183→        Returns:
+   184→            tuple: (is_valid, error_message, byte_length)
+   185→            - is_valid: True if memo is valid (<= 28 bytes)
+   186→            - error_message: Error message if invalid, None if valid
+   187→            - byte_length: Length of memo in bytes
+   188→        """
+   189→        if not memo:
+   190→            return True, None, 0
+   191→        
+   192→        # Calculate byte length (not character length)
+   193→        # Important: Arabic/Unicode characters take 2+ bytes
+   194→        memo_bytes = memo.encode('utf-8')
+   195→        byte_length = len(memo_bytes)
+   196→        
+   197→        if byte_length > 28:
+   198→            return False, f"Memo exceeds 28 bytes limit: {byte_length} bytes (Stellar limit)", byte_length
+   199→        
+   200→        return True, None, byte_length
+   201→    
+   202→    async def start_listener(self):
+   203→        """Start the blockchain listener task"""
+   204→        if self._listener_task is None or self._listener_task.done():
+   205→            self._listener_task = asyncio.create_task(self._listen_loop())
+   206→            logger.info("Blockchain listener started")
+   207→    
+   208→    async def stop_listener(self):
+   209→        """Stop the blockchain listener"""
+   210→        if self._listener_task and not self._listener_task.done():
+   211→            self._listener_task.cancel()
+   212→            try:
+   213→                await self._listener_task
+   214→            except asyncio.CancelledError:
+   215→                pass
+   216→            logger.info("Blockchain listener stopped")
+   217→    
+   218→    async def _listen_loop(self):
+   219→        """Main listening loop"""
+   220→        while True:
+   221→            try:
+   222→                await self._check_pending_transactions()
+   223→                await asyncio.sleep(self.check_interval)
+   224→            except asyncio.CancelledError:
+   225→                break
+   226→            except Exception as e:
+   227→                logger.error(f"Error in listener loop: {e}")
+   228→                await asyncio.sleep(self.check_interval)
+   229→    
+   230→    async def _check_pending_transactions(self):
+   231→        """Check pending transactions for confirmation"""
+   232→        if not self.pi_api_breaker.can_attempt():
+   233→            # Req #23: Enter Hibernation Mode
+   234→            if self.current_mode != NodeMode.HIBERNATION:
+   235→                self.current_mode = NodeMode.HIBERNATION
+   236→                logger.warning("Entered HIBERNATION mode - Pi payments paused")
+   237→            return
+   238→        
+   239→        # Try local node first (Req #22: Priority)
+   240→        if self.current_mode == NodeMode.LOCAL:
+   241→            success = await self._try_local_node()
+   242→            if not success:
+   243→                logger.warning("Local node failed, switching to public API")
+   244→                self.current_mode = NodeMode.PUBLIC
+   245→        
+   246→        # Fallback to public API
+   247→        if self.current_mode == NodeMode.PUBLIC or self.current_mode == NodeMode.HIBERNATION:
+   248→            success = await self._try_public_api()
+   249→            if not success:
+   250→                if self.current_mode != NodeMode.HIBERNATION:
+   251→                    logger.error("Both nodes failed, entering hibernation")
+   252→                    self.current_mode = NodeMode.HIBERNATION
+   253→                    self.circuit_breaker_open = True
+   254→            else:
+   255→                # Recovery successful
+   256→                if self.current_mode == NodeMode.HIBERNATION:
+   257→                    self.current_mode = NodeMode.PUBLIC
+   258→                    self.circuit_breaker_open = False
+   259→                    logger.info("Recovered from HIBERNATION to PUBLIC mode")
+   260→    
+   261→    async def _try_local_node(self) -> bool:
+   262→        """Try to connect to local Pi Node"""
+   263→        try:
+   264→            async with aiohttp.ClientSession() as session:
+   265→                async with session.get(
+   266→                    f"{self.local_node_url}/v1/network",
+   267→                    timeout=aiohttp.ClientTimeout(total=5)
+   268→                ) as response:
+   269→                    if response.status == 200:
+   270→                        self.pi_api_breaker.record_success()
+   271→                        return True
+   272→                    elif response.status in [500, 503]:
+   273→                        self.pi_api_breaker.record_failure()
+   274→                        return False
+   275→        except Exception as e:
+   276→            logger.debug(f"Local node check failed: {e}")
+   277→            self.pi_api_breaker.record_failure()
+   278→            return False
+   279→    
+   280→    async def _try_public_api(self) -> bool:
+   281→        """Try to connect to public Pi API"""
+   282→        try:
+   283→            async with aiohttp.ClientSession() as session:
+   284→                async with session.get(
+   285→                    f"{self.public_api_url}/v1/network",
+   286→                    timeout=aiohttp.ClientTimeout(total=10)
+   287→                ) as response:
+   288→                    if response.status == 200:
+   289→                        self.pi_api_breaker.record_success()
+   290→                        return True
+   291→                    elif response.status in [500, 503]:
+   292→                        self.pi_api_breaker.record_failure()
+   293→                        return False
+   294→        except Exception as e:
+   295→            logger.debug(f"Public API check failed: {e}")
+   296→            self.pi_api_breaker.record_failure()
+   297→            return False
+   298→    
+   299→    async def verify_transaction(self, transaction_data: Dict[str, Any]) -> Dict[str, Any]:
+   300→        """
+   301→        SECURITY: Strict Verification Logic - Anti-Fraud & Anti-Replay
+   302→        
+   303→        Verification Triangle:
+   304→        1. Amount Check: Transaction amount must match invoice amount
+   305→        2. Recipient Check: Transaction destination must match merchant wallet
+   306→        3. Anti-Replay: Transaction hash must be unique (not used before)
+   307→        4. Memo Validation: Memo must contain valid Invoice ID
+   308→        """
+   309→        if not self.pi_api_breaker.can_attempt():
+   310→            return {
+   311→                "status": "hibernation",
+   312→                "message": "Blockchain service is in hibernation mode. Payments paused.",
+   313→                "verified": False
+   314→            }
+   315→        
+   316→        # Extract transaction data
+   317→        memo = transaction_data.get("memo", "").strip()
+   318→        tx_amount = float(transaction_data.get("amount", 0))
+   319→        merchant_id = transaction_data.get("merchant_id", "")
+   320→        tx_hash = transaction_data.get("transaction_hash", "")
+   321→        recipient_address = transaction_data.get("recipient", "").strip()
+   322→        invoice_id = transaction_data.get("invoice_id", "")  # Invoice ID from frontend
+   323→        
+   324→        # SECURITY CHECK 1: Anti-Replay Protection
+   325→        if tx_hash:
+   326→            if tx_hash in self.used_transactions:
+   327→                logger.warning(f"🚨 REPLAY ATTACK DETECTED: Transaction hash {tx_hash} already used")
+   328→                return {
+   329→                    "status": "error",
+   330→                    "error_code": "REPLAY_DETECTED",
+   331→                    "message": "This transaction has already been processed. Replay attack prevented.",
+   332→                    "verified": False
+   333→                }
+   334→        
+   335→        # Req #16: Validate memo format (<= 28 bytes)
+   336→        is_valid, error_msg, byte_length = self.validate_memo(memo)
+   337→        if not is_valid:
+   338→            return {
+   339→                "status": "error",
+   340→                "error_code": "MEMO_TOO_LONG",
+   341→                "message": error_msg,
+   342→                "verified": False
+   343→            }
+   344→        
+   345→        # Extract Invoice ID from memo (memo should be the Invoice ID)
+   346→        # Format: Invoice ID is stored directly in memo (e.g., "INV-1765198043478-A3F2")
+   347→        invoice_id_from_memo = memo if memo.startswith("INV-") else invoice_id
+   348→        
+   349→        if not invoice_id_from_memo:
+   350→            return {
+   351→                "status": "error",
+   352→                "error_code": "INVALID_MEMO",
+   353→                "message": "Invoice ID not found in memo",
+   354→                "verified": False
+   355→            }
+   356→        
+   357→        # SECURITY CHECK 2: Amount Verification
+   358→        # Get invoice data (from cache or passed in transaction_data)
+   359→        invoice_data = transaction_data.get("invoice_data") or self.registered_invoices.get(invoice_id_from_memo)
+   360→        
+   361→        if not invoice_data:
+   362→            # Invoice not found - request frontend to provide invoice data
+   363→            return {
+   364→                "status": "pending",
+   365→                "error_code": "INVOICE_NOT_FOUND",
+   366→                "message": f"Invoice {invoice_id_from_memo} not found. Please provide invoice data.",
+   367→                "verified": False,
+   368→                "requires_invoice_data": True
+   369→            }
+   370→        
+   371→        invoice_amount = float(invoice_data.get("amount", 0))
+   372→        expected_merchant_id = invoice_data.get("merchantId", "")
+   373→        merchant_wallet = invoice_data.get("walletAddress", "")
+   374→        
+   375→        # SECURITY CHECK 2A: Amount Check (Critical)
+   376→        # Allow tiny tolerance for floating point errors (0.0000001 Pi)
+   377→        TOLERANCE = 0.0000001
+   378→        amount_difference = abs(tx_amount - invoice_amount)
+   379→        
+   380→        if tx_amount < (invoice_amount - TOLERANCE):
+   381→            logger.warning(
+   382→                f"🚨 UNDERPAID TRANSACTION: Invoice {invoice_id_from_memo} "
+   383→                f"requires {invoice_amount} Pi, but received {tx_amount} Pi"
+   384→            )
+   385→            return {
+   386→                "status": "error",
+   387→                "error_code": "UNDERPAID",
+   388→                "message": f"Payment amount ({tx_amount} Pi) is less than invoice amount ({invoice_amount} Pi)",
+   389→                "verified": False,
+   390→                "expected_amount": invoice_amount,
+   391→                "received_amount": tx_amount,
+   392→                "difference": invoice_amount - tx_amount
+   393→            }
+   394→        
+   395→        if amount_difference > TOLERANCE:
+   396→            logger.warning(
+   397→                f"⚠️ AMOUNT MISMATCH: Invoice {invoice_id_from_memo} "
+   398→                f"expected {invoice_amount} Pi, received {tx_amount} Pi (diff: {amount_difference})"
+   399→            )
+   400→            # Allow overpayment but log it
+   401→            # In strict mode, you might want to reject overpayments too
+   402→        
+   403→        # SECURITY CHECK 3: Recipient Check
+   404→        if recipient_address and merchant_wallet:
+   405→            if recipient_address.lower() != merchant_wallet.lower():
+   406→                logger.warning(
+   407→                    f"🚨 WRONG RECIPIENT: Transaction sent to {recipient_address}, "
+   408→                    f"but merchant wallet is {merchant_wallet}"
+   409→                )
+   410→                return {
+   411→                    "status": "error",
+   412→                    "error_code": "WRONG_RECIPIENT",
+   413→                    "message": f"Transaction recipient ({recipient_address}) does not match merchant wallet ({merchant_wallet})",
+   414→                    "verified": False
+   415→                }
+   416→        
+   417→        # SECURITY CHECK 4: Merchant ID Verification
+   418→        if merchant_id and expected_merchant_id:
+   419→            if merchant_id != expected_merchant_id:
+   420→                logger.warning(
+   421→                    f"🚨 MERCHANT MISMATCH: Transaction merchant {merchant_id} "
+   422→                    f"does not match invoice merchant {expected_merchant_id}"
+   423→                )
+   424→                return {
+   425→                    "status": "error",
+   426→                    "error_code": "MERCHANT_MISMATCH",
+   427→                    "message": "Transaction merchant ID does not match invoice merchant",
+   428→                    "verified": False
+   429→                }
+   430→        
+   431→        # All checks passed - Mark transaction as used (Anti-Replay)
+   432→        if tx_hash:
+   433→            self.used_transactions[tx_hash] = datetime.now()
+   434→            # Clean old transactions (older than 30 days)
+   435→            cutoff_date = datetime.now() - timedelta(days=30)
+   436→            self.used_transactions = {
+   437→                tx: ts for tx, ts in self.used_transactions.items()
+   438→                if ts > cutoff_date
+   439→            }
+   440→        
+   441→        # Store as verified
+   442→        tx_id = f"{merchant_id}_{invoice_id_from_memo}_{int(datetime.now().timestamp())}"
+   443→        self.pending_transactions[tx_id] = {
+   444→            "memo": memo,
+   445→            "amount": tx_amount,
+   446→            "merchant_id": merchant_id,
+   447→            "invoice_id": invoice_id_from_memo,
+   448→            "transaction_hash": tx_hash,
+   449→            "recipient": recipient_address,
+   450→            "timestamp": datetime.now().isoformat(),
+   451→            "status": "verified"
+   452→        }
+   453→        
+   454→        logger.info(f"✅ Transaction verified: Invoice {invoice_id_from_memo}, Amount: {tx_amount} Pi")
+   455→        
+   456→        # SECURITY: Send real-time notification to frontend via SSE
+   457→        # Import here to avoid circular dependency
+   458→        try:
+   459→            from app.routers.notifications import notification_manager
+   460→            asyncio.create_task(
+   461→                notification_manager.broadcast_notification(
+   462→                    merchant_id,
+   463→                    {
+   464→                        "type": "payment_confirmed",
+   465→                        "invoice_id": invoice_id_from_memo,
+   466→                        "merchant_id": merchant_id,
+   467→                        "status": "paid",
+   468→                        "amount": tx_amount,
+   469→                        "transaction_hash": tx_hash,
+   470→                        "timestamp": datetime.now().isoformat(),
+   471→                        "message": "Payment confirmed successfully"
+   472→                    }
+   473→                )
+   474→            )
+   475→        except Exception as e:
+   476→            logger.warning(f"Failed to send notification: {e}")
+   477→        
+   478→        return {
+   479→            "status": "verified",
+   480→            "transaction_id": tx_id,
+   481→            "invoice_id": invoice_id_from_memo,
+   482→            "verified": True,
+   483→            "message": "Transaction verified successfully",
+   484→            "amount_verified": True,
+   485→            "recipient_verified": True,
+   486→            "replay_protected": True
+   487→        }
+   488→    
+   489→    def register_invoice(self, invoice_id: str, invoice_data: Dict[str, Any]):
+   490→        """
+   491→        Register invoice data for verification
+   492→        Called by frontend when invoice is created
+   493→        """
+   494→        self.registered_invoices[invoice_id] = invoice_data
+   495→        logger.info(f"📋 Invoice registered: {invoice_id}")
+   496→    
+   497→    def get_used_transactions_count(self) -> int:
+   498→        """Get count of processed transactions (for monitoring)"""
+   499→        return len(self.used_transactions)
+   500→    
+   501→    def get_status(self) -> str:
+   502→        """Get current service status"""
+   503→        if not self.pi_api_breaker.can_attempt():
+   504→            return "hibernation"
+   505→        return self.current_mode.value
+   506→    
+   507→    def get_pending_transactions(self) -> Dict[str, Dict[str, Any]]:
+   508→        """Get all pending transactions"""
+   509→        return self.pending_transactions.copy()
+   510→
+   511→    # --- Pi Network API Helpers with Circuit Breaker ---
+   512→
+   513→    async def _call_pi_api(self, method: str, endpoint: str, **kwargs) -> Any:
+   514→        """
+   515→        Internal helper to call Pi API with circuit breaker
+   516→        """
+   517→        import httpx
+   518→        
+   519→        if not self.pi_api_breaker.can_attempt():
+   520→            self.current_mode = NodeMode.HIBERNATION
+   521→            logger.error(f"❌ Circuit Breaker OPEN - Hibernation Mode active for {endpoint}")
+   522→            raise Exception("Hibernation Mode: Pi Network API is currently unreachable")
+   523→
+   524→        if not PI_API_KEY:
+   525→            raise Exception("Internal Configuration Error: PI_API_KEY is missing")
+   526→
+   527→        headers = kwargs.get("headers", {})
+   528→        headers["Authorization"] = f"Key {PI_API_KEY}"
+   529→        kwargs["headers"] = headers
+   530→        kwargs["timeout"] = kwargs.get("timeout", 10.0)
+   531→
+   532→        url = f"{PI_API_BASE}{endpoint}"
+   533→        
+   534→        try:
+   535→            async with httpx.AsyncClient() as client:
+   536→                if method.upper() == "GET":
+   537→                    response = await client.get(url, **kwargs)
+   538→                elif method.upper() == "POST":
+   539→                    response = await client.post(url, **kwargs)
+   540→                else:
+   541→                    raise ValueError(f"Unsupported method: {method}")
+   542→                
+   543→                # Check for success (2xx) or failure (5xx)
+   544→                if response.status_code >= 500:
+   545→                    self.pi_api_breaker.record_failure()
+   546→                    raise Exception(f"Pi Network Server Error: {response.status_code}")
+   547→                
+   548→                # Treat 404 as "not success" but not necessarily circuit failure 
+   549→                # unless they persist (optional: decide based on specific 4xx)
+   550→                
+   551→                self.pi_api_breaker.record_success()
+   552→                return response
+   553→        except httpx.RequestError as e:
+   554→            self.pi_api_breaker.record_failure()
+   555→            logger.error(f"❌ Pi API request failed: {e}")
+   556→            raise Exception(f"Network error connecting to Pi: {e}")
+   557→        except Exception as e:
+   558→            # Other exceptions might also count as failures
+   559→            self.pi_api_breaker.record_failure()
+   560→            raise
+   561→
+   562→    async def get_payment(self, payment_id: str) -> Dict[str, Any]:
+   563→        """Fetch payment details from Pi Network"""
+   564→        response = await self._call_pi_api("GET", f"/payments/{payment_id}")
+   565→        if response.status_code != 200:
+   566→            raise Exception(f"Payment not found: {response.status_code}")
+   567→        return response.json()
+   568→
+   569→    async def approve_payment(self, payment_id: str) -> Dict[str, Any]:
+   570→        """Approve a payment on Pi Network"""
+   571→        response = await self._call_pi_api("POST", f"/payments/{payment_id}/approve")
+   572→        if response.status_code != 200:
+   573→            raise Exception(f"Approval failed: {response.status_code}")
+   574→        return response.json()
+   575→
+   576→    async def complete_payment(self, payment_id: str, txid: str) -> Dict[str, Any]:
+   577→        """Complete a payment on Pi Network"""
+   578→        response = await self._call_pi_api("POST", f"/payments/{payment_id}/complete", json={"txid": txid})
+   579→        if response.status_code != 200:
+   580→            raise Exception(f"Completion failed: {response.status_code}")
+   581→        return response.json()
+   582→
+   583→
+   584→class StellarAccountData:
+   585→    """
+   586→    Manage Stellar Account Data Entries for Pi Network Blockchain Storage
+   587→    Each merchant has a Stellar account
+   588→    Data stored as key-value pairs on blockchain
+   589→    """
+   590→    
+   591→    def __init__(self, network_passphrase: str = "Public Global Stellar Network ; September 2015"):
+   592→        """
+   593→        Initialize Stellar Account Data Manager
+   594→        """
+   595→        try:
+   596→            from stellar_sdk import Server, Network
+   597→            self.stellar_sdk_available = True
+   598→            self.network_passphrase = network_passphrase
+   599→            # Use Pi Network's Stellar Horizon server
+   600→            self.server = Server("https://horizon.stellar.org")
+   601→            self.network = Network(network_passphrase)
+   602→        except ImportError:
+   603→            logger.warning("Stellar SDK not available. Install with: pip install stellar-sdk")
+   604→            self.stellar_sdk_available = False
+   605→    
+   606→    async def set_account_data(self, account_secret: str, key: str, value: str) -> Dict[str, Any]:
+   607→        """
+   608→        Store data on Stellar blockchain as Account Data Entry
+   609→        Max 64 bytes per entry
+   610→        
+   611→        Args:
+   612→            account_secret: Stellar account secret key
+   613→            key: Data key (will be prefixed automatically)
+   614→            value: Data value (will be base64 encoded)
+   615→        
+   616→        Returns:
+   617→            Transaction result
+   618→        """
+   619→        if not self.stellar_sdk_available:
+   620→            raise ImportError("Stellar SDK not available. Please install stellar-sdk package.")
+   621→        
+   622→        try:
+   623→            from stellar_sdk import Keypair, TransactionBuilder, Operation
+   624→            
+   625→            account_keypair = Keypair.from_secret(account_secret)
+   626→            account = self.server.load_account(account_keypair.public_key)
+   627→            
+   628→            # Ensure value fits in 64 bytes (base64 encoded)
+   629→            value_bytes = value.encode('utf-8')
+   630→            if len(value_bytes) > 64:
+   631→                raise ValueError(f"Value too large: {len(value_bytes)} bytes (max 64)")
+   632→            
+   633→            # Build transaction
+   634→            transaction = (
+   635→                TransactionBuilder(
+   636→                    source_account=account,
+   637→                    network_passphrase=self.network_passphrase,
+   638→                    base_fee=100
+   639→                )
+   640→                .append_manage_data_op(
+   641→                    data_name=key,
+   642→                    data_value=value_bytes
+   643→                )
+   644→                .set_timeout(30)
+   645→                .build()
+   646→            )
+   647→            
+   648→            transaction.sign(account_keypair)
+   649→            response = self.server.submit_transaction(transaction)
+   650→            
+   651→            logger.info(f"✅ Account data stored: {key}")
+   652→            return {
+   653→                "success": True,
+   654→                "transaction_hash": response.get("hash"),
+   655→                "key": key
+   656→            }
+   657→        except Exception as e:
+   658→            logger.error(f"Error storing account data: {e}")
+   659→            raise
+   660→    
+   661→    async def get_account_data(self, account_id: str, key: str) -> Optional[str]:
+   662→        """
+   663→        Get data from Stellar Account Data
+   664→        
+   665→        Args:
+   666→            account_id: Stellar account public key
+   667→            key: Data key to retrieve
+   668→        
+   669→        Returns:
+   670→            Data value (decoded) or None if not found
+   671→        """
+   672→        if not self.stellar_sdk_available:
+   673→            raise ImportError("Stellar SDK not available. Please install stellar-sdk package.")
+   674→        
+   675→        try:
+   676→            account = self.server.accounts().account_id(account_id).call()
+   677→            data = account.get("data", {})
+   678→            
+   679→            if key not in data:
+   680→                return None
+   681→            
+   682→            # Decode base64
+   683→            import base64
+   684→            value_bytes = base64.b64decode(data[key])
+   685→            return value_bytes.decode('utf-8')
+   686→        except Exception as e:
+   687→            logger.error(f"Error getting account data: {e}")
+   688→            return None
+   689→    
+   690→    async def delete_account_data(self, account_secret: str, key: str) -> Dict[str, Any]:
+   691→        """
+   692→        Delete account data entry (set to empty string)
+   693→        
+   694→        Args:
+   695→            account_secret: Stellar account secret key
+   696→            key: Data key to delete
+   697→        
+   698→        Returns:
+   699→            Transaction result
+   700→        """
+   701→        return await self.set_account_data(account_secret, key, "")
+   702→    
+   703→    async def list_account_data(self, account_id: str, prefix: str = "") -> List[Dict[str, str]]:
+   704→        """
+   705→        List all account data entries with prefix
+   706→        
+   707→        Args:
+   708→            account_id: Stellar account public key
+   709→            prefix: Prefix to filter entries (e.g., "invoice:" to get all invoices)
+   710→        
+   711→        Returns:
+   712→            List of {key, value} dictionaries
+   713→        """
+   714→        if not self.stellar_sdk_available:
+   715→            raise ImportError("Stellar SDK not available. Please install stellar-sdk package.")
+   716→        
+   717→        try:
+   718→            account = self.server.accounts().account_id(account_id).call()
+   719→            data = account.get("data", {})
+   720→            
+   721→            entries = []
+   722→            import base64
+   723→            
+   724→            for key, value in data.items():
+   725→                if key.startswith(prefix):
+   726→                    try:
+   727→                        value_bytes = base64.b64decode(value)
+   728→                        value_str = value_bytes.decode('utf-8')
+   729→                        entries.append({
+   730→                            "key": key,
+   731→                            "value": value_str
+   732→                        })
+   733→                    except Exception as e:
+   734→                        logger.warning(f"Error decoding entry {key}: {e}")
+   735→            
+   736→            return entries
+   737→        except Exception as e:
+   738→            logger.error(f"Error listing account data: {e}")
+   739→            return []
+   740→
+   741→# Singleton instances for app-wide use
+   742→blockchain_service = BlockchainService()
+   743→stellar_account_data = StellarAccountData()

@@ -1,0 +1,20 @@
+{
+  "code": 200,
+  "data": {
+    "description": "",
+    "html": "<html><head><meta name=\"color-scheme\" content=\"light dark\"></head><body><pre style=\"word-wrap: break-word; white-space: pre-wrap;\">import logging\nimport json\nimport os\nfrom datetime import datetime\nfrom logging.handlers import RotatingFileHandler\nfrom typing import Any, Dict, Optional\nfrom app.core.config import settings\n\n# SECURITY: Centralized Audit Logger\n# This logger is separate from the standard server logger and focused on compliance.\n\nclass AuditLogger:\n    def __init__(self, log_name: str = \"audit\"):\n        self.logger = logging.getLogger(log_name)\n        self.logger.setLevel(logging.INFO)\n        \n        # Ensure logs directory exists\n        os.makedirs(\"logs\", exist_ok=True)\n        \n        # Prevent duplicate handlers if singleton is re-initialized\n        if not self.logger.handlers:\n            log_file = \"logs/audit.log\"\n            handler = RotatingFileHandler(\n                log_file, \n                maxBytes=10 * 1024 * 1024,  # 10MB\n                backupCount=5\n            )\n            formatter = logging.Formatter('%(asctime)s - %(message)s')\n            handler.setFormatter(formatter)\n            self.logger.addHandler(handler)\n            \n        # Sensitive fields to redact automatically\n        self.sensitive_fields = {\n            \"token\", \"accessToken\", \"access_token\", \"secret\", \"key\", \n            \"seed\", \"mnemonic\", \"private_key\", \"password\", \"pin\"\n        }\n\n    def _redact(self, data: Any) -> Any:\n        \"\"\"Recursively redact sensitive fields from a dict or list\"\"\"\n        if isinstance(data, dict):\n            return {\n                k: \"[REDACTED]\" if k.lower() in self.sensitive_fields else self._redact(v)\n                for k, v in data.items()\n            }\n        elif isinstance(data, list):\n            return [self._redact(item) for item in data]\n        return data\n\n    def log_event(\n        self, \n        event_type: str, \n        user_uid: Optional[str] = None, \n        payment_id: Optional[str] = None, \n        status: str = \"success\", \n        metadata: Optional[Dict[str, Any]] = None\n    ):\n        \"\"\"\n        Record a structured audit event.\n        \n        Args:\n            event_type: Type of event (e.g., PAYMENT_APPROVAL, PAYMENT_COMPLETION)\n            user_uid: The UID of the associated Pi user\n            payment_id: The Pi Network payment ID\n            status: Operation status (success, failure, pending)\n            metadata: Additional context (amount, currency, error messages)\n        \"\"\"\n        audit_entry = {\n            \"timestamp\": datetime.now().isoformat(),\n            \"event\": event_type,\n            \"user_uid\": user_uid,\n            \"payment_id\": payment_id,\n            \"status\": status,\n            \"metadata\": self._redact(metadata or {})\n        }\n        \n        self.logger.info(json.dumps(audit_entry))\n        \n        # If it's a critical failure, also log to the main system logger\n        if status == \"failure\":\n            system_logger = logging.getLogger(\"app.main\")\n            system_logger.error(f\"AUDIT_FAILURE: {event_type} - User: {user_uid} - Payment: {payment_id}\")\n\n# Singleton instance\naudit_logger = AuditLogger()\n</pre></body></html>",
+    "httpStatus": 200,
+    "httpStatusText": "",
+    "title": "",
+    "url": "https://raw.githubusercontent.com/Mirxou/Ledgererp/main/app/core/audit.py",
+    "usage": {
+      "tokens": 695
+    }
+  },
+  "meta": {
+    "usage": {
+      "tokens": 695
+    }
+  },
+  "status": 20000
+}

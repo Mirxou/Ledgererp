@@ -1,0 +1,20 @@
+{
+  "code": 200,
+  "data": {
+    "description": "",
+    "html": "<html><head><meta name=\"color-scheme\" content=\"light dark\"></head><body><pre style=\"word-wrap: break-word; white-space: pre-wrap;\">/**\n * Offline Sync Engine - Phase 4\n * Vision 2030\n */\n\nclass OfflineSyncManager {\n    constructor() {\n        this.syncQueue = JSON.parse(localStorage.getItem('pi_ledger_sync_queue') || '[]');\n        this.isOnline = navigator.onLine;\n\n        window.addEventListener('online', () => this.handleOnline());\n        window.addEventListener('offline', () => this.handleOffline());\n    }\n\n    handleOnline() {\n        this.isOnline = true;\n        console.log('🌐 App is online. Starting background sync...');\n        this.updateOnlineStatusUI(true);\n        this.processQueue();\n    }\n\n    handleOffline() {\n        this.isOnline = false;\n        console.log('📡 App is offline. Transactions will be queued.');\n        this.updateOnlineStatusUI(false);\n    }\n\n    /**\n     * Queue a transaction for later sync\n     */\n    queueTransaction(action, data) {\n        this.syncQueue.push({ action, data, timestamp: Date.now() });\n        localStorage.setItem('pi_ledger_sync_queue', JSON.stringify(this.syncQueue));\n\n        if (window.Toast) {\n            Toast.info('تم حفظ العملية محلياً (وضع عدم الاتصال). Transaction saved locally (Offline mode).');\n        }\n    }\n\n    /**\n     * Process the offline queue\n     */\n    async processQueue() {\n        if (this.syncQueue.length === 0) return;\n\n        console.log(`🔄 Syncing ${this.syncQueue.length} queued items...`);\n\n        const remainingQueue = [];\n        for (const item of this.syncQueue) {\n            try {\n                // Here we would call the appropriate manager based on action\n                // For now, assume these are invoice saves\n                if (item.action === 'save_invoice') {\n                    await window.dbManager.saveInvoice(item.data);\n                }\n                console.log('✅ Item synced successfully:', item.action);\n            } catch (error) {\n                console.error('❌ Failed to sync item:', item, error);\n                remainingQueue.push(item);\n            }\n        }\n\n        this.syncQueue = remainingQueue;\n        localStorage.setItem('pi_ledger_sync_queue', JSON.stringify(this.syncQueue));\n\n        if (this.syncQueue.length === 0 && window.Toast) {\n            Toast.success('تمت مزامنة جميع العمليات بنجاح. All transactions synced successfully.');\n        }\n    }\n\n    updateOnlineStatusUI(online) {\n        const statusPill = document.getElementById('online-status-pill');\n        if (statusPill) {\n            statusPill.className = online ? 'status-pill online' : 'status-pill offline';\n            statusPill.innerHTML = online\n                ? '<i class=\"fas fa-check-circle\"></i> متصل Online'\n                : '<i class=\"fas fa-exclamation-triangle\"></i> وضع عدم الاتصال Offline';\n        }\n    }\n}\n\nwindow.offlineSyncManager = new OfflineSyncManager();\n</pre></body></html>",
+    "httpStatus": 200,
+    "httpStatusText": "",
+    "title": "",
+    "url": "https://raw.githubusercontent.com/Mirxou/Ledgererp/main/static/js/offline-sync.js",
+    "usage": {
+      "tokens": 663
+    }
+  },
+  "meta": {
+    "usage": {
+      "tokens": 663
+    }
+  },
+  "status": 20000
+}

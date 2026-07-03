@@ -1,0 +1,20 @@
+{
+  "code": 200,
+  "data": {
+    "description": "",
+    "html": "<html><head><meta name=\"color-scheme\" content=\"light dark\"></head><body><pre style=\"word-wrap: break-word; white-space: pre-wrap;\"># Cloudflare Pages Headers - Fix MIME Types\n# Build Output Directory = static, so files are at root level\n\n# JavaScript files\n/js/*\n  Content-Type: application/javascript; charset=utf-8\n  Cache-Control: public, max-age=31536000, immutable\n\n# CSS files\n\n\n/css/*\n  Content-Type: text/css; charset=utf-8\n  Cache-Control: public, max-age=31536000, immutable\n\n# JSON files\n/*.json\n  Content-Type: application/json; charset=utf-8\n\n# HTML files\n/*.html\n  Content-Type: text/html; charset=utf-8\n\n# Image files\n/*.png\n  Content-Type: image/png\n  Cache-Control: public, max-age=31536000, immutable\n/*.jpg\n  Content-Type: image/jpeg\n  Cache-Control: public, max-age=31536000, immutable\n/*.jpeg\n  Content-Type: image/jpeg\n  Cache-Control: public, max-age=31536000, immutable\n/*.svg\n  Content-Type: image/svg+xml\n  Cache-Control: public, max-age=31536000, immutable\n/*.ico\n  Content-Type: image/x-icon\n  Cache-Control: public, max-age=31536000, immutable\n\n# Font files\n/*.woff\n  Content-Type: font/woff\n  Cache-Control: public, max-age=31536000, immutable\n/*.woff2\n  Content-Type: font/woff2\n  Cache-Control: public, max-age=31536000, immutable\n/*.ttf\n  Content-Type: font/ttf\n  Cache-Control: public, max-age=31536000, immutable\n\n# Library files\n/libs/*\n  Content-Type: application/javascript; charset=utf-8\n  Cache-Control: public, max-age=31536000, immutable\n\n# Well-known files\n/.well-known/*\n  Content-Type: text/plain; charset=utf-8\n\n# Pi Network validation key\n/validation-key.txt\n  Content-Type: text/plain; charset=utf-8\n  Cache-Control: public, max-age=3600\n</pre></body></html>",
+    "httpStatus": 200,
+    "httpStatusText": "",
+    "title": "",
+    "url": "https://raw.githubusercontent.com/Mirxou/Ledgererp/main/static/_headers",
+    "usage": {
+      "tokens": 474
+    }
+  },
+  "meta": {
+    "usage": {
+      "tokens": 474
+    }
+  },
+  "status": 20000
+}

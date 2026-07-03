@@ -1,0 +1,21 @@
+{
+  "code": 200,
+  "data": {
+    "description": "",
+    "html": "<html><head><meta name=\"color-scheme\" content=\"light dark\"></head><body><pre style=\"word-wrap: break-word; white-space: pre-wrap;\">[\n  {\n    \"name\": \"v1\",\n    \"path\": \"app/api/v1\",\n    \"sha\": \"246869c0ea3e1d84559bdce18c98c36dea186503\",\n    \"size\": 0,\n    \"url\": \"https://api.github.com/repos/Mirxou/Ledgererp/contents/app/api/v1?ref=main\",\n    \"html_url\": \"https://github.com/Mirxou/Ledgererp/tree/main/app/api/v1\",\n    \"git_url\": \"https://api.github.com/repos/Mirxou/Ledgererp/git/trees/246869c0ea3e1d84559bdce18c98c36dea186503\",\n    \"download_url\": null,\n    \"type\": \"dir\",\n    \"_links\": {\n      \"self\": \"https://api.github.com/repos/Mirxou/Ledgererp/contents/app/api/v1?ref=main\",\n      \"git\": \"https://api.github.com/repos/Mirxou/Ledgererp/git/trees/246869c0ea3e1d84559bdce18c98c36dea186503\",\n      \"html\": \"https://github.com/Mirxou/Ledgererp/tree/main/app/api/v1\"\n    }\n  }\n]\n</pre></body></html>",
+    "httpStatus": 200,
+    "httpStatusText": "",
+    "publishedTime": "Thu, 12 Mar 2026 02:31:20 GMT",
+    "title": "",
+    "url": "https://api.github.com/repos/Mirxou/Ledgererp/contents/app/api",
+    "usage": {
+      "tokens": 321
+    }
+  },
+  "meta": {
+    "usage": {
+      "tokens": 321
+    }
+  },
+  "status": 20000
+}

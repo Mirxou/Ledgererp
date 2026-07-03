@@ -1,0 +1,20 @@
+{
+  "code": 200,
+  "data": {
+    "description": "",
+    "html": "<html><head><meta name=\"color-scheme\" content=\"light dark\"></head><body><pre style=\"word-wrap: break-word; white-space: pre-wrap;\">from fastapi import APIRouter, Depends, HTTPException\nfrom typing import List\nfrom app.api.v1.endpoints import invoices, products\n\nrouter = APIRouter()\n\n@router.get(\"/status\")\nasync def get_api_status():\n    \"\"\"\n    Check the health and version of the Pi Ledger Public API.\n    \"\"\"\n    return {\n        \"status\": \"operational\",\n        \"version\": \"1.0.0-beta\",\n        \"phase\": \"2030 Vision - Phase 4\"\n    }\n\n# Future endpoints for 3rd party developers\n# @router.get(\"/invoices\")\n# @router.post(\"/webhooks\")\n</pre></body></html>",
+    "httpStatus": 200,
+    "httpStatusText": "",
+    "title": "",
+    "url": "https://raw.githubusercontent.com/Mirxou/Ledgererp/main/app/api/v1/public_api.py",
+    "usage": {
+      "tokens": 168
+    }
+  },
+  "meta": {
+    "usage": {
+      "tokens": 168
+    }
+  },
+  "status": 20000
+}
