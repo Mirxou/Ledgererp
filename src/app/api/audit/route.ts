@@ -1,7 +1,42 @@
 import { NextResponse } from "next/server";
 
+function buildCategoryBreakdown(allIssues: { category: string; severity: string }[]) {
+  const map = new Map<string, { critical: number; high: number; medium: number; low: number; total: number }>();
+  for (const issue of allIssues) {
+    const existing = map.get(issue.category) || { critical: 0, high: 0, medium: 0, low: 0, total: 0 };
+    const sev = (issue.severity || 'medium').toLowerCase();
+    if (sev === 'critical') existing.critical++;
+    else if (sev === 'high') existing.high++;
+    else if (sev === 'medium') existing.medium++;
+    else existing.low++;
+    existing.total++;
+    map.set(issue.category, existing);
+  }
+  return Array.from(map.entries())
+    .map(([category, counts]) => ({ category, ...counts }))
+    .sort((a, b) => b.total - a.total);
+}
+
+function buildFileHeatmap(allIssues: { file: string; severity: string }[]) {
+  const map = new Map<string, { critical: number; high: number; medium: number; low: number; total: number }>();
+  for (const issue of allIssues) {
+    const f = issue.file;
+    const existing = map.get(f) || { critical: 0, high: 0, medium: 0, low: 0, total: 0 };
+    const sev = (issue.severity || 'medium').toLowerCase();
+    if (sev === 'critical') existing.critical++;
+    else if (sev === 'high') existing.high++;
+    else if (sev === 'medium') existing.medium++;
+    else existing.low++;
+    existing.total++;
+    map.set(f, existing);
+  }
+  return Array.from(map.entries())
+    .map(([file, counts]) => ({ file, ...counts }))
+    .sort((a, b) => b.total - a.total);
+}
+
 export async function GET() {
-  const report = {
+  const data = {
     meta: {
       projectName: "Ledgererp",
       repository: "https://github.com/Mirxou/Ledgererp",
@@ -302,5 +337,21 @@ export async function GET() {
     ],
   };
 
-  return NextResponse.json(report);
+  // Build derived data after object is fully constructed
+  const allIssuesForCategory = [
+    ...data.criticalFindings.map(i => ({ ...i, severity: 'critical' })),
+    ...data.highIssues.map(i => ({ ...i, severity: 'high' })),
+    ...data.mediumIssues.map(i => ({ ...i, severity: 'medium' })),
+  ];
+  const allIssuesForFile = [
+    ...data.criticalFindings.map(i => ({ file: i.file, severity: 'critical' })),
+    ...data.highIssues.map(i => ({ file: i.file, severity: 'high' })),
+    ...data.mediumIssues.map(i => ({ file: i.file, severity: 'medium' })),
+  ];
+
+  return NextResponse.json({
+    ...data,
+    categoryBreakdown: buildCategoryBreakdown(allIssuesForCategory),
+    fileHeatmap: buildFileHeatmap(allIssuesForFile),
+  });
 }
