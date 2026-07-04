@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
+import { ThemeProvider } from "@/components/theme-provider";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -14,24 +15,28 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Z.ai Code Scaffold - AI-Powered Development",
-  description: "Modern Next.js scaffold optimized for AI-powered development with Z.ai. Built with TypeScript, Tailwind CSS, and shadcn/ui.",
-  keywords: ["Z.ai", "Next.js", "TypeScript", "Tailwind CSS", "shadcn/ui", "AI development", "React"],
-  authors: [{ name: "Z.ai Team" }],
+  title: "Ledgererp — Pi Network Security Audit Dashboard",
+  description:
+    "Comprehensive security audit report for Ledgererp, a non-custodial ERP system built for Pi Network. Analyzing 67 files, 4,800+ lines of code across backend and frontend.",
+  keywords: [
+    "Pi Network", "Ledgererp", "Security Audit", "ERP", "Non-Custodial",
+    "Pi Browser", "Stellar", "Blockchain", "FastAPI", "develop.pinet.com",
+  ],
+  authors: [{ name: "Ledgererp Security Team", url: "https://github.com/Mirxou/Ledgererp" }],
   icons: {
-    icon: "https://z-cdn.chatglm.cn/z-ai/static/logo.svg",
+    icon: "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛡️</text></svg>",
   },
   openGraph: {
-    title: "Z.ai Code Scaffold",
-    description: "AI-powered development with modern React stack",
-    url: "https://chat.z.ai",
-    siteName: "Z.ai",
+    title: "Ledgererp Security Audit Report",
+    description: "Pi Network ERP Security Audit — 114 issues found, 23 critical. Comprehensive analysis with actionable recommendations.",
+    url: "https://ledgererp.online",
+    siteName: "Ledgererp",
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
-    title: "Z.ai Code Scaffold",
-    description: "AI-powered development with modern React stack",
+    title: "Ledgererp Security Audit Report",
+    description: "Pi Network ERP Security Audit — 114 issues, 23 critical vulnerabilities detected.",
   },
 };
 
@@ -45,8 +50,15 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased bg-background text-foreground`}
       >
-        {children}
-        <Toaster />
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="dark"
+          enableSystem
+          disableTransitionOnChange
+        >
+          {children}
+          <Toaster />
+        </ThemeProvider>
       </body>
     </html>
   );
