@@ -68,3 +68,10 @@ screenshot-*.png
 
 # Bun
 bun.lock
+
+# Sandbox-specific (not part of the audit dashboard)
+skills/
+examples/
+download/
+mini-services/
+.zscripts/
