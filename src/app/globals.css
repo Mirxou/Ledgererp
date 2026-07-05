@@ -6,7 +6,7 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
+  --font-sans: var(--font-cairo), var(--font-geist-sans), system-ui, sans-serif;
   --font-mono: var(--font-geist-mono);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
@@ -739,4 +739,174 @@
   footer {
     padding-bottom: env(safe-area-inset-bottom);
   }
+}
+
+/* ==========================================================================
+   11. LIGHT MODE DEPTH ENHANCEMENTS
+   Add layering and glassmorphism to light mode cards, matching dark mode quality.
+   ========================================================================== */
+
+.bg-card {
+  background: linear-gradient(135deg, oklch(0.995 0.002 280) 0%, oklch(1 0 0) 100%);
+  box-shadow: 0 1px 3px oklch(0.2 0.02 260 / 8%), 0 8px 24px oklch(0.2 0.02 260 / 5%);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+/* Light mode elevated surfaces */
+[class*="rounded-"][class*="border"][class*="p-"] {
+  background: linear-gradient(135deg, oklch(0.997 0.003 280) 0%, oklch(1 0 0) 100%);
+  box-shadow: 0 2px 6px oklch(0.2 0.02 260 / 10%), 0 8px 24px oklch(0.2 0.02 260 / 6%);
+}
+
+/* ==========================================================================
+   12. PI BRAND GRADIENT UTILITIES
+   Pi Network purple/gold brand utilities for consistent theming.
+   ========================================================================== */
+
+@utility pi-gradient {
+  background: linear-gradient(135deg, oklch(0.55 0.25 295) 0%, oklch(0.45 0.2 270) 100%);
+}
+
+@utility pi-gradient-text {
+  background: linear-gradient(135deg, oklch(0.55 0.25 295) 0%, oklch(0.75 0.18 80) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+@utility pi-glow {
+  box-shadow: 0 0 20px oklch(0.55 0.25 295 / 20%), 0 0 60px oklch(0.55 0.25 295 / 10%);
+}
+
+/* ==========================================================================
+   13. GLOBAL SMOOTH SCROLLBARS (Light + Dark)
+   Consistent thin rounded scrollbar styling for both themes.
+   ========================================================================== */
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: oklch(0.7 0 0 / 30%);
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: oklch(0.7 0 0 / 50%);
+}
+
+/* ==========================================================================
+   14. CAIRO FONT INTEGRATION
+   Ensure Cairo Arabic font is prioritized. The --font-sans override is
+   handled in the primary @theme inline block above.
+   ========================================================================== */
+
+/* ==========================================================================
+   15. LIGHT MODE CARD DEPTH — Matching Dark Quality
+   Richer light mode cards with multi-layer shadows and inner highlights.
+   ========================================================================== */
+
+.bg-card {
+  background: linear-gradient(
+    165deg,
+    oklch(0.995 0.003 280) 0%,
+    oklch(1 0 0) 50%,
+    oklch(0.998 0.001 300) 100%
+  );
+  border: 1px solid oklch(0.85 0.01 270 / 50%);
+  box-shadow:
+    0 1px 2px oklch(0.2 0.02 260 / 6%),
+    0 4px 12px oklch(0.2 0.02 260 / 4%),
+    inset 0 1px 0 oklch(1 0 0 / 80%);
+}
+
+.bg-card:hover {
+  box-shadow:
+    0 2px 8px oklch(0.2 0.02 260 / 10%),
+    0 8px 24px oklch(0.2 0.02 260 / 6%),
+    inset 0 1px 0 oklch(1 0 0 / 90%);
+}
+
+/* Light mode scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: oklch(0.96 0 0);
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb {
+  background: oklch(0.75 0.02 260 / 30%);
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: oklch(0.65 0.04 260 / 40%);
+}
+
+/* ==========================================================================
+   16. VERDICT BANNER — Revolutionary Visual Effects
+   Gradient border spin, particle twinkle, and Pi badge pulse.
+   ========================================================================== */
+
+/* Animated gradient border — conic gradient rotation */
+@keyframes verdict-border-spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-verdict-border-spin {
+  animation: verdict-border-spin 6s linear infinite;
+}
+
+/* Particle / star twinkle effect */
+@keyframes particle-twinkle {
+  0%, 100% {
+    opacity: 0.15;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.7;
+    transform: scale(1.8);
+  }
+}
+
+.animate-particle-twinkle {
+  animation: particle-twinkle 3s ease-in-out infinite;
+}
+
+/* Pi Network badge pulse in footer */
+@keyframes pi-badge-pulse {
+  0%, 100% {
+    box-shadow: 0 0 4px oklch(0.55 0.25 295 / 30%);
+    transform: scale(1);
+  }
+  50% {
+    box-shadow: 0 0 12px oklch(0.55 0.25 295 / 50%), 0 0 24px oklch(0.75 0.18 80 / 20%);
+    transform: scale(1.03);
+  }
+}
+
+@utility animate-pi-badge-pulse {
+  animation: pi-badge-pulse 2.5s ease-in-out infinite;
+}
+
+/* Verdict banner wrapper — clip for gradient border */
+.verdict-banner-wrapper {
+  position: relative;
+}
+
+.verdict-banner-wrapper > .animate-verdict-border-spin {
+  z-index: 0;
 }

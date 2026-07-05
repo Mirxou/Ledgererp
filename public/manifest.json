@@ -1,22 +1,33 @@
 {
-  "name": "Ledgererp Security Audit",
+  "name": "Ledgererp — تقرير التدقيق الأمني",
   "short_name": "Ledgererp",
-  "description": "تقرير التدقيق الأمني الشامل لنظام Ledgererp ERP على شبكة Pi Network",
+  "description": "تقرير تدقيق أمني شامل لنظام Ledgererp ERP على شبكة Pi Network",
   "start_url": "/",
   "display": "standalone",
-  "orientation": "portrait",
+  "orientation": "portrait-primary",
   "background_color": "#0a0a0a",
   "theme_color": "#7c3aed",
-  "categories": ["security", "finance", "utilities"],
+  "dir": "rtl",
+  "lang": "ar",
+  "scope": "/",
+  "categories": ["security", "finance", "utilities", "business"],
   "icons": [
     {
-      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛡️</text></svg>",
+      "src": "/pi-shield-logo.svg",
       "sizes": "any",
       "type": "image/svg+xml",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "/pi-shield-logo.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
     }
   ],
-  "pi_app_version": "1.0.0",
+  "screenshots": [],
+  "pi_app_version": "2.0.0",
   "pi_sdk_version": "2.0",
-  "pi_network": "pi_testnet"
+  "pi_network": "pi_testnet",
+  "prefer_related_applications": false
 }

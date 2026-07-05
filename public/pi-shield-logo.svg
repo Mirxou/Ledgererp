@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <defs>
+    <linearGradient id="shield-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#7C3AED"/>
+      <stop offset="50%" stop-color="#6D28D9"/>
+      <stop offset="100%" stop-color="#5B21B6"/>
+    </linearGradient>
+    <linearGradient id="pi-text-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF"/>
+      <stop offset="100%" stop-color="#E0D4F5"/>
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="6" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <clipPath id="shield-clip">
+      <path d="M256 32L64 112v160c0 114.2 82.4 220.9 192 248 109.6-27.1 192-133.8 192-248V112L256 32z"/>
+    </clipPath>
+  </defs>
+  <!-- Shadow -->
+  <path d="M256 40L72 116v156c0 110.6 79.6 214.8 184 241.3 104.4-26.5 184-130.7 184-241.3V116L256 40z" fill="rgba(124,58,237,0.15)" transform="translate(4,4)"/>
+  <!-- Shield body -->
+  <path d="M256 32L64 112v160c0 114.2 82.4 220.9 192 248 109.6-27.1 192-133.8 192-248V112L256 32z" fill="url(#shield-grad)" stroke="rgba(255,255,255,0.15)" stroke-width="2"/>
+  <!-- Inner highlight -->
+  <path d="M256 32L64 112v160c0 114.2 82.4 220.9 192 248 109.6-27.1 192-133.8 192-248V112L256 32z" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="4" clip-path="url(#shield-clip)"/>
+  <!-- Pi symbol -->
+  <text x="256" y="310" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-size="200" font-weight="bold" fill="url(#pi-text-grad)" filter="url(#glow)">π</text>
+  <!-- Subtle check mark -->
+  <path d="M200 400l24 24 88-88" stroke="#F59E0B" stroke-width="12" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity="0.9"/>
+</svg>
