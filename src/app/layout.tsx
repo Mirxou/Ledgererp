@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
@@ -14,30 +14,44 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-export const metadata: Metadata = {
-  title: "Ledgererp — Pi Network Security Audit Dashboard",
-  description:
-    "Comprehensive security audit report for Ledgererp, a non-custodial ERP system built for Pi Network. Analyzing 67 files, 4,800+ lines of code across backend and frontend.",
-  keywords: [
-    "Pi Network", "Ledgererp", "Security Audit", "ERP", "Non-Custodial",
-    "Pi Browser", "Stellar", "Blockchain", "FastAPI", "develop.pinet.com",
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
+    { media: "(prefers-color-scheme: dark)", color: "#0a0a0a" },
   ],
-  authors: [{ name: "Ledgererp Security Team", url: "https://github.com/Mirxou/Ledgererp" }],
+};
+
+export const metadata: Metadata = {
+  title: "Ledgererp — تقرير التدقيق الأمني | Pi Network",
+  description:
+    "تقرير تدقيق أمني شامل لنظام Ledgererp ERP غير الحضاني المبني لشبكة Pi Network. تحليل 67 ملفًا و4800+ سطر كود عبر الخادم والواجهة الأمامية.",
+  keywords: [
+    "Pi Network", "Ledgererp", "تدقيق أمني", "ERP", "غير حضانتي",
+    "Pi Browser", "Stellar", "Blockchain", "FastAPI", "develop.pinet.com",
+    "Security Audit", "أمان",
+  ],
+  authors: [{ name: "فريق أمان Ledgererp", url: "https://github.com/Mirxou/Ledgererp" }],
   icons: {
     icon: "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛡️</text></svg>",
   },
   openGraph: {
-    title: "Ledgererp Security Audit Report",
-    description: "Pi Network ERP Security Audit — 114 issues found, 23 critical. Comprehensive analysis with actionable recommendations.",
+    title: "تقرير التدقيق الأمني — Ledgererp",
+    description: "تدقيق أمني لـ Ledgererp على شبكة Pi — 114 مشكلة، 23 حرجة. تحليل شامل مع توصيات قابلة للتنفيذ.",
     url: "https://ledgererp.online",
     siteName: "Ledgererp",
     type: "website",
+    locale: "ar_DZ",
   },
   twitter: {
     card: "summary_large_image",
-    title: "Ledgererp Security Audit Report",
-    description: "Pi Network ERP Security Audit — 114 issues, 23 critical vulnerabilities detected.",
+    title: "تقرير التدقيق الأمني — Ledgererp",
+    description: "تدقيق Ledgererp الأمني — 114 مشكلة، 23 ثغرة حرجة.",
   },
+  manifest: "/manifest.json",
 };
 
 export default function RootLayout({
@@ -46,7 +60,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="ar" dir="rtl" suppressHydrationWarning>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased bg-background text-foreground`}
       >

@@ -5,12 +5,12 @@ import { useTheme } from "next-themes";
 import {
   ShieldAlert, ShieldX, ShieldCheck, AlertTriangle, Bug, Code2,
   Server, Globe, LayoutGrid, FileWarning, Terminal, Lock, Eye,
-  XCircle, CheckCircle2, ArrowRight, ChevronDown, ChevronUp,
+  XCircle, CheckCircle2, ChevronDown, ChevronUp,
   ExternalLink, Github, Zap, Target, Layers, Cpu, Gauge,
   BarChart3, Search, Download, Filter, FileCode2,
   Clock, Hash, Radio, CircleDot, TriangleAlert, Copy, Check,
   PieChart, Activity, Flame, FolderOpen,
-  Sun, Moon, FileJson, FileSpreadsheet, ClipboardList, PanelRight,
+  Sun, Moon, FileJson, FileSpreadsheet, ClipboardList, PanelLeft,
 } from "lucide-react";
 import {
   Card, CardContent, CardDescription, CardHeader, CardTitle,
@@ -31,6 +31,7 @@ import {
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Skeleton } from "@/components/ui/skeleton";
 
 /* ════════════════════════════════════════════════════════════════════════════
    TYPES
@@ -41,7 +42,7 @@ interface Issue {
   title: string; description: string; recommendation: string;
 }
 interface IssueBrief {
-  id: string; source: string; file: string; line: number; category: string; title: string;
+  id: string; source: string; file: string; line?: number; category: string; title: string;
 }
 interface AuditReport {
   meta: { projectName: string; repository: string; description: string; auditDate: string; totalFiles: number; totalLines: string; techStack: string[] };
@@ -82,15 +83,15 @@ const GLASS_STAT =
    ════════════════════════════════════════════════════════════════════════════ */
 
 function getScoreColors(score: number) {
-  if (score >= 81) return { stroke: "#16a34a", bg: "rgba(22,163,74,0.08)", text: "text-green-600", glow: "rgba(22,163,74,0.3)", darkText: "dark:text-green-600", bgClass: "bg-green-50/20 dark:bg-green-50/20" };
-  if (score >= 61) return { stroke: "#059669", bg: "rgba(5,150,105,0.08)", text: "text-emerald-500", glow: "rgba(5,150,105,0.3)", darkText: "dark:text-emerald-500", bgClass: "bg-emerald-50/20 dark:bg-emerald-50/20" };
-  if (score >= 41) return { stroke: "#d97706", bg: "rgba(217,119,6,0.08)", text: "text-amber-500", glow: "rgba(217,119,6,0.3)", darkText: "dark:text-amber-500", bgClass: "bg-amber-50/20 dark:bg-amber-50/20" };
-  if (score >= 26) return { stroke: "#ea580c", bg: "rgba(234,88,12,0.08)", text: "text-orange-500", glow: "rgba(234,88,12,0.3)", darkText: "dark:text-orange-500", bgClass: "bg-orange-50/20 dark:bg-orange-50/20" };
-  return { stroke: "#dc2626", bg: "rgba(220,38,38,0.08)", text: "text-red-600", glow: "rgba(220,38,38,0.3)", darkText: "dark:text-red-600", bgClass: "bg-red-50/20 dark:bg-red-50/20" };
+  if (score >= 81) return { stroke: "#16a34a", bg: "rgba(22,163,74,0.08)", text: "text-green-600 dark:text-green-400", glow: "rgba(22,163,74,0.3)", bgClass: "bg-green-50/20 dark:bg-green-50/20" };
+  if (score >= 61) return { stroke: "#059669", bg: "rgba(5,150,105,0.08)", text: "text-emerald-500 dark:text-emerald-400", glow: "rgba(5,150,105,0.3)", bgClass: "bg-emerald-50/20 dark:bg-emerald-50/20" };
+  if (score >= 41) return { stroke: "#d97706", bg: "rgba(217,119,6,0.08)", text: "text-amber-500 dark:text-amber-400", glow: "rgba(217,119,6,0.3)", bgClass: "bg-amber-50/20 dark:bg-amber-50/20" };
+  if (score >= 26) return { stroke: "#ea580c", bg: "rgba(234,88,12,0.08)", text: "text-orange-500 dark:text-orange-400", glow: "rgba(234,88,12,0.3)", bgClass: "bg-orange-50/20 dark:bg-orange-50/20" };
+  return { stroke: "#dc2626", bg: "rgba(220,38,38,0.08)", text: "text-red-600 dark:text-red-400", glow: "rgba(220,38,38,0.3)", bgClass: "bg-red-50/20 dark:bg-red-50/20" };
 }
 
 function getProgressColors(value: number) {
-  if (value >= 81) return { text: "text-green-600 dark:text-green-600", bar: "[&>div]:bg-green-500" };
+  if (value >= 81) return { text: "text-green-600 dark:text-green-400", bar: "[&>div]:bg-green-500" };
   if (value >= 61) return { text: "text-emerald-600 dark:text-emerald-400", bar: "[&>div]:bg-emerald-500" };
   if (value >= 41) return { text: "text-amber-600 dark:text-amber-400", bar: "[&>div]:bg-amber-500" };
   if (value >= 26) return { text: "text-orange-600 dark:text-orange-400", bar: "[&>div]:bg-orange-500" };
@@ -126,7 +127,7 @@ function AnimatedNumber({ value, duration = 1200, delay = 0 }: { value: number; 
 }
 
 /* ════════════════════════════════════════════════════════════════════════════
-   SCORE RING (with DISTINCT colors per score + dark mode glow)
+   SCORE RING (SVG)
    ════════════════════════════════════════════════════════════════════════════ */
 
 function ScoreRing({ score, label, size = 110, showAnimated = true }: { score: number; label: string; size?: number; showAnimated?: boolean }) {
@@ -134,7 +135,7 @@ function ScoreRing({ score, label, size = 110, showAnimated = true }: { score: n
   const circumference = 2 * Math.PI * radius;
   const offset = circumference - (score / 100) * circumference;
   const colors = getScoreColors(score);
-  const filterId = `glow-${label.replace(/[^a-zA-Z]/g, "-").toLowerCase()}`;
+  const filterId = `glow-${label.replace(/[^a-zA-Z0-9\u0600-\u06FF]/g, "-").toLowerCase()}`;
 
   return (
     <div className="flex flex-col items-center gap-2.5">
@@ -146,35 +147,34 @@ function ScoreRing({ score, label, size = 110, showAnimated = true }: { score: n
               <feMerge><feMergeNode in="coloredBlur" /><feMergeNode in="SourceGraphic" /></feMerge>
             </filter>
           </defs>
-          <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="currentColor" strokeWidth="5.5" className="text-muted/20" />
+          <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="currentColor" strokeWidth="5.5" className="text-muted-foreground/20" />
           <circle
             cx={size / 2} cy={size / 2} r={radius} fill="none"
             strokeWidth="5.5" strokeLinecap="round"
             stroke={colors.stroke}
-            className="transition-all duration-1000 ease-out dark:filter"
-            style={{ filter: undefined, strokeDasharray: circumference, strokeDashoffset: offset }}
+            className="transition-all duration-1000 ease-out"
+            style={{ strokeDasharray: circumference, strokeDashoffset: offset }}
           />
-          {/* Dark mode glow overlay */}
           <circle
             cx={size / 2} cy={size / 2} r={radius} fill="none"
             strokeWidth="5.5" strokeLinecap="round"
             stroke={colors.stroke}
             className="hidden dark:block transition-all duration-1000 ease-out"
             style={{ strokeDasharray: circumference, strokeDashoffset: offset, filter: `drop-shadow(0 0 8px ${colors.glow})` }}
-            aria-hidden
+            aria-hidden="true"
           />
         </svg>
-        <span className={`absolute inset-0 flex items-center justify-center font-bold ${colors.text} ${colors.darkText}`} style={{ fontSize: size * 0.22 }}>
+        <span className={`absolute inset-0 flex items-center justify-center font-bold ${colors.text}`} style={{ fontSize: size * 0.22 }}>
           {showAnimated ? <AnimatedNumber value={score} /> : score}
         </span>
       </div>
-      <span className="text-[11px] font-medium text-muted-foreground text-center leading-tight max-w-[100px]">{label}</span>
+      <span className="text-[11px] font-medium text-muted-foreground text-center leading-tight max-w-[120px]">{label}</span>
     </div>
   );
 }
 
 /* ════════════════════════════════════════════════════════════════════════════
-   SVG DONUT CHART (with DISTINCT colors)
+   SVG DONUT CHART
    ════════════════════════════════════════════════════════════════════════════ */
 
 function DonutChart({ data, size = 180 }: { data: { label: string; value: number; color: string }[]; size?: number }) {
@@ -188,14 +188,15 @@ function DonutChart({ data, size = 180 }: { data: { label: string; value: number
       const accumulatedBefore = data.slice(0, idx).reduce((s, x) => s + x.value / total, 0);
       return { ...d, dashLen: pct * circumference, dashOffset: -accumulatedBefore * circumference, pct };
     }),
-    [data, total, circumference]);
+    [data, total, circumference]
+  );
 
-  if (total === 0) return <div className="flex items-center justify-center h-full text-sm text-muted-foreground">No data</div>;
+  if (total === 0) return <div className="flex items-center justify-center h-full text-sm text-muted-foreground">لا توجد بيانات</div>;
 
   return (
     <div className="flex flex-col items-center gap-3">
       <svg width={size} height={size} className="-rotate-90">
-        <circle cx={cx} cy={cy} r={r} fill="none" stroke="currentColor" strokeWidth={sw} className="text-muted/10" />
+        <circle cx={cx} cy={cy} r={r} fill="none" stroke="currentColor" strokeWidth={sw} className="text-muted-foreground/10" />
         {segments.map((s, i) => (
           <circle key={i} cx={cx} cy={cy} r={r} fill="none" strokeWidth={sw} strokeLinecap="butt"
             stroke={s.color} strokeDasharray={`${s.dashLen} ${circumference - s.dashLen}`}
@@ -224,7 +225,7 @@ function DonutChart({ data, size = 180 }: { data: { label: string; value: number
 function HorizontalBarChart({ data, maxItems = 10 }: { data: { label: string; value: number; color: string }[]; maxItems?: number }) {
   const items = data.slice(0, maxItems);
   const maxVal = Math.max(...items.map((d) => d.value), 1);
-  const barH = 22, gap = 6, labelW = 140, valueW = 36, padRight = 8;
+  const barH = 22, gap = 6, labelW = 160, valueW = 36, padRight = 8;
   const barAreaW = 280;
   const svgW = labelW + barAreaW + valueW + padRight;
   const svgH = items.length * (barH + gap) + 4;
@@ -236,8 +237,8 @@ function HorizontalBarChart({ data, maxItems = 10 }: { data: { label: string; va
         const w = Math.max((d.value / maxVal) * barAreaW, 2);
         return (
           <g key={i} className="transition-all duration-500" style={{ transitionDelay: `${i * 60}ms` }}>
-            <text x={labelW - 8} y={y + barH / 2 + 1} textAnchor="end" fontSize="10" fill="currentColor" className="fill-muted-foreground truncate" style={{ maxWidth: labelW - 16 }}>
-              {d.label.length > 22 ? d.label.slice(0, 20) + "\u2026" : d.label}
+            <text x={labelW - 8} y={y + barH / 2 + 1} textAnchor="end" fontSize="10" fill="currentColor" className="fill-muted-foreground">
+              {d.label.length > 24 ? d.label.slice(0, 22) + "\u2026" : d.label}
             </text>
             <rect x={labelW} y={y} width={w} height={barH} rx={4} fill={d.color} opacity={0.85} />
             <text x={labelW + w + 8} y={y + barH / 2 + 1} fontSize="11" fontWeight="600" fill="currentColor" className="fill-foreground">
@@ -255,27 +256,28 @@ function HorizontalBarChart({ data, maxItems = 10 }: { data: { label: string; va
    ════════════════════════════════════════════════════════════════════════════ */
 
 function SeverityBadge({ severity }: { severity: string }) {
-  const m: Record<string, { cls: string; icon: React.ReactNode }> = {
-    CRITICAL: { cls: "bg-red-500/15 text-red-600 border-red-500/30 dark:text-red-400 dark:border-red-500/40", icon: <XCircle className="h-3 w-3" /> },
-    HIGH: { cls: "bg-orange-500/15 text-orange-600 border-orange-500/30 dark:text-orange-400 dark:border-orange-500/40", icon: <AlertTriangle className="h-3 w-3" /> },
-    MEDIUM: { cls: "bg-amber-500/15 text-amber-600 border-amber-500/30 dark:text-amber-400 dark:border-amber-500/40", icon: <ShieldAlert className="h-3 w-3" /> },
-    LOW: { cls: "bg-sky-500/15 text-sky-600 border-sky-500/30 dark:text-sky-400 dark:border-sky-500/40", icon: <ShieldCheck className="h-3 w-3" /> },
+  const map: Record<string, { cls: string; icon: React.ReactNode; label: string }> = {
+    CRITICAL: { cls: "bg-red-500/15 text-red-600 border-red-500/30 dark:text-red-400 dark:border-red-500/40", icon: <XCircle className="h-3 w-3" />, label: "حرج" },
+    HIGH: { cls: "bg-orange-500/15 text-orange-600 border-orange-500/30 dark:text-orange-400 dark:border-orange-500/40", icon: <AlertTriangle className="h-3 w-3" />, label: "مرتفع" },
+    MEDIUM: { cls: "bg-amber-500/15 text-amber-600 border-amber-500/30 dark:text-amber-400 dark:border-amber-500/40", icon: <ShieldAlert className="h-3 w-3" />, label: "متوسط" },
+    LOW: { cls: "bg-sky-500/15 text-sky-600 border-sky-500/30 dark:text-sky-400 dark:border-sky-500/40", icon: <ShieldCheck className="h-3 w-3" />, label: "منخفض" },
   };
-  const v = m[severity] || m.LOW;
-  return <Badge variant="outline" className={`${v.cls} gap-1 text-[10px] font-semibold px-2 py-0.5`}>{v.icon}{severity}</Badge>;
+  const v = map[severity] || map.LOW;
+  return <Badge variant="outline" className={`${v.cls} gap-1 text-[10px] font-semibold px-2 py-0.5`}>{v.icon}{v.label}</Badge>;
 }
 
 function SourceBadge({ source }: { source: string }) {
+  const labels: Record<string, string> = { Backend: "الخادم", Frontend: "الواجهة", "Pi Network": "شبكة بي" };
   const c: Record<string, string> = {
     Backend: "bg-violet-500/15 text-violet-600 border-violet-500/30 dark:text-violet-400",
     Frontend: "bg-cyan-500/15 text-cyan-600 border-cyan-500/30 dark:text-cyan-400",
     "Pi Network": "bg-purple-500/15 text-purple-600 border-purple-500/30 dark:text-purple-400",
   };
-  return <Badge variant="outline" className={`${c[source] || ""} text-[10px] font-semibold px-2 py-0.5`}>{source}</Badge>;
+  return <Badge variant="outline" className={`${c[source] || ""} text-[10px] font-semibold px-2 py-0.5`}>{labels[source] || source}</Badge>;
 }
 
 /* ════════════════════════════════════════════════════════════════════════════
-   STAT CARD (with glassmorphism in dark mode)
+   STAT CARD
    ════════════════════════════════════════════════════════════════════════════ */
 
 function StatCard({ icon: Icon, label, value, sub, color, delay = 0 }: {
@@ -300,7 +302,7 @@ function StatCard({ icon: Icon, label, value, sub, color, delay = 0 }: {
 }
 
 /* ════════════════════════════════════════════════════════════════════════════
-   LABELED PROGRESS BAR (with DISTINCT colors per score)
+   LABELED PROGRESS BAR
    ════════════════════════════════════════════════════════════════════════════ */
 
 function LabeledProgress({ label, value, delay = 0 }: { label: string; value: number; delay?: number }) {
@@ -326,10 +328,7 @@ function IssueDetailSheet({ issue, open, onOpenChange, repoUrl, severity = "CRIT
   if (!issue) return null;
   const sev = severity.toUpperCase();
   const sevColor: Record<string, string> = {
-    CRITICAL: "text-red-500",
-    HIGH: "text-orange-500",
-    MEDIUM: "text-amber-500",
-    LOW: "text-sky-500",
+    CRITICAL: "text-red-500", HIGH: "text-orange-500", MEDIUM: "text-amber-500", LOW: "text-sky-500",
   };
   const githubUrl = `${repoUrl.replace(/\/?$/, "")}/blob/main/${issue.file}${issue.line > 0 ? `#L${issue.line}` : ""}`;
 
@@ -338,76 +337,62 @@ function IssueDetailSheet({ issue, open, onOpenChange, repoUrl, severity = "CRIT
       <SheetContent className="w-full sm:max-w-lg overflow-y-auto dark:bg-gradient-to-b dark:from-[oklch(0.20_0_0)] dark:to-[oklch(0.16_0_0)]">
         <SheetHeader className="pb-4">
           <SheetTitle className="text-base leading-snug pr-8">{issue.title}</SheetTitle>
-          <SheetDescription className="sr-only">Full details for issue {issue.id}</SheetDescription>
+          <SheetDescription className="sr-only">تفاصيل المشكلة {issue.id}</SheetDescription>
         </SheetHeader>
-
         <div className="space-y-5">
-          {/* Meta badges */}
           <div className="flex flex-wrap items-center gap-2">
             <SeverityBadge severity={sev} />
             <SourceBadge source={issue.source} />
-            <Badge variant="outline" className="text-[10px] font-medium bg-muted/50">{issue.category}</Badge>
+            <Badge variant="outline" className="text-[10px] font-medium bg-muted-foreground/10">{issue.category}</Badge>
           </div>
-
-          {/* ID / File / Line grid */}
           <div className="grid grid-cols-2 gap-3">
-            <div className="p-3 rounded-xl bg-muted/40 border">
-              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-1">Issue ID</p>
+            <div className="p-3 rounded-xl bg-muted-foreground/5 border">
+              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-1">رقم المشكلة</p>
               <p className="text-sm font-mono font-semibold">{issue.id}</p>
             </div>
-            <div className="p-3 rounded-xl bg-muted/40 border">
-              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-1">Severity</p>
-              <p className={`text-sm font-semibold ${sevColor[sev] || "text-red-500"}`}>{sev.charAt(0) + sev.slice(1).toLowerCase()}</p>
+            <div className="p-3 rounded-xl bg-muted-foreground/5 border">
+              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-1">الخطورة</p>
+              <p className={`text-sm font-semibold ${sevColor[sev] || "text-red-500"}`}>{sev}</p>
             </div>
-            <div className="col-span-2 p-3 rounded-xl bg-muted/40 border">
-              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-1">Source</p>
+            <div className="col-span-2 p-3 rounded-xl bg-muted-foreground/5 border">
+              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-1">المصدر</p>
               <p className="text-sm font-semibold">{issue.source}</p>
             </div>
-            <div className="col-span-2 p-3 rounded-xl bg-muted/40 border">
-              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-1">File</p>
-              <p className="text-sm font-mono">{issue.file}{issue.line > 0 ? ` : ${issue.line}` : ""}</p>
+            <div className="col-span-2 p-3 rounded-xl bg-muted-foreground/5 border">
+              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-1">الملف</p>
+              <p className="text-sm font-mono break-all">{issue.file}{issue.line > 0 ? ` : ${issue.line}` : ""}</p>
             </div>
           </div>
-
           <Separator />
-
-          {/* Description */}
           {isBrief ? (
             <div className="rounded-xl bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/50 p-4">
               <h4 className="text-xs font-bold text-amber-700 dark:text-amber-400 uppercase tracking-widest mb-2 flex items-center gap-1.5">
-                <AlertTriangle className="h-3.5 w-3.5" />Limited Details
+                <AlertTriangle className="h-3.5 w-3.5" />تفاصيل محدودة
               </h4>
               <p className="text-sm text-amber-800 dark:text-amber-300 leading-relaxed">
-                Full description and recommendation are available in the exported report. Use the Export JSON or Export CSV option to get the complete audit data.
+                الوصف والتوصية الكاملة متاحان في التقرير المُصدَّر. استخدم خيار تصدير JSON أو CSV للحصول على بيانات التدقيق الكاملة.
               </p>
             </div>
           ) : (
             <>
               <div>
-                <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-2">Description</h4>
+                <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-2">الوصف</h4>
                 <p className="text-sm text-muted-foreground leading-relaxed">{issue.description}</p>
               </div>
-
-              {/* Recommendation */}
               <div className="rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/50 p-4">
                 <h4 className="text-xs font-bold text-emerald-700 dark:text-emerald-400 uppercase tracking-widest mb-2 flex items-center gap-1.5">
-                  <CheckCircle2 className="h-3.5 w-3.5" />Recommendation
+                  <CheckCircle2 className="h-3.5 w-3.5" />التوصية
                 </h4>
                 <p className="text-sm text-emerald-800 dark:text-emerald-300 leading-relaxed">{issue.recommendation}</p>
               </div>
-
               <Separator />
-
-              {/* GitHub link */}
               <a
-                href={githubUrl}
-                target="_blank"
-                rel="noopener noreferrer"
+                href={githubUrl} target="_blank" rel="noopener noreferrer"
                 className="flex items-center gap-2 text-sm text-primary hover:text-primary/80 hover:underline transition-colors min-h-[44px] py-2"
-                aria-label={`View ${issue.file} on GitHub`}
+                aria-label={`عرض ${issue.file} على GitHub`}
               >
                 <Github className="h-4 w-4" />
-                View on GitHub
+                عرض على GitHub
                 <ExternalLink className="h-3 w-3" />
               </a>
             </>
@@ -419,7 +404,7 @@ function IssueDetailSheet({ issue, open, onOpenChange, repoUrl, severity = "CRIT
 }
 
 /* ════════════════════════════════════════════════════════════════════════════
-   CRITICAL ISSUE CARD (expandable, opens sheet on click)
+   CRITICAL ISSUE CARD
    ════════════════════════════════════════════════════════════════════════════ */
 
 function CriticalIssueCard({ issue, index, onSelect }: { issue: Issue; index: number; onSelect: (issue: Issue) => void }) {
@@ -428,9 +413,8 @@ function CriticalIssueCard({ issue, index, onSelect }: { issue: Issue; index: nu
 
   return (
     <div
-      role="button"
-      tabIndex={0}
-      aria-label={`Critical issue ${index + 1}: ${issue.title}. Press to view details.`}
+      role="button" tabIndex={0}
+      aria-label={`مشكلة حرجة ${index + 1}: ${issue.title}`}
       onClick={() => onSelect(issue)}
       onKeyDown={(e) => { if (e.key === "Enter") onSelect(issue); }}
       className={`border rounded-xl p-4 sm:p-5 transition-all duration-300 hover:shadow-lg hover:-translate-y-0.5 cursor-pointer ${
@@ -451,22 +435,22 @@ function CriticalIssueCard({ issue, index, onSelect }: { issue: Issue; index: nu
           <div className="flex items-center gap-2 flex-wrap mb-2">
             <SeverityBadge severity="CRITICAL" />
             <SourceBadge source={issue.source} />
-            <Badge variant="outline" className="text-[10px] font-medium bg-muted/50">{issue.category}</Badge>
-            {isBlocking && <Badge className="bg-red-600 text-white text-[10px] px-2 py-0 animate-pulse">BLOCKS DEPLOY</Badge>}
+            <Badge variant="outline" className="text-[10px] font-medium bg-muted-foreground/10">{issue.category}</Badge>
+            {isBlocking && <Badge className="bg-red-600 text-white text-[10px] px-2 py-0 animate-pulse">يعطل النشر</Badge>}
           </div>
           <h4 className="font-semibold text-sm mb-1.5 leading-snug">{issue.title}</h4>
           <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2.5">
             <Code2 className="h-3 w-3 flex-shrink-0" />
-            <code className="text-xs font-mono">{issue.file}</code>
-            {issue.line > 0 && <span className="text-muted-foreground/60">Line {issue.line}</span>}
+            <code className="text-xs font-mono break-all">{issue.file}</code>
+            {issue.line > 0 && <span className="text-muted-foreground/60">سطر {issue.line}</span>}
           </div>
           <p className="text-xs text-muted-foreground leading-relaxed mb-2">{issue.description}</p>
           <button
             onClick={(e) => { e.stopPropagation(); setExpanded(!expanded); }}
             className="text-xs text-primary hover:text-primary/80 hover:underline flex items-center gap-1 transition-colors min-h-[44px] py-1"
-            aria-label={expanded ? "Hide fix recommendation" : "Show fix recommendation"}
+            aria-label={expanded ? "إخفاء التوصية" : "عرض التوصية"}
           >
-            {expanded ? <>Hide Fix <ChevronUp className="h-3 w-3" /></> : <>Show Fix <ChevronDown className="h-3 w-3" /></>}
+            {expanded ? <>إخفاء التوصية <ChevronUp className="h-3 w-3" /></> : <>عرض التوصية <ChevronDown className="h-3 w-3" /></>}
           </button>
           {expanded && (
             <div className="mt-3 p-3.5 bg-emerald-50 dark:bg-emerald-950/30 rounded-lg border border-emerald-200 dark:border-emerald-900/50">
@@ -483,28 +467,73 @@ function CriticalIssueCard({ issue, index, onSelect }: { issue: Issue; index: nu
 }
 
 /* ════════════════════════════════════════════════════════════════════════════
-   ISSUE ROW (for High/Medium, clickable)
+   ISSUE ROW (for High/Medium)
    ════════════════════════════════════════════════════════════════════════════ */
 
 function IssueRow({ issue, onClick }: { issue: IssueBrief & { severity?: string }; onClick?: () => void }) {
   return (
     <div
-      role="button"
-      tabIndex={0}
-      onClick={onClick}
+      role="button" tabIndex={0} onClick={onClick}
       onKeyDown={(e) => { if (e.key === "Enter") onClick?.(); }}
-      className="flex items-center gap-3 py-2.5 px-3 rounded-lg hover:bg-muted/50 transition-colors group cursor-pointer min-h-[44px]"
-      aria-label={`Issue: ${issue.title}`}
+      className="flex items-center gap-3 py-2.5 px-3 rounded-lg hover:bg-muted-foreground/5 transition-colors group cursor-pointer min-h-[44px]"
+      aria-label={`مشكلة: ${issue.title}`}
     >
-      <code className="text-[11px] font-mono text-muted-foreground flex-shrink-0 w-40 truncate hidden sm:block">{issue.file}</code>
-      <span className="text-[11px] text-muted-foreground/60 flex-shrink-0 hidden md:block w-10">{issue.line > 0 ? `:${issue.line}` : ""}</span>
-      <span className="text-xs text-muted-foreground flex-shrink-0 w-32 truncate hidden lg:block">{issue.category}</span>
-      <span className="text-xs font-medium truncate flex-1 group-hover:text-foreground transition-colors">{issue.title}</span>
       <SourceBadge source={issue.source} />
-      <PanelRight className="h-3.5 w-3.5 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors flex-shrink-0" />
+      <span className="text-xs font-medium truncate flex-1 group-hover:text-foreground transition-colors">{issue.title}</span>
+      <code className="text-[11px] font-mono text-muted-foreground flex-shrink-0 w-36 truncate hidden sm:block text-left" dir="ltr">{issue.file}</code>
+      <PanelLeft className="h-3.5 w-3.5 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors flex-shrink-0" />
     </div>
   );
 }
+
+/* ════════════════════════════════════════════════════════════════════════════
+   LOADING SKELETON
+   ════════════════════════════════════════════════════════════════════════════ */
+
+function LoadingSkeleton() {
+  return (
+    <div className="space-y-6 p-4" dir="rtl">
+      <div className="flex items-center justify-between">
+        <Skeleton className="h-8 w-64" />
+        <div className="flex gap-2">
+          <Skeleton className="h-9 w-9 rounded-lg" />
+          <Skeleton className="h-9 w-9 rounded-lg" />
+        </div>
+      </div>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        {[...Array(4)].map((_, i) => (
+          <Skeleton key={i} className="h-24 rounded-xl" />
+        ))}
+      </div>
+      <Skeleton className="h-12 w-full rounded-xl" />
+      <div className="grid md:grid-cols-2 gap-6">
+        <Skeleton className="h-64 rounded-xl" />
+        <Skeleton className="h-64 rounded-xl" />
+      </div>
+      {[...Array(3)].map((_, i) => (
+        <Skeleton key={i} className="h-20 rounded-xl" />
+      ))}
+    </div>
+  );
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   SECURITY ZONES CONFIG
+   ════════════════════════════════════════════════════════════════════════════ */
+
+const SECURITY_ZONES = [
+  { title: "ثغرات XSS", icon: Bug, filter: ["XSS"], color: "text-red-500" },
+  { title: "المصادقة والتفويض", icon: Lock, filter: ["Authentication", "Authorization"], color: "text-orange-500" },
+  { title: "مشاكل التشفير", icon: Terminal, filter: ["Cryptography", "Hardcoded Secret", "Weak Cryptography"], color: "text-amber-500" },
+  { title: "التخزين والبيانات غير الآمنة", icon: Eye, filter: ["Insecure Storage"], color: "text-sky-500" },
+  { title: "هجمات postMessage", icon: Radio, filter: ["postMessage"], color: "text-violet-500" },
+  { title: "أخطاء وقت التشغيل", icon: TriangleAlert, filter: ["Runtime"], color: "text-rose-500" },
+  { title: "تسريب المعلومات", icon: Eye, filter: ["Info Disclosure", "Token Exposure"], color: "text-cyan-500" },
+  { title: "التحايل على KYC", icon: ShieldX, filter: ["Fake KYC", "KYC"], color: "text-red-400" },
+  { title: "هيكلية حضانة", icon: ShieldX, filter: ["Custodial"], color: "text-red-600" },
+  { title: "سلسلة التوريد", icon: Globe, filter: ["Supply Chain"], color: "text-emerald-500" },
+  { title: "مشاكل النشر", icon: Server, filter: ["Deployment", "Rate Limiting"], color: "text-orange-400" },
+];
 
 /* ════════════════════════════════════════════════════════════════════════════
    MAIN PAGE
@@ -522,24 +551,73 @@ export default function AuditDashboard() {
   const [selectedIsBrief, setSelectedIsBrief] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [securityOpen, setSecurityOpen] = useState<Record<string, boolean>>({
-    "XSS Vulnerabilities": true,
-    "Authentication & Authorization": true,
-    "Cryptography Issues": true,
-    "Insecure Storage & Data": true,
+    "ثغرات XSS": true,
+    "المصادقة والتفويض": true,
+    "مشاكل التشفير": true,
+    "التخزين والبيانات غير الآمنة": true,
   });
   const { theme, setTheme } = useTheme();
 
+  /* ── Fetch ─────────────────────────────────────────────────────────── */
+
   useEffect(() => {
-    fetch("/api/audit").then((r) => r.json()).then(setReport).finally(() => setLoading(false));
+    fetch("/api/audit")
+      .then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
+      .then((d) => { setReport(d); setLoading(false); })
+      .catch((err) => { console.error("Failed to load audit data:", err); setLoading(false); });
+  }, []);
+
+  /* ── Export ────────────────────────────────────────────────────────── */
+
+  const handleExport = useCallback((format: "json" | "csv" | "clipboard") => {
+    if (!report) return;
+    const criticalExport = report.criticalFindings.map((i) => ({
+      id: i.id, severity: "critical", source: i.source, file: i.file,
+      line: i.line, category: i.category, title: i.title,
+      description: i.description, recommendation: i.recommendation,
+    }));
+    const highExport = report.highIssues.map((i) => ({
+      id: i.id, severity: "high", source: i.source, file: i.file,
+      line: i.line || 0, category: i.category, title: i.title,
+    }));
+    const all = [...criticalExport, ...highExport];
+
+    if (format === "json") {
+      const blob = new Blob([JSON.stringify({ meta: report.meta, summary: report.summary, issues: all }, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a"); a.href = url; a.download = "ledgererp-audit.json"; a.click();
+      URL.revokeObjectURL(url);
+    } else if (format === "csv") {
+      const headers = "ID,Severity,Source,File,Line,Category,Title,Description,Recommendation";
+      const rows = all.map((i) =>
+        [i.id, i.severity, i.source, i.file, i.line, i.category, `"${(i.title || "").replace(/"/g, '""')}"`, `"${((i as Issue).description || "").replace(/"/g, '""')}"`, `"${((i as Issue).recommendation || "").replace(/"/g, '""')}"`].join(",")
+      );
+      const blob = new Blob(["\uFEFF" + headers + "\n" + rows.join("\n")], { type: "text/csv;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a"); a.href = url; a.download = "ledgererp-audit.csv"; a.click();
+      URL.revokeObjectURL(url);
+    } else {
+      navigator.clipboard.writeText(JSON.stringify({ meta: report.meta, summary: report.summary, issues: all }, null, 2));
+      setCopied(true); setTimeout(() => setCopied(false), 2000);
+    }
+  }, [report]);
+
+  /* ── Open issue sheet ──────────────────────────────────────────────── */
+
+  const openSheet = useCallback((issue: Issue, severity: string, isBrief = false) => {
+    setSelectedIssue(issue);
+    setSelectedSeverity(severity);
+    setSelectedIsBrief(isBrief);
+    setSheetOpen(true);
   }, []);
 
   /* ── Computed data ──────────────────────────────────────────────────── */
 
   const donutData = useMemo(() => [
-    { label: "Critical", value: report?.summary.critical ?? 0, color: "#dc2626" },
-    { label: "High", value: report?.summary.high ?? 0, color: "#f97316" },
-    { label: "Medium", value: report?.summary.medium ?? 0, color: "#eab308" },
-    { label: "Low", value: report?.summary.low ?? 0, color: "#0ea5e9" },
+    { label: "حرج", value: report?.summary.critical ?? 0, color: "#dc2626" },
+    { label: "مرتفع", value: report?.summary.high ?? 0, color: "#f97316" },
+    { label: "متوسط", value: report?.summary.medium ?? 0, color: "#eab308" },
+    { label: "منخفض", value: report?.summary.low ?? 0, color: "#0ea5e9" },
   ], [report]);
 
   const categoryBarData = useMemo(() => (report?.categoryBreakdown ?? []).map((c) => ({
@@ -584,455 +662,372 @@ export default function AuditDashboard() {
     });
   }, [report, searchQuery, filterSource]);
 
-  /* ── Handlers ───────────────────────────────────────────────────────── */
+  const verdictColor = report
+    ? report.scores.overall >= 61 ? "text-green-600 dark:text-green-400"
+    : report.scores.overall >= 41 ? "text-amber-600 dark:text-amber-400"
+    : report.scores.overall >= 26 ? "text-orange-600 dark:text-orange-400"
+    : "text-red-600 dark:text-red-400"
+    : "";
 
-  const handleSelectIssue = useCallback((issue: Issue) => {
-    setSelectedIssue(issue);
-    setSelectedSeverity("CRITICAL");
-    setSelectedIsBrief(false);
-    setSheetOpen(true);
-  }, []);
+  const verdictBg = report
+    ? report.scores.overall >= 61 ? "from-green-50 to-green-100/50 dark:from-green-950/40 dark:to-green-950/20 border-green-200 dark:border-green-900/50"
+    : report.scores.overall >= 41 ? "from-amber-50 to-amber-100/50 dark:from-amber-950/40 dark:to-amber-950/20 border-amber-200 dark:border-amber-900/50"
+    : report.scores.overall >= 26 ? "from-orange-50 to-orange-100/50 dark:from-orange-950/40 dark:to-orange-950/20 border-orange-200 dark:border-orange-900/50"
+    : "from-red-50 to-red-100/50 dark:from-red-950/40 dark:to-red-950/20 border-red-200 dark:border-red-900/50"
+    : "";
 
-  const handleSelectBriefIssue = useCallback((brief: IssueBrief, severity: string) => {
-    const fakeIssue: Issue = {
-      ...brief,
-      description: "",
-      recommendation: "",
-    };
-    setSelectedSeverity(severity.toUpperCase());
-    setSelectedIsBrief(true);
-    const match = report?.criticalFindings.find((f) => f.id === brief.id);
-    if (match) {
-      setSelectedIssue(match);
-      setSelectedIsBrief(false);
-    } else {
-      setSelectedIssue(fakeIssue);
-    }
-    setSheetOpen(true);
-  }, [report]);
+  const verdictText = report
+    ? report.scores.overall >= 61 ? "مقبول بشروط — يحتاج تحسينات أمنية"
+    : report.scores.overall >= 41 ? "ضعيف — يتطلب إصلاحات عاجلة"
+    : report.scores.overall >= 26 ? "حرج — غير آمن للنشر"
+    : "خطير — ثغرات قاتلة"
+    : "";
 
-  const handleExportJSON = useCallback(() => {
-    if (!report) return;
-    const exportData = {
-      ...report,
-      lowIssues: Array.from({ length: report.summary.low }, (_, i) => ({
-        id: `L-${String(i + 1).padStart(3, "0")}`,
-        source: "Mixed",
-        file: "various",
-        line: 0,
-        category: "Low Severity",
-        title: `Low severity issue #${i + 1}`,
-        description: `This is one of ${report.summary.low} low severity issues tracked in the audit. See the full report for details.`,
-        recommendation: "Review and address as part of regular maintenance.",
-      })),
-    };
-    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url; a.download = "ledgererp-audit-report.json"; a.click();
-    URL.revokeObjectURL(url);
-  }, [report]);
+  const verdictIcon = report
+    ? report.scores.overall >= 61 ? <ShieldCheck className="h-6 w-6" />
+    : report.scores.overall >= 41 ? <AlertTriangle className="h-6 w-6" />
+    : <XCircle className="h-6 w-6" />
+    : null;
 
-  const handleExportCSV = useCallback(() => {
-    if (!report) return;
-    const all = [
-      ...report.criticalFindings.map((i) => ({ ...i, severity: "critical" })),
-      ...report.highIssues.map((i) => ({ ...i, severity: "high", description: "", recommendation: "" })),
-      ...report.mediumIssues.map((i) => ({ ...i, severity: "medium", description: "", recommendation: "" })),
-      ...Array.from({ length: report.summary.low }, (_, i) => ({
-        id: `L-${String(i + 1).padStart(3, "0")}`, source: "Mixed", file: "various", line: 0,
-        category: "Low Severity", title: `Low severity issue #${i + 1}`,
-        description: "", recommendation: "", severity: "low",
-      })),
-    ];
-    const headers = ["ID", "Severity", "Source", "File", "Line", "Category", "Title", "Description", "Recommendation"];
-    const rows = all.map((i) => [i.id, i.severity, i.source, i.file, i.line, i.category, i.title, i.description, i.recommendation].map((v) => `"${String(v).replace(/"/g, '""')}"`).join(","));
-    const csv = [headers.join(","), ...rows].join("\n");
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a"); a.href = url; a.download = "ledgererp-audit.csv"; a.click();
-    URL.revokeObjectURL(url);
-  }, [report]);
+  /* ── Render ────────────────────────────────────────────────────────── */
 
-  const handleCopyToClipboard = useCallback(() => {
-    if (!report) return;
-    navigator.clipboard.writeText(JSON.stringify(report, null, 2));
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  }, [report]);
-
-  /* ── Security zones data (11 zones) ──────────────────────────────────── */
-
-  const securityZones = useMemo(() => [
-    { title: "XSS Vulnerabilities", icon: <Eye className="h-4 w-4 text-red-500" />, color: "text-red-500", items: [
-      "b2b.js \u2014 innerHTML merchant data injection",
-      "hardware.js \u2014 receipt HTML injection",
-      "invoice.js \u2014 addItem DOMPurify bypass",
-      "deep-linking.js \u2014 URL param injection",
-      "ui-utils.js \u2014 iframe with arbitrary src",
-      "ui-utils.js \u2014 Modal.prompt() HTML injection",
-      "security.js \u2014 DOMPurify fallback insufficient",
-      "shift-management.js \u2014 report innerHTML injection",
-      "audit-logs.js \u2014 double HTML encoding bug",
-    ]},
-    { title: "Authentication & Authorization", icon: <Lock className="h-4 w-4 text-orange-500" />, color: "text-orange-500", items: [
-      "KYB middleware \u2014 unauthenticated requests pass through",
-      "SSE notifications \u2014 zero authentication required",
-      "Blockchain data \u2014 no merchant ownership check",
-      "Rate limiting \u2014 bypassed via User-Agent header",
-      "KYC \u2014 always returns fake completed status",
-      "Refund auth \u2014 browser confirm() only, no server check",
-      "Pi tokens \u2014 stored raw in memory and Redis",
-    ]},
-    { title: "Cryptography Issues", icon: <Zap className="h-4 w-4 text-amber-500" />, color: "text-amber-500", items: [
-      "Hardcoded signing secret: 'super_secret_signing_key_change_me'",
-      "SHA256 instead of HMAC for subscription signatures",
-      "Fallback mnemonic: 55 bits vs required 128 bits entropy",
-      "Static PBKDF2 salts (same for all users)",
-      "PIN stored as plaintext in IndexedDB",
-      "No SRI on CDN resources (Chart.js, QRious, Font Awesome)",
-      "Unpkg.com script loaded without integrity check",
-    ]},
-    { title: "Insecure Storage & Data", icon: <FileWarning className="h-4 w-4 text-violet-500" />, color: "text-violet-500", items: [
-      "Transaction data in localStorage (unencrypted)",
-      "Stellar public key in localStorage (no integrity)",
-      "Merchant ID fallback to 'anonymous'",
-      "Offline sync queue in plain localStorage",
-      "Canvas fingerprinting for device ID",
-      "Payment URL exposed in alert() on error",
-      "Invoice ID uses Math.random() not crypto API",
-    ]},
-    { title: "Supply Chain Risks", icon: <TriangleAlert className="h-4 w-4 text-rose-500" />, color: "text-rose-500", items: [
-      "Unpkg.com CDN used for production dependencies",
-      "No lockfile validation in production build",
-      "Chart.js loaded from unpkg without version pinning",
-      "QRious library loaded without integrity hash",
-      "Font Awesome from cdnjs \u2014 no SRI verification",
-    ]},
-    { title: "Performance Issues", icon: <Gauge className="h-4 w-4 text-blue-500" />, color: "text-blue-500", items: [
-      "No code splitting on frontend bundle",
-      "All JS modules loaded synchronously",
-      "No lazy loading for route components",
-      "Large monolithic files exceeding 500 lines",
-      "No service worker for offline caching strategy",
-    ]},
-    { title: "Code Quality", icon: <Code2 className="h-4 w-4 text-teal-500" />, color: "text-teal-500", items: [
-      "Multiple TODO/FIXME comments in production code",
-      "Empty files committed to repository",
-      "Incomplete implementations (stub functions)",
-      "Inconsistent error handling patterns",
-      "Mixed coding styles across modules",
-    ]},
-    { title: "Privacy Concerns", icon: <Eye className="h-4 w-4 text-pink-500" />, color: "text-pink-500", items: [
-      "Canvas fingerprinting for device identification",
-      "Transaction history stored unencrypted",
-      "No data retention policy implemented",
-      "User data exposed in browser console logs",
-    ]},
-    { title: "Error Handling", icon: <AlertTriangle className="h-4 w-4 text-yellow-600" />, color: "text-yellow-600", items: [
-      "Payment errors exposed via alert() dialogs",
-      "Generic try-catch swallowing all errors",
-      "No error boundary components in React app",
-      "API errors not properly propagated to UI",
-    ]},
-    { title: "Incomplete Code", icon: <FileWarning className="h-4 w-4 text-slate-500" />, color: "text-slate-500", items: [
-      "Empty controller files in backend",
-      "Stub API endpoints returning placeholder data",
-      "Unfinished KYC/KYB verification flows",
-      "Missing input validation on several endpoints",
-    ]},
-    { title: "Deprecated APIs", icon: <Clock className="h-4 w-4 text-neutral-500" />, color: "text-neutral-500", items: [
-      "Using deprecated Stellar SDK methods",
-      "Old Pi SDK integration patterns",
-      "Legacy browser API usage without fallbacks",
-    ]},
-  ], []);
-
-  /* ── Loading state ──────────────────────────────────────────────────── */
-
-  if (loading) {
-    return (
-      <div role="status" aria-label="Loading audit report" className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-white to-slate-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950">
-        <div className="flex flex-col items-center gap-5">
-          <div className="relative">
-            <div className="w-16 h-16 border-4 border-red-100 dark:border-red-900/40 rounded-full" />
-            <div className="absolute inset-0 w-16 h-16 border-4 border-transparent border-t-red-500 rounded-full animate-spin" />
+  if (loading) return (
+    <div className="min-h-screen flex flex-col bg-background text-foreground" dir="rtl">
+      <div className="flex-1 flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <div className="relative inline-block">
+            <ShieldAlert className="h-12 w-12 text-primary animate-pulse" />
           </div>
-          <div className="text-center">
-            <p className="text-sm font-semibold text-foreground">Loading Audit Report</p>
-            <p className="text-xs text-muted-foreground mt-1">Analyzing 67 files across 4,800+ lines of code</p>
-          </div>
+          <p className="text-sm text-muted-foreground font-medium">جاري تحميل تقرير التدقيق الأمني...</p>
         </div>
       </div>
-    );
-  }
+      <footer className="mt-auto border-t py-6"><div className="max-w-7xl mx-auto px-4 text-center text-xs text-muted-foreground">Ledgererp — Pi Network</div></footer>
+    </div>
+  );
 
-  if (!report) return null;
-
-  /* ── Render ─────────────────────────────────────────────────────────── */
+  if (!report) return (
+    <div className="min-h-screen flex flex-col bg-background text-foreground" dir="rtl">
+      <div className="flex-1 flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <XCircle className="h-12 w-12 text-red-500 mx-auto" />
+          <p className="text-sm text-muted-foreground">فشل تحميل بيانات التدقيق. يرجى المحاولة لاحقاً.</p>
+        </div>
+      </div>
+    </div>
+  );
 
   return (
-    <div className="min-h-screen flex flex-col bg-gradient-to-br from-slate-50 via-white to-slate-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 transition-colors duration-300">
+    <div className="min-h-screen flex flex-col bg-background text-foreground" dir="rtl">
 
-      {/* ═══════════════════════════════════════════════════════════════════
+      {/* ═══════════════════════════════════════════════════════════════
           HEADER
-         ═══════════════════════════════════════════════════════════════════ */}
-      <header className="sticky top-0 z-50 bg-white/80 dark:bg-slate-950/80 backdrop-blur-xl border-b shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex items-center justify-between gap-3">
-          {/* Left: Pi logo + title */}
-          <div className="flex items-center gap-3 min-w-0">
-            {/* Pi Network Logo Badge */}
-            <div className="relative flex-shrink-0">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-red-500 via-red-600 to-rose-700 flex items-center justify-center shadow-lg shadow-red-500/25">
-                <ShieldX className="h-5 w-5 text-white" />
+         ═══════════════════════════════════════════════════════════════ */}
+      <header className="sticky top-0 z-50 border-b bg-background/80 backdrop-blur-xl">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between h-14 sm:h-16">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-600 to-purple-800 flex items-center justify-center flex-shrink-0 shadow-lg">
+                <ShieldAlert className="h-4.5 w-4.5 text-white" />
               </div>
-              <div className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-purple-600 flex items-center justify-center border-2 border-background dark:border-slate-950 shadow-sm">
-                <span className="text-[9px] font-black text-white leading-none">&pi;</span>
+              <div className="min-w-0">
+                <h1 className="text-sm sm:text-base font-bold leading-tight truncate">تدقيق Ledgererp الأمني</h1>
+                <p className="text-[10px] text-muted-foreground hidden sm:block">Pi Network — Security Audit Dashboard</p>
               </div>
             </div>
-            <div className="min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <h1 className="text-base sm:text-lg font-bold leading-tight tracking-tight truncate">Security Audit Report</h1>
-                <Badge className="bg-purple-600/15 text-purple-700 border-purple-500/30 dark:text-purple-300 dark:border-purple-500/40 text-[10px] font-semibold gap-1 px-2 py-0 hidden sm:inline-flex">
-                  <CircleDot className="h-2.5 w-2.5" />Pi Network Testnet
-                </Badge>
-              </div>
-              <p className="text-[11px] text-muted-foreground mt-0.5 truncate">
-                {report.meta.projectName} &bull; {new Date(report.meta.auditDate).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}
-              </p>
-            </div>
-          </div>
-
-          {/* Right: controls */}
-          <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
-            {/* File/line badges hidden on mobile */}
-            <Badge variant="secondary" className="hidden md:inline-flex items-center gap-1.5 text-[11px] px-2.5 py-1 font-medium">
-              <FileCode2 className="h-3 w-3" />{report.meta.totalFiles} files
-            </Badge>
-            <Badge variant="secondary" className="hidden md:inline-flex items-center gap-1.5 text-[11px] px-2.5 py-1 font-medium">
-              <Hash className="h-3 w-3" />~{report.meta.totalLines} lines
-            </Badge>
-
-            {/* Theme Toggle */}
-            <Button
-              variant="outline" size="sm"
-              className="gap-1.5 text-xs h-8 w-8 sm:w-auto sm:px-3"
-              onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-              aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
-            >
-              {theme === "dark" ? <Sun className="h-3.5 w-3.5" /> : <Moon className="h-3.5 w-3.5" />}
-              <span className="hidden sm:inline">{theme === "dark" ? "Light" : "Dark"}</span>
-            </Button>
-
-            {/* Export Dropdown */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8 px-3" aria-label="Export options">
-                  <Download className="h-3 w-3" />
-                  <span className="hidden sm:inline">Export</span>
-                  <ChevronDown className="h-3 w-3 opacity-50" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={handleExportJSON} className="gap-2 text-xs cursor-pointer">
-                  <FileJson className="h-3.5 w-3.5" />Export JSON
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={handleExportCSV} className="gap-2 text-xs cursor-pointer">
-                  <FileSpreadsheet className="h-3.5 w-3.5" />Export CSV
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={handleCopyToClipboard} className="gap-2 text-xs cursor-pointer">
-                  {copied ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <ClipboardList className="h-3.5 w-3.5" />}
-                  {copied ? "Copied!" : "Copy to Clipboard"}
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-
-            {/* GitHub */}
-            <a href={report.meta.repository} target="_blank" rel="noopener noreferrer" aria-label="View repository on GitHub">
-              <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8 px-3">
-                <Github className="h-3 w-3" /><span className="hidden sm:inline">GitHub</span>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs">
+                    <Download className="h-3.5 w-3.5" />
+                    <span className="hidden sm:inline">تصدير</span>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => handleExport("json")}>
+                    <FileJson className="h-4 w-4 ml-2" />تصدير JSON
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleExport("csv")}>
+                    <FileSpreadsheet className="h-4 w-4 ml-2" />تصدير CSV
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleExport("clipboard")}>
+                    {copied ? <Check className="h-4 w-4 ml-2" /> : <ClipboardList className="h-4 w-4 ml-2" />}
+                    {copied ? "تم النسخ!" : "نسخ إلى الحافظة"}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <Button
+                variant="ghost" size="icon" className="h-8 w-8"
+                onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+                aria-label="تبديل السمة"
+              >
+                {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
               </Button>
-            </a>
+            </div>
           </div>
         </div>
       </header>
 
-      {/* ═══════════════════════════════════════════════════════════════════
-          MAIN
-         ═══════════════════════════════════════════════════════════════════ */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      {/* ═══════════════════════════════════════════════════════════════
+          MAIN CONTENT
+         ═══════════════════════════════════════════════════════════════ */}
+      <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-6 space-y-6">
 
-        {/* ── VERDICT BANNER (with shimmer in dark mode) ─────────────── */}
-        <div className="relative rounded-2xl p-6 sm:p-8 mb-8 bg-gradient-to-r from-red-600 via-red-600 to-rose-700 text-white shadow-2xl shadow-red-500/20 overflow-hidden">
-          {/* Dark mode shimmer line */}
-          <div className="absolute inset-0 overflow-hidden pointer-events-none opacity-0 dark:opacity-100">
-            <div className="absolute top-0 left-0 w-1/3 h-full bg-gradient-to-r from-transparent via-white/[0.04] to-transparent animate-verdict-shimmer" />
-          </div>
-          <div className="relative flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
-            <div className="flex items-center gap-5">
-              <div className="w-20 h-20 rounded-2xl bg-white/15 backdrop-blur-sm flex items-center justify-center border border-white/10 flex-shrink-0">
-                <ShieldX className="h-10 w-10" />
-              </div>
-              <div>
-                <div className="flex items-center gap-2 mb-1.5">
-                  <Flame className="h-4 w-4 text-yellow-300" />
-                  <h2 className="text-xl sm:text-2xl font-black tracking-tight">NOT READY FOR DEPLOYMENT</h2>
-                </div>
-                <p className="text-red-100 text-sm leading-relaxed max-w-xl">
-                  {report.summary.critical} critical vulnerabilities, {report.summary.blockingDeployment} blocking issues,
-                  and an overall score of <strong className="text-white">{report.scores.overall}/100</strong>.
-                  Immediate action required before any production deployment.
-                </p>
-              </div>
+        {/* ──── VERDICT BANNER ──────────────────────────────────────── */}
+        <div className={`verdict-banner rounded-2xl border p-5 sm:p-6 bg-gradient-to-l ${verdictBg} ${CARD_DEPTH}`}>
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+            <div className={`flex-shrink-0 w-14 h-14 rounded-2xl flex items-center justify-center ${verdictColor}`}>
+              {verdictIcon}
             </div>
-            <div className="text-center sm:text-right flex-shrink-0">
-              <div className="text-6xl sm:text-7xl font-black leading-none">
-                <AnimatedNumber value={report.scores.overall} duration={1500} />
-              </div>
-              <div className="text-red-200 text-[11px] font-semibold tracking-widest uppercase mt-1">Overall Score</div>
+            <div className="flex-1 min-w-0 text-center sm:text-right">
+              <h2 className="text-lg sm:text-xl font-black mb-1">حكم الأمان العام: <span className={verdictColor}>{report.scores.overall}/100</span></h2>
+              <p className="text-sm text-muted-foreground">{verdictText}</p>
+            </div>
+            <div className="flex-shrink-0 hidden md:flex">
+              <ScoreRing score={report.scores.overall} label="النتيجة العامة" size={90} />
             </div>
           </div>
         </div>
 
-        {/* ── STAT CARDS (6 cards: 2×3 mobile, 3 tablet, 6 desktop) ── */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-8">
-          <StatCard icon={XCircle} label="Critical Issues" value={report.summary.critical} color="bg-gradient-to-br from-red-500 to-red-600" delay={0} />
-          <StatCard icon={AlertTriangle} label="High Issues" value={report.summary.high} color="bg-gradient-to-br from-orange-500 to-orange-600" delay={100} />
-          <StatCard icon={ShieldAlert} label="Medium Issues" value={report.summary.medium} color="bg-gradient-to-br from-amber-500 to-amber-600" delay={200} />
-          <StatCard icon={ShieldCheck} label="Low Issues" value={report.summary.low} color="bg-gradient-to-br from-sky-500 to-sky-600" delay={300} />
-          <StatCard icon={Bug} label="Total Issues" value={report.summary.totalIssues} color="bg-gradient-to-br from-slate-500 to-slate-600" delay={400} />
-          <StatCard icon={Radio} label="Blocks Deployment" value={report.summary.blockingDeployment} color="bg-gradient-to-br from-rose-500 to-rose-700" delay={500} />
+        {/* ──── STAT CARDS ──────────────────────────────────────────── */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+          <StatCard icon={ShieldAlert} label="إجمالي المشاكل" value={report.summary.totalIssues} sub={`${report.meta.totalFiles} ملف`} color="bg-gradient-to-br from-slate-600 to-slate-800" delay={0} />
+          <StatCard icon={XCircle} label="حرج" value={report.summary.critical} sub={`${report.summary.blockingDeployment} تعطل النشر`} color="bg-gradient-to-br from-red-500 to-red-700" delay={100} />
+          <StatCard icon={AlertTriangle} label="مرتفع" value={report.summary.high} color="bg-gradient-to-br from-orange-500 to-orange-700" delay={200} />
+          <StatCard icon={ShieldAlert} label="متوسط" value={report.summary.medium} sub={`${report.summary.low} منخفض`} color="bg-gradient-to-br from-amber-500 to-amber-700" delay={300} />
         </div>
 
-        {/* ── TABS ──────────────────────────────────────────────────── */}
+        {/* ──── TABS ────────────────────────────────────────────────── */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-5 h-auto p-1.5 bg-muted/50 backdrop-blur-sm overflow-x-auto scrollbar-none">
-            {[
-              { value: "overview", icon: <Gauge className="h-3.5 w-3.5 hidden sm:block" />, label: "Overview" },
-              { value: "critical", icon: <ShieldX className="h-3.5 w-3.5 hidden sm:block" />, label: "Issues" },
-              { value: "security", icon: <Lock className="h-3.5 w-3.5 hidden sm:block" />, label: "Security" },
-              { value: "architecture", icon: <LayoutGrid className="h-3.5 w-3.5 hidden sm:block" />, label: "Architecture" },
-              { value: "pi-network", icon: <Globe className="h-3.5 w-3.5 hidden sm:block" />, label: "Pi Network" },
-            ].map((t) => (
-              <TabsTrigger key={t.value} value={t.value}
-                className="text-xs py-2.5 gap-1.5 data-[state=active]:bg-background data-[state=active]:shadow-sm data-[state=active]:font-semibold transition-all min-w-0">
-                {t.icon}{t.label}
-              </TabsTrigger>
-            ))}
+          <TabsList className="w-full flex overflow-x-auto no-scrollbar">
+            <TabsTrigger value="overview" className="flex-1 min-w-0 text-xs sm:text-sm gap-1.5">
+              <LayoutGrid className="h-3.5 w-3.5 hidden sm:block" />نظرة عامة
+            </TabsTrigger>
+            <TabsTrigger value="critical" className="flex-1 min-w-0 text-xs sm:text-sm gap-1.5">
+              <Flame className="h-3.5 w-3.5 hidden sm:block" />حرج
+              <Badge variant="destructive" className="text-[9px] h-4 px-1 min-w-[18px] flex items-center justify-center">{report.summary.critical}</Badge>
+            </TabsTrigger>
+            <TabsTrigger value="high" className="flex-1 min-w-0 text-xs sm:text-sm gap-1.5">
+              <Zap className="h-3.5 w-3.5 hidden sm:block" />مرتفع
+              <Badge className="bg-orange-500/15 text-orange-600 dark:text-orange-400 text-[9px] h-4 px-1 min-w-[18px] flex items-center justify-center border-0">{report.summary.high}</Badge>
+            </TabsTrigger>
+            <TabsTrigger value="medium" className="flex-1 min-w-0 text-xs sm:text-sm gap-1.5">
+              <AlertTriangle className="h-3.5 w-3.5 hidden sm:block" />متوسط
+              <Badge className="bg-amber-500/15 text-amber-600 dark:text-amber-400 text-[9px] h-4 px-1 min-w-[18px] flex items-center justify-center border-0">{report.summary.medium}</Badge>
+            </TabsTrigger>
+            <TabsTrigger value="pi-network" className="flex-1 min-w-0 text-xs sm:text-sm gap-1.5">
+              <Globe className="h-3.5 w-3.5 hidden sm:block" />شبكة بي
+            </TabsTrigger>
           </TabsList>
 
-          {/* ──── OVERVIEW TAB ──────────────────────────────────────────── */}
-          <TabsContent value="overview" className="space-y-8">
-            {/* Score Rings + Donut */}
-            <div className="grid lg:grid-cols-3 gap-6">
-              <Card className={`lg:col-span-2 ${CARD_DEPTH}`}>
-                <CardHeader className="pb-4">
-                  <CardTitle className="text-sm flex items-center gap-2"><Activity className="h-4 w-4 text-primary" />Quality Scores</CardTitle>
-                  <CardDescription>Comprehensive assessment across all dimensions</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex flex-wrap justify-center gap-6 sm:gap-8">
-                    <ScoreRing score={report.scores.overall} label="Overall" size={120} />
-                    <ScoreRing score={report.scores.backend.overall} label="Backend" size={105} />
-                    <ScoreRing score={report.scores.frontend.overall} label="Frontend" size={105} />
-                    <ScoreRing score={report.scores.piNetwork.overall} label="Pi Network" size={105} />
-                  </div>
+          {/* ──── OVERVIEW TAB ──────────────────────────────────────── */}
+          <TabsContent value="overview" className="space-y-6">
+
+            {/* Score Rings */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <Card className={CARD_DEPTH}>
+                <CardContent className="p-4 flex flex-col items-center">
+                  <ScoreRing score={report.scores.backend.overall} label="الخادم" size={100} />
                 </CardContent>
               </Card>
-
               <Card className={CARD_DEPTH}>
-                <CardHeader className="pb-4">
-                  <CardTitle className="text-sm flex items-center gap-2"><PieChart className="h-4 w-4 text-primary" />Severity Distribution</CardTitle>
-                  <CardDescription>Breakdown by severity level</CardDescription>
-                </CardHeader>
-                <CardContent className="flex items-center justify-center">
-                  <DonutChart data={donutData} />
+                <CardContent className="p-4 flex flex-col items-center">
+                  <ScoreRing score={report.scores.frontend.overall} label="الواجهة الأمامية" size={100} />
+                </CardContent>
+              </Card>
+              <Card className={CARD_DEPTH}>
+                <CardContent className="p-4 flex flex-col items-center">
+                  <ScoreRing score={report.scores.piNetwork.overall} label="شبكة بي" size={100} />
+                </CardContent>
+              </Card>
+              <Card className={CARD_DEPTH}>
+                <CardContent className="p-4 flex flex-col items-center">
+                  <ScoreRing score={report.scores.overall} label="النتيجة العامة" size={100} />
                 </CardContent>
               </Card>
             </div>
 
-            {/* Backend / Frontend / Pi scores */}
-            <div className="grid md:grid-cols-3 gap-6">
-              <Card className={CARD_DEPTH}>
-                <CardHeader className="pb-4">
-                  <CardTitle className="text-sm flex items-center gap-2"><Server className="h-4 w-4 text-violet-500" />Backend Scores</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <LabeledProgress label="Code Quality" value={report.scores.backend.codeQuality} />
-                  <LabeledProgress label="Security" value={report.scores.backend.security} />
-                  <LabeledProgress label="Architecture" value={report.scores.backend.architecture} />
-                </CardContent>
-              </Card>
-              <Card className={CARD_DEPTH}>
-                <CardHeader className="pb-4">
-                  <CardTitle className="text-sm flex items-center gap-2"><Layers className="h-4 w-4 text-cyan-500" />Frontend Scores</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <LabeledProgress label="Code Quality" value={report.scores.frontend.codeQuality} />
-                  <LabeledProgress label="Security" value={report.scores.frontend.security} />
-                  <LabeledProgress label="Pi Compliance" value={report.scores.frontend.piCompliance} />
-                </CardContent>
-              </Card>
-              <Card className={CARD_DEPTH}>
-                <CardHeader className="pb-4">
-                  <CardTitle className="text-sm flex items-center gap-2 text-purple-600 dark:text-purple-400"><Globe className="h-4 w-4" />Pi Network Compliance</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <LabeledProgress label="Manifest" value={report.scores.piNetwork.manifestCompliance} />
-                  <LabeledProgress label="Domain Verification" value={report.scores.piNetwork.domainVerification} />
-                  <LabeledProgress label="API Key Mgmt" value={report.scores.piNetwork.apiKeyManagement} />
-                  <LabeledProgress label="Payment Flow" value={report.scores.piNetwork.paymentFlow} />
-                  <LabeledProgress label="KYC / KYB" value={report.scores.piNetwork.kycKyb} />
-                  <LabeledProgress label="Deployment" value={report.scores.piNetwork.deploymentReadiness} />
-                  <LabeledProgress label="Non-Custodial" value={report.scores.piNetwork.nonCustodial} />
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Category + File charts */}
+            {/* Backend & Frontend Scores + Donut */}
             <div className="grid md:grid-cols-2 gap-6">
               <Card className={CARD_DEPTH}>
-                <CardHeader className="pb-4">
-                  <CardTitle className="text-sm flex items-center gap-2"><BarChart3 className="h-4 w-4 text-primary" />Issues by Category</CardTitle>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm flex items-center gap-2"><Server className="h-4 w-4" />درجات الخادم</CardTitle>
                 </CardHeader>
-                <CardContent>
-                  <ScrollArea className="h-[340px]">
-                    <HorizontalBarChart data={categoryBarData} />
-                  </ScrollArea>
+                <CardContent className="space-y-4">
+                  <LabeledProgress label="جودة الكود" value={report.scores.backend.codeQuality} />
+                  <LabeledProgress label="الأمان" value={report.scores.backend.security} />
+                  <LabeledProgress label="البنية" value={report.scores.backend.architecture} />
                 </CardContent>
               </Card>
               <Card className={CARD_DEPTH}>
-                <CardHeader className="pb-4">
-                  <CardTitle className="text-sm flex items-center gap-2"><Flame className="h-4 w-4 text-orange-500" />File Heatmap (Top 10)</CardTitle>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm flex items-center gap-2"><Layers className="h-4 w-4" />توزيع المشاكل حسب الخطورة</CardTitle>
                 </CardHeader>
-                <CardContent>
-                  <ScrollArea className="h-[340px]">
-                    <HorizontalBarChart data={fileHeatData} />
-                  </ScrollArea>
+                <CardContent className="flex justify-center py-2">
+                  <DonutChart data={donutData} size={180} />
                 </CardContent>
               </Card>
             </div>
 
-            {/* ALL 20 Recommendations (3-col grid, no ScrollArea) */}
+            {/* Category Breakdown Chart */}
             <Card className={CARD_DEPTH}>
-              <CardHeader className="pb-4">
-                <CardTitle className="text-sm flex items-center gap-2"><Target className="h-4 w-4 text-emerald-500" />All Recommendations ({report.recommendations.length})</CardTitle>
-                <CardDescription>Prioritized actions to improve code quality and security</CardDescription>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm flex items-center gap-2"><BarChart3 className="h-4 w-4" />توزيع المشاكل حسب الفئة</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-2">
-                  {report.recommendations.map((rec) => (
-                    <div key={rec.priority} className="flex items-center gap-2.5 text-xs py-2 px-2.5 rounded-lg hover:bg-muted/40 transition-colors">
-                      <span className="w-5 text-center font-bold text-muted-foreground/50 flex-shrink-0">{rec.priority}</span>
-                      <ArrowRight className={`h-3 w-3 flex-shrink-0 ${
-                        rec.impact === "Critical" ? "text-red-400" : rec.impact === "High" ? "text-orange-400" : "text-amber-400"
-                      }`} />
-                      <span className="flex-1 truncate">{rec.title}</span>
-                      <Badge variant="outline" className={`text-[9px] flex-shrink-0 px-1.5 py-0 ${
-                        rec.effort === "Small" ? "text-emerald-600" : rec.effort === "Medium" ? "text-amber-600" : "text-red-600"
-                      }`}>{rec.effort}</Badge>
+                <ScrollArea className="w-full" style={{ maxHeight: 400 }}>
+                  <HorizontalBarChart data={categoryBarData} />
+                </ScrollArea>
+              </CardContent>
+            </Card>
+
+            {/* File Heatmap */}
+            <Card className={CARD_DEPTH}>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm flex items-center gap-2"><FileCode2 className="h-4 w-4" />خريطة الملفات الأكثر مشاكل</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ScrollArea className="w-full" style={{ maxHeight: 400 }}>
+                  <HorizontalBarChart data={fileHeatData} />
+                </ScrollArea>
+              </CardContent>
+            </Card>
+
+            {/* Security Zones (Collapsible) */}
+            <Card className={CARD_DEPTH}>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm flex items-center gap-2"><ShieldAlert className="h-4 w-4" />المناطق الأمنية</CardTitle>
+                <CardDescription>انقر على أي منطقة لتوسيع المشاكل المتعلقة بها</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {SECURITY_ZONES.map((zone) => {
+                  const issues = report.criticalFindings.filter((i) =>
+                    zone.filter.some((f) => i.category.includes(f))
+                  );
+                  return (
+                    <Collapsible
+                      key={zone.title}
+                      open={securityOpen[zone.title] ?? false}
+                      onOpenChange={(v) => setSecurityOpen((p) => ({ ...p, [zone.title]: v }))}
+                    >
+                      <CollapsibleTrigger className="w-full flex items-center gap-3 py-3 px-4 rounded-xl hover:bg-muted-foreground/5 transition-colors min-h-[44px]" aria-label={zone.title}>
+                        <zone.icon className={`h-4 w-4 flex-shrink-0 ${zone.color}`} />
+                        <span className="text-sm font-medium flex-1 text-right">{zone.title}</span>
+                        <Badge variant="outline" className="text-[10px]">{issues.length}</Badge>
+                        {securityOpen[zone.title] ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+                      </CollapsibleTrigger>
+                      <CollapsibleContent>
+                        {issues.length > 0 ? (
+                          <div className="pr-10 pb-3 space-y-1.5">
+                            {issues.map((issue) => (
+                              <button
+                                key={issue.id}
+                                onClick={() => openSheet(issue, "CRITICAL")}
+                                className="w-full text-right text-xs text-muted-foreground hover:text-foreground py-1.5 px-2 rounded-lg hover:bg-muted-foreground/5 transition-colors min-h-[36px] flex items-center gap-2"
+                              >
+                                <span className="font-mono text-[10px] text-muted-foreground/60">{issue.id}</span>
+                                <span className="truncate flex-1">{issue.title}</span>
+                                <ExternalLink className="h-3 w-3 flex-shrink-0 opacity-0 group-hover:opacity-100" />
+                              </button>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="pr-10 pb-3">
+                            <p className="text-xs text-muted-foreground/60 py-1">لا توجد مشاكل في هذه المنطقة</p>
+                          </div>
+                        )}
+                      </CollapsibleContent>
+                    </Collapsible>
+                  );
+                })}
+              </CardContent>
+            </Card>
+
+            {/* Recommendations */}
+            <Card className={CARD_DEPTH}>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm flex items-center gap-2"><Target className="h-4 w-4" />التوصيات حسب الأولوية</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ScrollArea className="w-full" style={{ maxHeight: 500 }}>
+                  <div className="space-y-2">
+                    {report.recommendations.map((rec) => (
+                      <div key={rec.priority} className="flex items-start gap-3 p-3 rounded-xl bg-muted-foreground/5 border border-border/50 hover:border-border transition-colors">
+                        <div className="flex-shrink-0 w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center">
+                          <span className="text-xs font-bold text-primary">{rec.priority}</span>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-semibold leading-relaxed">{rec.title}</p>
+                          <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                            <Badge variant="outline" className="text-[9px]">
+                              {rec.effort === "Small" ? "جهد صغير" : rec.effort === "Medium" ? "جهد متوسط" : "جهد كبير"}
+                            </Badge>
+                            <Badge variant="outline" className={`text-[9px] ${rec.impact === "Critical" ? "text-red-500 border-red-500/30" : rec.impact === "High" ? "text-orange-500 border-orange-500/30" : "text-amber-500 border-amber-500/30"}`}>
+                              {rec.impact === "Critical" ? "تأثير حرج" : rec.impact === "High" ? "تأثير مرتفع" : "تأثير متوسط"}
+                            </Badge>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </ScrollArea>
+              </CardContent>
+            </Card>
+
+            {/* Architecture Problems */}
+            <Card className={CARD_DEPTH}>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm flex items-center gap-2"><Activity className="h-4 w-4" />مشاكل البنية المعمارية</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {report.architectureProblems.map((prob, i) => (
+                  <div key={i} className="flex items-start gap-3 p-4 rounded-xl bg-muted-foreground/5 border border-border/50">
+                    <div className="w-7 h-7 rounded-full bg-orange-100 dark:bg-orange-900/40 flex items-center justify-center flex-shrink-0 mt-0.5">
+                      <span className="text-xs font-bold text-orange-600 dark:text-orange-400">{i + 1}</span>
                     </div>
-                  ))}
+                    <div className="flex-1 min-w-0">
+                      <h4 className="text-sm font-semibold mb-1">{prob.title}</h4>
+                      <p className="text-xs text-muted-foreground leading-relaxed">{prob.description}</p>
+                    </div>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+
+            {/* Code Quality */}
+            <Card className={CARD_DEPTH}>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm flex items-center gap-2"><Code2 className="h-4 w-4" />جودة الكود</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div>
+                  <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-3 flex items-center gap-1.5">
+                    <FolderOpen className="h-3.5 w-3.5" />أكبر الملفات
+                  </h4>
+                  <div className="space-y-2">
+                    {report.codeQuality.largestFiles.slice(0, 5).map((f) => (
+                      <div key={f.file} className="flex items-center justify-between text-xs p-2.5 rounded-lg bg-muted-foreground/5">
+                        <code className="font-mono text-muted-foreground truncate max-w-[60%]" dir="ltr">{f.file}</code>
+                        <div className="flex items-center gap-3 text-muted-foreground/70 flex-shrink-0">
+                          <span>{f.lines} سطر</span>
+                          <span>{(f.size / 1024).toFixed(1)}KB</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <Separator />
+                <div>
+                  <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-3 flex items-center gap-1.5">
+                    <FileWarning className="h-3.5 w-3.5" />ملاحظات TODO/FIXME
+                  </h4>
+                  <div className="space-y-2">
+                    {report.codeQuality.todoFixme.map((t, i) => (
+                      <div key={i} className="flex items-start gap-2 text-xs p-2.5 rounded-lg bg-amber-50/50 dark:bg-amber-950/20 border border-amber-200/50 dark:border-amber-900/40">
+                        <code className="font-mono text-amber-600 dark:text-amber-400 flex-shrink-0">{t.file}</code>
+                        <span className="text-muted-foreground truncate">{t.text}</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -1040,7 +1035,7 @@ export default function AuditDashboard() {
             {/* Tech Stack */}
             <Card className={CARD_DEPTH}>
               <CardHeader className="pb-3">
-                <CardTitle className="text-sm flex items-center gap-2"><Cpu className="h-4 w-4" />Project Tech Stack</CardTitle>
+                <CardTitle className="text-sm flex items-center gap-2"><Cpu className="h-4 w-4" />التقنيات المستخدمة</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="flex flex-wrap gap-2">
@@ -1052,283 +1047,145 @@ export default function AuditDashboard() {
             </Card>
           </TabsContent>
 
-          {/* ──── ISSUES TAB ────────────────────────────────────────────── */}
+          {/* ──── CRITICAL TAB ──────────────────────────────────────── */}
           <TabsContent value="critical" className="space-y-6">
-            {/* Search + Filter */}
             <div className="flex flex-col sm:flex-row gap-3">
               <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/60" />
+                <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/60" />
                 <Input
-                  placeholder="Search issues by title, file, or category\u2026"
+                  placeholder="بحث في المشاكل الحرجة..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-9 h-10 text-sm"
-                  aria-label="Search issues"
+                  className="pr-9 h-10 text-sm"
+                  aria-label="بحث في المشاكل"
                 />
               </div>
-              <div className="relative">
-                <Filter className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/60" />
-                <select
-                  value={filterSource}
-                  onChange={(e) => setFilterSource(e.target.value)}
-                  className="h-10 pl-9 pr-8 text-sm rounded-md border bg-background ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 appearance-none cursor-pointer"
-                  aria-label="Filter by source"
-                >
-                  <option value="all">All Sources</option>
-                  <option value="Backend">Backend</option>
-                  <option value="Frontend">Frontend</option>
-                  <option value="Pi Network">Pi Network</option>
-                </select>
+              <select
+                value={filterSource}
+                onChange={(e) => setFilterSource(e.target.value)}
+                className="h-10 text-sm rounded-md border border-input bg-background px-3 py-2 text-foreground focus:outline-none focus:ring-2 focus:ring-ring min-w-[140px]"
+                aria-label="تصفية حسب المصدر"
+              >
+                <option value="all">جميع المصادر</option>
+                <option value="Backend">الخادم</option>
+                <option value="Frontend">الواجهة</option>
+                <option value="Pi Network">شبكة بي</option>
+              </select>
+            </div>
+            <p className="text-xs text-muted-foreground">{filteredCritical.length} من {report.criticalFindings.length} مشكلة حرجة</p>
+            <div className="space-y-4">
+              {filteredCritical.map((issue, i) => (
+                <CriticalIssueCard key={issue.id} issue={issue} index={i} onSelect={(iss) => openSheet(iss, "CRITICAL")} />
+              ))}
+            </div>
+          </TabsContent>
+
+          {/* ──── HIGH TAB ──────────────────────────────────────────── */}
+          <TabsContent value="high" className="space-y-6">
+            <div className="flex flex-col sm:flex-row gap-3">
+              <div className="relative flex-1">
+                <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/60" />
+                <Input
+                  placeholder="بحث في المشاكل المرتفعة..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pr-9 h-10 text-sm"
+                  aria-label="بحث في المشاكل"
+                />
               </div>
+              <select
+                value={filterSource}
+                onChange={(e) => setFilterSource(e.target.value)}
+                className="h-10 text-sm rounded-md border border-input bg-background px-3 py-2 text-foreground focus:outline-none focus:ring-2 focus:ring-ring min-w-[140px]"
+                aria-label="تصفية حسب المصدر"
+              >
+                <option value="all">جميع المصادر</option>
+                <option value="Backend">الخادم</option>
+                <option value="Frontend">الواجهة</option>
+                <option value="Pi Network">شبكة بي</option>
+              </select>
             </div>
-
-            {/* Critical Issues */}
-            <Card className={`border-red-200/60 dark:border-red-900/40 ${CARD_DEPTH}`}>
-              <CardHeader className="pb-4">
-                <CardTitle className="text-sm flex items-center gap-2 text-red-600 dark:text-red-400">
-                  <XCircle className="h-4 w-4" />{filteredCritical.length} Critical Issues
-                  {searchQuery && <span className="text-muted-foreground font-normal">(filtered)</span>}
-                </CardTitle>
-                <CardDescription className="text-[11px]">Click any card to view full details in a slide-over panel</CardDescription>
-              </CardHeader>
-              <CardContent>
-                {filteredCritical.length === 0 ? (
-                  <p className="text-sm text-muted-foreground py-6 text-center">No issues match your filters</p>
-                ) : (
-                  <div className="space-y-4">
-                    {filteredCritical.map((issue) => (
-                      <CriticalIssueCard key={issue.id} issue={issue} index={report.criticalFindings.indexOf(issue)} onSelect={handleSelectIssue} />
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* High Issues */}
-            <Card className={`border-orange-200/60 dark:border-orange-900/40 ${CARD_DEPTH}`}>
-              <CardHeader className="pb-4">
-                <CardTitle className="text-sm flex items-center gap-2 text-orange-600 dark:text-orange-400">
-                  <AlertTriangle className="h-4 w-4" />{filteredHigh.length} High Severity Issues
-                  {searchQuery && <span className="text-muted-foreground font-normal">(filtered)</span>}
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {filteredHigh.length === 0 ? (
-                  <p className="text-sm text-muted-foreground py-6 text-center">No issues match your filters</p>
-                ) : (
-                  <div className="divide-y divide-border/50">
-                    {filteredHigh.map((issue) => (
-                      <IssueRow key={issue.id} issue={issue} onClick={() => handleSelectBriefIssue(issue, "high")} />
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Medium Issues */}
-            <Card className={`border-amber-200/60 dark:border-amber-900/40 ${CARD_DEPTH}`}>
-              <CardHeader className="pb-4">
-                <CardTitle className="text-sm flex items-center gap-2 text-amber-600 dark:text-amber-400">
-                  <ShieldAlert className="h-4 w-4" />{filteredMedium.length} Medium Severity Issues
-                  {searchQuery && <span className="text-muted-foreground font-normal">(filtered)</span>}
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {filteredMedium.length === 0 ? (
-                  <p className="text-sm text-muted-foreground py-6 text-center">No issues match your filters</p>
-                ) : (
-                  <div className="divide-y divide-border/50">
-                    {filteredMedium.map((issue) => (
-                      <IssueRow key={issue.id} issue={issue} onClick={() => handleSelectBriefIssue(issue, "medium")} />
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Low Issues */}
-            <Card className={`border-sky-200/60 dark:border-sky-900/40 ${CARD_DEPTH}`}>
-              <CardHeader className="pb-4">
-                <CardTitle className="text-sm flex items-center gap-2 text-sky-600 dark:text-sky-400">
-                  <ShieldCheck className="h-4 w-4" />{report.summary.low} Low Severity Issues
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-xs text-muted-foreground text-center py-4">
-                  Low severity issues are tracked in the full audit report. Export JSON or CSV for complete data.
-                </p>
+            <p className="text-xs text-muted-foreground">{filteredHigh.length} من {report.highIssues.length} مشكلة مرتفعة</p>
+            <Card className={CARD_DEPTH}>
+              <CardContent className="p-2">
+                {filteredHigh.map((issue) => (
+                  <IssueRow
+                    key={issue.id}
+                    issue={{ ...issue, severity: "HIGH" }}
+                    onClick={() => {
+                      const fakeIssue: Issue = { id: issue.id, source: issue.source, file: issue.file, line: issue.line || 0, category: issue.category, title: issue.title, description: "", recommendation: "" };
+                      openSheet(fakeIssue, "HIGH", true);
+                    }}
+                  />
+                ))}
               </CardContent>
             </Card>
           </TabsContent>
 
-          {/* ──── SECURITY TAB (11 Collapsible Zones) ─────────────────── */}
-          <TabsContent value="security" className="space-y-4">
-            <div className="grid md:grid-cols-2 gap-4">
-              {securityZones.map((zone) => {
-                const isOpen = securityOpen[zone.title] ?? false;
-                return (
-                  <Card key={zone.title} className={CARD_DEPTH}>
-                    <Collapsible
-                      open={isOpen}
-                      onOpenChange={(v) => setSecurityOpen((prev) => ({ ...prev, [zone.title]: v }))}
-                    >
-                      <CollapsibleTrigger className="w-full">
-                        <CardHeader className="pb-3 cursor-pointer hover:bg-muted/20 rounded-t-lg transition-colors">
-                          <CardTitle className="text-sm flex items-center justify-between gap-2">
-                            <span className="flex items-center gap-2">{zone.icon}{zone.title}</span>
-                            <div className="flex items-center gap-2">
-                              <Badge variant="outline" className="text-[10px]">{zone.items.length}</Badge>
-                              <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`} />
-                            </div>
-                          </CardTitle>
-                        </CardHeader>
-                      </CollapsibleTrigger>
-                      <CollapsibleContent>
-                        <CardContent className="space-y-1.5 pt-0">
-                          {zone.items.map((v, i) => (
-                            <div key={i} className="flex items-start gap-2.5 text-xs py-1.5 px-2 rounded-lg hover:bg-muted/30 transition-colors">
-                              <XCircle className={`h-3 w-3 ${zone.color} flex-shrink-0 mt-0.5`} />
-                              <span className="text-muted-foreground leading-relaxed break-words">{v}</span>
-                            </div>
-                          ))}
-                        </CardContent>
-                      </CollapsibleContent>
-                    </Collapsible>
-                  </Card>
-                );
-              })}
+          {/* ──── MEDIUM TAB ────────────────────────────────────────── */}
+          <TabsContent value="medium" className="space-y-6">
+            <div className="flex flex-col sm:flex-row gap-3">
+              <div className="relative flex-1">
+                <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/60" />
+                <Input
+                  placeholder="بحث في المشاكل المتوسطة..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pr-9 h-10 text-sm"
+                  aria-label="بحث في المشاكل"
+                />
+              </div>
+              <select
+                value={filterSource}
+                onChange={(e) => setFilterSource(e.target.value)}
+                className="h-10 text-sm rounded-md border border-input bg-background px-3 py-2 text-foreground focus:outline-none focus:ring-2 focus:ring-ring min-w-[140px]"
+                aria-label="تصفية حسب المصدر"
+              >
+                <option value="all">جميع المصادر</option>
+                <option value="Backend">الخادم</option>
+                <option value="Frontend">الواجهة</option>
+              </select>
             </div>
+            <p className="text-xs text-muted-foreground">{filteredMedium.length} من {report.mediumIssues.length} مشكلة متوسطة</p>
+            <Card className={CARD_DEPTH}>
+              <CardContent className="p-2">
+                {filteredMedium.map((issue) => (
+                  <IssueRow
+                    key={issue.id}
+                    issue={{ ...issue, severity: "MEDIUM" }}
+                    onClick={() => {
+                      const fakeIssue: Issue = { id: issue.id, source: issue.source, file: issue.file, line: issue.line || 0, category: issue.category, title: issue.title, description: "", recommendation: "" };
+                      openSheet(fakeIssue, "MEDIUM", true);
+                    }}
+                  />
+                ))}
+              </CardContent>
+            </Card>
           </TabsContent>
 
-          {/* ──── ARCHITECTURE TAB (Complete rewrite) ──────────────────── */}
-          <TabsContent value="architecture" className="space-y-6">
-            <div className="grid md:grid-cols-2 gap-6">
-
-              {/* Architecture Problems */}
-              <Card className={CARD_DEPTH}>
-                <CardHeader className="pb-4">
-                  <CardTitle className="text-sm flex items-center gap-2"><LayoutGrid className="h-4 w-4 text-red-500" />Architecture Problems ({report.architectureProblems.length})</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  {report.architectureProblems.map((prob, i) => (
-                    <div key={i} className="p-4 rounded-xl bg-red-50/70 dark:bg-red-950/20 border border-red-200/60 dark:border-red-900/40">
-                      <h4 className="text-sm font-semibold mb-1.5">{prob.title}</h4>
-                      <p className="text-xs text-muted-foreground leading-relaxed">{prob.description}</p>
-                    </div>
-                  ))}
-                </CardContent>
-              </Card>
-
-              {/* Largest Files */}
-              <Card className={CARD_DEPTH}>
-                <CardHeader className="pb-4">
-                  <CardTitle className="text-sm flex items-center gap-2"><BarChart3 className="h-4 w-4 text-orange-500" />Largest Files ({report.codeQuality.largestFiles.length})</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  {report.codeQuality.largestFiles.map((f) => {
-                    const maxSize = report.codeQuality.largestFiles[0].size;
-                    return (
-                      <div key={f.file} className="space-y-1.5">
-                        <div className="flex justify-between items-center">
-                          <code className="text-[11px] font-mono text-muted-foreground truncate max-w-[240px]">{f.file}</code>
-                          <span className="text-[10px] text-muted-foreground/70 font-medium">{(f.size / 1024).toFixed(0)}KB &middot; {f.lines}L</span>
-                        </div>
-                        <div className="h-2 bg-muted rounded-full overflow-hidden">
-                          <div className="h-full bg-gradient-to-r from-orange-400 to-red-500 rounded-full transition-all duration-1000"
-                            style={{ width: `${(f.size / maxSize) * 100}%` }} />
-                        </div>
-                      </div>
-                    );
-                  })}
-                </CardContent>
-              </Card>
-
-              {/* TODO/FIXME */}
-              <Card className={CARD_DEPTH}>
-                <CardHeader className="pb-4">
-                  <CardTitle className="text-sm flex items-center gap-2"><FileWarning className="h-4 w-4 text-amber-500" />TODO / FIXME ({report.codeQuality.todoFixme.length})</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-2.5">
-                  {report.codeQuality.todoFixme.map((todo, i) => (
-                    <div key={i} className="flex items-start gap-2.5 text-xs p-3 rounded-lg bg-amber-50/70 dark:bg-amber-950/20 border border-amber-200/50 dark:border-amber-900/40">
-                      <code className="font-mono text-amber-700 dark:text-amber-400 flex-shrink-0 w-28 truncate font-medium">{todo.file}</code>
-                      <span className="text-muted-foreground leading-relaxed">{todo.text}</span>
-                    </div>
-                  ))}
-                </CardContent>
-              </Card>
-
-              {/* Empty / Incomplete Files */}
-              <Card className={CARD_DEPTH}>
-                <CardHeader className="pb-4">
-                  <CardTitle className="text-sm flex items-center gap-2"><Terminal className="h-4 w-4 text-rose-500" />Empty / Incomplete Files</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-2.5">
-                  <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-2">Empty Files ({report.codeQuality.emptyFiles.length})</p>
-                  {report.codeQuality.emptyFiles.map((f, i) => (
-                    <div key={`empty-${i}`} className="flex items-center gap-2 text-xs text-muted-foreground py-1">
-                      <XCircle className="h-3 w-3 text-red-400" />{f}
-                    </div>
-                  ))}
-                  <Separator className="my-3" />
-                  <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-2">Incomplete Files ({report.codeQuality.incompleteFiles.length})</p>
-                  {report.codeQuality.incompleteFiles.map((f, i) => (
-                    <div key={`inc-${i}`} className="flex items-center gap-2 text-xs text-muted-foreground py-1">
-                      <AlertTriangle className="h-3 w-3 text-amber-400" />{f}
-                    </div>
-                  ))}
-                </CardContent>
-              </Card>
-
-              {/* All 20 Recommendations */}
-              <Card className={`md:col-span-2 ${CARD_DEPTH}`}>
-                <CardHeader className="pb-4">
-                  <CardTitle className="text-sm flex items-center gap-2"><Target className="h-4 w-4 text-emerald-500" />All Recommendations ({report.recommendations.length})</CardTitle>
-                  <CardDescription>Prioritized actions to improve code quality and security</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-2">
-                    {report.recommendations.map((rec) => (
-                      <div key={rec.priority} className="flex items-center gap-2.5 text-xs py-2 px-2.5 rounded-lg hover:bg-muted/40 transition-colors">
-                        <span className="w-5 text-center font-bold text-muted-foreground/50 flex-shrink-0">{rec.priority}</span>
-                        <ArrowRight className={`h-3 w-3 flex-shrink-0 ${
-                          rec.impact === "Critical" ? "text-red-400" : rec.impact === "High" ? "text-orange-400" : "text-amber-400"
-                        }`} />
-                        <span className="flex-1 truncate">{rec.title}</span>
-                        <Badge variant="outline" className={`text-[9px] flex-shrink-0 px-1.5 py-0 ${
-                          rec.effort === "Small" ? "text-emerald-600" : rec.effort === "Medium" ? "text-amber-600" : "text-red-600"
-                        }`}>{rec.effort}</Badge>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          </TabsContent>
-
-          {/* ──── PI NETWORK TAB ───────────────────────────────────────── */}
+          {/* ──── PI NETWORK TAB ────────────────────────────────────── */}
           <TabsContent value="pi-network" className="space-y-6">
 
             {/* Pi Network Compliance Score Ring */}
             <Card className={CARD_DEPTH}>
               <CardHeader className="pb-4">
                 <CardTitle className="text-sm flex items-center gap-2 text-purple-600 dark:text-purple-400">
-                  <Globe className="h-4 w-4" />Pi Network Compliance Score
+                  <Globe className="h-4 w-4" />درجة التوافق مع شبكة بي
                 </CardTitle>
-                <CardDescription>Overall Pi Network readiness assessment</CardDescription>
+                <CardDescription>تقييم شامل لجاهزية شبكة بي</CardDescription>
               </CardHeader>
               <CardContent className="flex justify-center">
-                <ScoreRing score={report.scores.piNetwork.overall} label="Pi Network Compliance" size={140} />
+                <ScoreRing score={report.scores.piNetwork.overall} label="توافق شبكة بي" size={140} />
               </CardContent>
             </Card>
 
-            {/* Blocking Issues (NO md:col-span-2) */}
+            {/* Blocking Issues */}
             <Card className={`border-red-200/60 dark:border-red-900/40 ${CARD_DEPTH}`}>
               <CardHeader className="pb-4">
                 <CardTitle className="text-base flex items-center gap-2 text-red-600 dark:text-red-400">
-                  <XCircle className="h-5 w-5" />{report.piNetworkCompliance.blockingIssues.length} Blocking Issues
+                  <XCircle className="h-5 w-5" />{report.piNetworkCompliance.blockingIssues.length} مشاكل تعطل النشر
                 </CardTitle>
-                <CardDescription>These issues must ALL be resolved before Pi Network will approve the app</CardDescription>
+                <CardDescription>يجب حل جميع هذه المشاكل قبل أن توافق شبكة بي على التطبيق</CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
@@ -1342,11 +1199,11 @@ export default function AuditDashboard() {
               </CardContent>
             </Card>
 
-            {/* Non-Custodial Claim Verification (PROMINENT) */}
+            {/* Non-Custodial Claim Verification */}
             <Card className={`border-red-200/60 dark:border-red-900/40 ${CARD_DEPTH}`}>
               <CardHeader className="pb-4">
                 <CardTitle className="text-sm flex items-center gap-2 text-red-600 dark:text-red-400">
-                  <ShieldX className="h-4 w-4" />Non-Custodial Claim Verification
+                  <ShieldX className="h-4 w-4" />التحقق من ادعاء عدم الحضانة
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -1356,19 +1213,19 @@ export default function AuditDashboard() {
                       <XCircle className="h-6 w-6 text-red-600 dark:text-red-400" />
                     </div>
                     <div className="flex-1">
-                      <h4 className="font-bold text-sm text-red-700 dark:text-red-400 mb-2">CLAIM IS FALSE &mdash; System is Fundamentally Custodial</h4>
+                      <h4 className="font-bold text-sm text-red-700 dark:text-red-400 mb-2">الادعاء كاذب — النظام حضانتي بالأساس</h4>
                       <p className="text-xs text-muted-foreground leading-relaxed mb-3">
-                        The README, SECURITY.md, and manifest all claim this is a &ldquo;non-custodial&rdquo; system.
-                        However, the backend deterministically derives ALL user Stellar secret keys from{" "}
-                        <code className="mx-1 px-1.5 py-0.5 bg-red-100 dark:bg-red-900/50 rounded text-red-700 dark:text-red-400 font-mono text-[10px]">
+                        يدّعي README و SECURITY.md و manifest أن هذا نظام &ldquo;غير حضانتي&rdquo;.
+                        لكن الخادم يُشتق جميع مفاتيح Stellar السرية للمستخدمين بشكل حتمي من{" "}
+                        <code className="mx-1 px-1.5 py-0.5 bg-red-100 dark:bg-red-900/50 rounded text-red-700 dark:text-red-400 font-mono text-[10px]" dir="ltr">
                           SHA256(SECRET_KEY:UID)
                         </code>{" "}
-                        and handles all transaction signing server-side. If the master secret leaks, every user wallet on the platform is compromised.
+                        ويتولى توقيع جميع المعاملات من جانب الخادم. إذا تسرب المفتاح الرئيسي، فإن جميع محافظ المستخدمين على المنصة ستُخترق.
                       </p>
                       <div className="flex flex-wrap gap-2">
-                        <Badge className="bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-400 text-[10px] border-red-200 dark:border-red-800">FALSE CLAIM</Badge>
-                        <Badge className="bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-400 text-[10px] border-red-200 dark:border-red-800">SECURITY BY OBSCURITY</Badge>
-                        <Badge className="bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-400 text-[10px] border-red-200 dark:border-red-800">SINGLE POINT OF FAILURE</Badge>
+                        <Badge className="bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-400 text-[10px] border-red-200 dark:border-red-800">ادعاء كاذب</Badge>
+                        <Badge className="bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-400 text-[10px] border-red-200 dark:border-red-800">أمان بالتخفي</Badge>
+                        <Badge className="bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-400 text-[10px] border-red-200 dark:border-red-800">نقطة فشل واحدة</Badge>
                       </div>
                     </div>
                   </div>
@@ -1380,7 +1237,7 @@ export default function AuditDashboard() {
               {/* Deployment Issues */}
               <Card className={CARD_DEPTH}>
                 <CardHeader className="pb-4">
-                  <CardTitle className="text-sm flex items-center gap-2"><Server className="h-4 w-4 text-orange-500" />Deployment Issues ({report.piNetworkCompliance.deploymentIssues.length})</CardTitle>
+                  <CardTitle className="text-sm flex items-center gap-2"><Server className="h-4 w-4 text-orange-500" />مشاكل النشر ({report.piNetworkCompliance.deploymentIssues.length})</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-2.5">
                   {report.piNetworkCompliance.deploymentIssues.map((issue, i) => (
@@ -1395,7 +1252,7 @@ export default function AuditDashboard() {
               {/* Security Headers */}
               <Card className={CARD_DEPTH}>
                 <CardHeader className="pb-4">
-                  <CardTitle className="text-sm flex items-center gap-2"><ShieldAlert className="h-4 w-4 text-amber-500" />Missing Security Headers ({report.piNetworkCompliance.securityHeaders.length})</CardTitle>
+                  <CardTitle className="text-sm flex items-center gap-2"><ShieldAlert className="h-4 w-4 text-amber-500" />رؤوس أمان مفقودة ({report.piNetworkCompliance.securityHeaders.length})</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-2.5">
                   {report.piNetworkCompliance.securityHeaders.map((issue, i) => (
@@ -1411,7 +1268,7 @@ export default function AuditDashboard() {
             {/* Manifest Issues */}
             <Card className={CARD_DEPTH}>
               <CardHeader className="pb-4">
-                <CardTitle className="text-sm flex items-center gap-2"><FileWarning className="h-4 w-4 text-violet-500" />Manifest Compliance Issues ({report.piNetworkCompliance.manifestIssues.length})</CardTitle>
+                <CardTitle className="text-sm flex items-center gap-2"><FileWarning className="h-4 w-4 text-violet-500" />مشاكل توافق Manifest ({report.piNetworkCompliance.manifestIssues.length})</CardTitle>
               </CardHeader>
               <CardContent className="space-y-2.5">
                 {report.piNetworkCompliance.manifestIssues.map((issue, i) => (
@@ -1423,30 +1280,30 @@ export default function AuditDashboard() {
               </CardContent>
             </Card>
 
-            {/* Pi Network Individual Scores */}
+            {/* Pi Network Detailed Scores */}
             <Card className={CARD_DEPTH}>
               <CardHeader className="pb-4">
                 <CardTitle className="text-sm flex items-center gap-2 text-purple-600 dark:text-purple-400">
-                  <Gauge className="h-4 w-4" />Pi Network Detailed Scores
+                  <Gauge className="h-4 w-4" />درجات شبكة بي التفصيلية
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <LabeledProgress label="Manifest Compliance" value={report.scores.piNetwork.manifestCompliance} />
-                <LabeledProgress label="Domain Verification" value={report.scores.piNetwork.domainVerification} />
-                <LabeledProgress label="API Key Management" value={report.scores.piNetwork.apiKeyManagement} />
-                <LabeledProgress label="Payment Flow" value={report.scores.piNetwork.paymentFlow} />
+                <LabeledProgress label="توافق Manifest" value={report.scores.piNetwork.manifestCompliance} />
+                <LabeledProgress label="التحقق من النطاق" value={report.scores.piNetwork.domainVerification} />
+                <LabeledProgress label="إدارة مفتاح API" value={report.scores.piNetwork.apiKeyManagement} />
+                <LabeledProgress label="سير الدفع" value={report.scores.piNetwork.paymentFlow} />
                 <LabeledProgress label="KYC / KYB" value={report.scores.piNetwork.kycKyb} />
-                <LabeledProgress label="Deployment Readiness" value={report.scores.piNetwork.deploymentReadiness} />
-                <LabeledProgress label="Non-Custodial" value={report.scores.piNetwork.nonCustodial} />
+                <LabeledProgress label="جاهزية النشر" value={report.scores.piNetwork.deploymentReadiness} />
+                <LabeledProgress label="عدم الحضانة" value={report.scores.piNetwork.nonCustodial} />
               </CardContent>
             </Card>
           </TabsContent>
         </Tabs>
       </main>
 
-      {/* ═══════════════════════════════════════════════════════════════════
+      {/* ═══════════════════════════════════════════════════════════════
           ISSUE DETAIL SHEET
-         ═══════════════════════════════════════════════════════════════════ */}
+         ═══════════════════════════════════════════════════════════════ */}
       <IssueDetailSheet
         issue={selectedIssue}
         open={sheetOpen}
@@ -1456,15 +1313,15 @@ export default function AuditDashboard() {
         isBrief={selectedIsBrief}
       />
 
-      {/* ═══════════════════════════════════════════════════════════════════
-          FOOTER
-         ═══════════════════════════════════════════════════════════════════ */}
+      {/* ═══════════════════════════════════════════════════════════════
+          FOOTER (sticky)
+         ═══════════════════════════════════════════════════════════════ */}
       <footer className="mt-auto border-t bg-white/60 dark:bg-slate-950/60 backdrop-blur-md">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div className="text-xs text-muted-foreground text-center sm:text-left">
+            <div className="text-xs text-muted-foreground text-center sm:text-right">
               <div className="flex items-center justify-center sm:justify-start gap-2 mb-0.5">
-                <p className="font-semibold">Ledgererp Security Audit Report</p>
+                <p className="font-semibold">تقرير التدقيق الأمني — Ledgererp</p>
                 <a
                   href="https://develop.pinet.com"
                   target="_blank"
@@ -1477,15 +1334,15 @@ export default function AuditDashboard() {
                 </a>
               </div>
               <p>
-                Generated {new Date(report.meta.auditDate).toLocaleString()} &bull; {report.meta.totalFiles} files &bull; {report.meta.totalLines} lines &bull; {report.summary.totalIssues} issues found
+                تم الإنشاء {new Date(report.meta.auditDate).toLocaleDateString("ar-DZ")} &bull; {report.meta.totalFiles} ملف &bull; {report.meta.totalLines} سطر &bull; {report.summary.totalIssues} مشكلة
               </p>
             </div>
             <div className="flex items-center gap-2 flex-wrap justify-center">
-              <Badge variant="outline" className="text-[10px] gap-1 px-2 py-0.5"><XCircle className="h-2.5 w-2.5 text-red-500" />{report.summary.critical} Critical</Badge>
-              <Badge variant="outline" className="text-[10px] gap-1 px-2 py-0.5"><AlertTriangle className="h-2.5 w-2.5 text-orange-500" />{report.summary.high} High</Badge>
-              <Badge variant="outline" className="text-[10px] gap-1 px-2 py-0.5"><ShieldAlert className="h-2.5 w-2.5 text-amber-500" />{report.summary.medium} Medium</Badge>
-              <Badge variant="outline" className="text-[10px] gap-1 px-2 py-0.5"><ShieldCheck className="h-2.5 w-2.5 text-sky-500" />{report.summary.low} Low</Badge>
-              <a href={report.meta.repository} target="_blank" rel="noopener noreferrer" aria-label="View repository on GitHub">
+              <Badge variant="outline" className="text-[10px] gap-1 px-2 py-0.5"><XCircle className="h-2.5 w-2.5 text-red-500" />{report.summary.critical} حرج</Badge>
+              <Badge variant="outline" className="text-[10px] gap-1 px-2 py-0.5"><AlertTriangle className="h-2.5 w-2.5 text-orange-500" />{report.summary.high} مرتفع</Badge>
+              <Badge variant="outline" className="text-[10px] gap-1 px-2 py-0.5"><ShieldAlert className="h-2.5 w-2.5 text-amber-500" />{report.summary.medium} متوسط</Badge>
+              <Badge variant="outline" className="text-[10px] gap-1 px-2 py-0.5"><ShieldCheck className="h-2.5 w-2.5 text-sky-500" />{report.summary.low} منخفض</Badge>
+              <a href={report.meta.repository} target="_blank" rel="noopener noreferrer" aria-label="عرض المستودع على GitHub">
                 <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
                   <Github className="h-3.5 w-3.5" />
                 </Button>

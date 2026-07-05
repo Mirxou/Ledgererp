@@ -682,3 +682,61 @@
     max-width: 100%;
   }
 }
+
+/* ==========================================================================
+   10. RTL SUPPORT
+   Fixes for right-to-left layout in Arabic.
+   ========================================================================== */
+
+/* Hide horizontal scrollbar on tabs */
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* Ensure SVG charts render correctly in RTL */
+[dir="rtl"] svg {
+  direction: ltr;
+}
+
+/* RTL-safe select styling */
+[dir="rtl"] select {
+  background-position: left 0.5rem center;
+  padding-left: 2rem;
+  padding-right: 0.75rem;
+}
+
+/* RTL dropdown alignment */
+[dir="rtl"] [data-radix-popper-content-wrapper] {
+  direction: rtl;
+}
+
+/* RTL sheet from left side */
+[dir="rtl"] [data-side="left"] {
+  --radix-dialog-content-transform: translateX(100%);
+}
+[dir="rtl"] [data-side="right"] {
+  --radix-dialog-content-transform: translateX(-100%);
+}
+
+/* Ensure code blocks stay LTR in RTL context */
+[dir="rtl"] code,
+[dir="rtl"] pre,
+[dir="rtl"] .font-mono {
+  direction: ltr;
+  text-align: left;
+  unicode-bidi: embed;
+}
+
+/* Pi Browser mobile optimization */
+@supports (padding-top: env(safe-area-inset-top)) {
+  header.sticky {
+    padding-top: env(safe-area-inset-top);
+  }
+  footer {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
