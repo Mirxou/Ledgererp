@@ -123,7 +123,7 @@ function ScoreRing({ score, label, size = 110, showAnimated = true }: { score: n
       <div className="relative rounded-full p-2.5" style={{ background: bgColor }}>
         <svg width={size} height={size} className="-rotate-90">
           <defs>
-            <filter id={`glow-${label.replace(/\s/g, "-")}`}>
+            <filter id={`glow-${label.replace(/[^a-zA-Z]/g, "-").toLowerCase()}`}>
               <feGaussianBlur stdDeviation="3" result="coloredBlur" />
               <feMerge><feMergeNode in="coloredBlur" /><feMergeNode in="SourceGraphic" /></feMerge>
             </filter>
@@ -293,10 +293,17 @@ function LabeledProgress({ label, value, delay = 0 }: { label: string; value: nu
    ISSUE DETAIL SHEET
    ════════════════════════════════════════════════════════════════════════════ */
 
-function IssueDetailSheet({ issue, open, onOpenChange, repoUrl }: {
-  issue: Issue | null; open: boolean; onOpenChange: (v: boolean) => void; repoUrl: string;
+function IssueDetailSheet({ issue, open, onOpenChange, repoUrl, severity = "CRITICAL" }: {
+  issue: Issue | null; open: boolean; onOpenChange: (v: boolean) => void; repoUrl: string; severity?: string;
 }) {
   if (!issue) return null;
+  const sev = severity.toUpperCase();
+  const sevColor: Record<string, string> = {
+    CRITICAL: "text-red-500",
+    HIGH: "text-orange-500",
+    MEDIUM: "text-amber-500",
+    LOW: "text-sky-500",
+  };
   const githubUrl = `${repoUrl.replace(/\/?$/, "")}/blob/main/${issue.file}${issue.line > 0 ? `#L${issue.line}` : ""}`;
 
   return (
@@ -310,7 +317,7 @@ function IssueDetailSheet({ issue, open, onOpenChange, repoUrl }: {
         <div className="space-y-5">
           {/* Meta badges */}
           <div className="flex flex-wrap items-center gap-2">
-            <SeverityBadge severity="CRITICAL" />
+            <SeverityBadge severity={sev} />
             <SourceBadge source={issue.source} />
             <Badge variant="outline" className="text-[10px] font-medium bg-muted/50">{issue.category}</Badge>
           </div>
@@ -323,7 +330,7 @@ function IssueDetailSheet({ issue, open, onOpenChange, repoUrl }: {
             </div>
             <div className="p-3 rounded-xl bg-muted/40 border">
               <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-1">Severity</p>
-              <p className="text-sm font-semibold text-red-500">Critical</p>
+              <p className={`text-sm font-semibold ${sevColor[sev] || "text-red-500"}`}>{sev.charAt(0) + sev.slice(1).toLowerCase()}</p>
             </div>
             <div className="col-span-2 p-3 rounded-xl bg-muted/40 border">
               <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-1">Source</p>
@@ -471,6 +478,7 @@ export default function AuditDashboard() {
   const [filterSource, setFilterSource] = useState<string>("all");
   const [copied, setCopied] = useState(false);
   const [selectedIssue, setSelectedIssue] = useState<Issue | null>(null);
+  const [selectedSeverity, setSelectedSeverity] = useState("CRITICAL");
   const [sheetOpen, setSheetOpen] = useState(false);
   const [securityOpen, setSecurityOpen] = useState<Record<string, boolean>>({
     "XSS Vulnerabilities": true,
@@ -538,6 +546,7 @@ export default function AuditDashboard() {
 
   const handleSelectIssue = useCallback((issue: Issue) => {
     setSelectedIssue(issue);
+    setSelectedSeverity("CRITICAL");
     setSheetOpen(true);
   }, []);
 
@@ -548,6 +557,7 @@ export default function AuditDashboard() {
       description: "Full description available in the detailed audit report.",
       recommendation: "Refer to the comprehensive audit report for detailed remediation steps.",
     };
+    setSelectedSeverity(severity.toUpperCase());
     // Try to find matching critical finding for richer data
     const match = report?.criticalFindings.find((f) => f.id === brief.id);
     if (match) {
@@ -793,7 +803,7 @@ export default function AuditDashboard() {
         {/* ── VERDICT BANNER (with shimmer in dark mode) ─────────────── */}
         <div className="relative rounded-2xl p-6 sm:p-8 mb-8 bg-gradient-to-r from-red-600 via-red-600 to-rose-700 text-white shadow-2xl shadow-red-500/20 overflow-hidden">
           {/* Dark mode shimmer line */}
-          <div className="absolute inset-0 overflow-hidden pointer-events-none dark:block hidden">
+          <div className="absolute inset-0 overflow-hidden pointer-events-none opacity-0 dark:opacity-100">
             <div className="absolute top-0 left-0 w-1/3 h-full bg-gradient-to-r from-transparent via-white/[0.04] to-transparent animate-verdict-shimmer" />
           </div>
           <div className="relative flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
@@ -827,12 +837,12 @@ export default function AuditDashboard() {
           <StatCard icon={XCircle} label="Critical Issues" value={report.summary.critical} color="bg-gradient-to-br from-red-500 to-red-600" delay={0} />
           <StatCard icon={AlertTriangle} label="High Issues" value={report.summary.high} sub={`${report.summary.medium} medium \u00b7 ${report.summary.low} low`} color="bg-gradient-to-br from-orange-500 to-orange-600" delay={100} />
           <StatCard icon={Bug} label="Total Issues" value={report.summary.totalIssues} color="bg-gradient-to-br from-amber-500 to-amber-600" delay={200} />
-          <StatCard icon={Radio} label="Blocking Deploy" value={report.summary.blockingDeployment} color="bg-gradient-to-br from-rose-500 to-rose-700" delay={300} />
+          <StatCard icon={Radio} label="Blocks Deployment" value={report.summary.blockingDeployment} color="bg-gradient-to-br from-rose-500 to-rose-700" delay={300} />
         </div>
 
         {/* ── TABS ──────────────────────────────────────────────────── */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-5 h-auto p-1.5 bg-muted/50 backdrop-blur-sm overflow-x-auto">
+          <TabsList className="grid w-full grid-cols-5 h-auto p-1.5 bg-muted/50 backdrop-blur-sm overflow-x-auto scrollbar-none">
             {[
               { value: "overview", icon: <Gauge className="h-3.5 w-3.5 hidden sm:block" />, label: "Overview" },
               { value: "critical", icon: <ShieldX className="h-3.5 w-3.5 hidden sm:block" />, label: "Issues" },
@@ -964,6 +974,20 @@ export default function AuditDashboard() {
                 </ScrollArea>
               </CardContent>
             </Card>
+
+            {/* Tech Stack */}
+            <Card className={CARD_DEPTH}>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm flex items-center gap-2"><Cpu className="h-4 w-4" />Project Tech Stack</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex flex-wrap gap-2">
+                  {report.meta.techStack.map((tech) => (
+                    <Badge key={tech} variant="secondary" className="text-xs px-3 py-1 font-medium">{tech}</Badge>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
           </TabsContent>
 
           {/* ──── ISSUES TAB ────────────────────────────────────────────── */}
@@ -1057,6 +1081,20 @@ export default function AuditDashboard() {
                 )}
               </CardContent>
             </Card>
+
+            {/* Low Issues */}
+            <Card className={`border-sky-200/60 dark:border-sky-900/40 ${CARD_DEPTH}`}>
+              <CardHeader className="pb-4">
+                <CardTitle className="text-sm flex items-center gap-2 text-sky-600 dark:text-sky-400">
+                  <ShieldCheck className="h-4 w-4" />{report.summary.low} Low Severity Issues
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-xs text-muted-foreground text-center py-4">
+                  Low severity issues are tracked in the full audit report. Export JSON or CSV for complete data.
+                </p>
+              </CardContent>
+            </Card>
           </TabsContent>
 
           {/* ──── SECURITY TAB (Collapsible Zones) ─────────────────────── */}
@@ -1086,7 +1124,7 @@ export default function AuditDashboard() {
                           {zone.items.map((v, i) => (
                             <div key={i} className="flex items-start gap-2.5 text-xs py-1.5 px-2 rounded-lg hover:bg-muted/30 transition-colors">
                               <XCircle className={`h-3 w-3 ${zone.color} flex-shrink-0 mt-0.5`} />
-                              <span className="text-muted-foreground leading-relaxed">{v}</span>
+                              <span className="text-muted-foreground leading-relaxed break-words">{v}</span>
                             </div>
                           ))}
                         </CardContent>
@@ -1193,7 +1231,7 @@ export default function AuditDashboard() {
           {/* ──── PI NETWORK TAB ───────────────────────────────────────── */}
           <TabsContent value="pi-network" className="space-y-6">
             {/* Blocking Issues */}
-            <Card className={`border-red-200/60 dark:border-red-900/40 md:col-span-2 ${CARD_DEPTH}`}>
+            <Card className={`border-red-200/60 dark:border-red-900/40 ${CARD_DEPTH}`}>
               <CardHeader className="pb-4">
                 <CardTitle className="text-base flex items-center gap-2 text-red-600 dark:text-red-400">
                   <XCircle className="h-5 w-5" />{report.piNetworkCompliance.blockingIssues.length} Blocking Issues
@@ -1297,6 +1335,7 @@ export default function AuditDashboard() {
         open={sheetOpen}
         onOpenChange={setSheetOpen}
         repoUrl={report.meta.repository}
+        severity={selectedSeverity}
       />
 
       {/* ═══════════════════════════════════════════════════════════════════
@@ -1331,6 +1370,7 @@ export default function AuditDashboard() {
               <Badge variant="outline" className="text-[10px] gap-1 px-2 py-0.5"><XCircle className="h-2.5 w-2.5 text-red-500" />{report.summary.critical} Critical</Badge>
               <Badge variant="outline" className="text-[10px] gap-1 px-2 py-0.5"><AlertTriangle className="h-2.5 w-2.5 text-orange-500" />{report.summary.high} High</Badge>
               <Badge variant="outline" className="text-[10px] gap-1 px-2 py-0.5"><ShieldAlert className="h-2.5 w-2.5 text-amber-500" />{report.summary.medium} Medium</Badge>
+              <Badge variant="outline" className="text-[10px] gap-1 px-2 py-0.5"><ShieldCheck className="h-2.5 w-2.5 text-sky-500" />{report.summary.low} Low</Badge>
             </div>
           </div>
         </div>
