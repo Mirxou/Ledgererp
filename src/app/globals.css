@@ -41,75 +41,88 @@
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+  --radius: 0.625rem;
+  --color-pi-purple: oklch(0.55 0.25 295);
+  --color-pi-gold: oklch(0.80 0.16 85);
+  --color-pi-success: oklch(0.72 0.19 155);
+  --color-pi-warning: oklch(0.78 0.16 75);
 }
 
+/* ==========================================================================
+   PI NETWORK BRAND THEME SYSTEM
+   Light: warm white bg, pure white cards, subtle purple accents
+   Dark: deep navy-black bg, purple-tinted cards, purple borders
+   ========================================================================== */
+
 :root {
-  --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
+  /* ── Pi Light Mode ────────────────────────────────────────────────── */
+  --background: oklch(0.98 0.005 80);
+  --foreground: oklch(0.18 0.02 280);
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
+  --card-foreground: oklch(0.18 0.02 280);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.18 0.02 280);
+  --primary: oklch(0.55 0.25 295);
   --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
+  --secondary: oklch(0.955 0.015 295);
+  --secondary-foreground: oklch(0.30 0.06 295);
+  --muted: oklch(0.955 0.01 280);
+  --muted-foreground: oklch(0.48 0.03 280);
+  --accent: oklch(0.945 0.02 295);
+  --accent-foreground: oklch(0.30 0.06 295);
   --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.646 0.222 41.116);
+  --border: oklch(0.91 0.01 295);
+  --input: oklch(0.91 0.01 295);
+  --ring: oklch(0.55 0.25 295);
+  --chart-1: oklch(0.55 0.25 295);
   --chart-2: oklch(0.6 0.118 184.704);
   --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
+  --chart-4: oklch(0.80 0.16 85);
   --chart-5: oklch(0.769 0.188 70.08);
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
+  --sidebar: oklch(0.98 0.008 295);
+  --sidebar-foreground: oklch(0.18 0.02 280);
+  --sidebar-primary: oklch(0.55 0.25 295);
   --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --sidebar-accent: oklch(0.945 0.02 295);
+  --sidebar-accent-foreground: oklch(0.30 0.06 295);
+  --sidebar-border: oklch(0.91 0.01 295);
+  --sidebar-ring: oklch(0.55 0.25 295);
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
+  /* ── Pi Dark Mode — Deep Navy-Black with Purple Tint ──────────────── */
+  --background: oklch(0.13 0.02 280);
+  --foreground: oklch(0.94 0.01 295);
+  --card: oklch(0.17 0.015 285);
+  --card-foreground: oklch(0.94 0.01 295);
+  --popover: oklch(0.17 0.015 285);
+  --popover-foreground: oklch(0.94 0.01 295);
+  --primary: oklch(0.65 0.24 295);
+  --primary-foreground: oklch(0.98 0 0);
+  --secondary: oklch(0.22 0.025 285);
+  --secondary-foreground: oklch(0.90 0.01 295);
+  --muted: oklch(0.22 0.02 285);
+  --muted-foreground: oklch(0.65 0.03 285);
+  --accent: oklch(0.24 0.035 285);
+  --accent-foreground: oklch(0.90 0.01 295);
   --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.488 0.243 264.376);
+  --border: oklch(1 0 0 / 8%);
+  --input: oklch(1 0 0 / 12%);
+  --ring: oklch(0.55 0.25 295);
+  --chart-1: oklch(0.65 0.24 295);
   --chart-2: oklch(0.696 0.17 162.48);
   --chart-3: oklch(0.769 0.188 70.08);
   --chart-4: oklch(0.627 0.265 303.9);
   --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  --sidebar: oklch(0.15 0.02 285);
+  --sidebar-foreground: oklch(0.94 0.01 295);
+  --sidebar-primary: oklch(0.65 0.24 295);
+  --sidebar-primary-foreground: oklch(0.98 0 0);
+  --sidebar-accent: oklch(0.22 0.03 285);
+  --sidebar-accent-foreground: oklch(0.90 0.01 295);
+  --sidebar-border: oklch(1 0 0 / 8%);
+  --sidebar-ring: oklch(0.55 0.25 295);
 }
 
 @layer base {
@@ -122,34 +135,78 @@
 }
 
 /* ==========================================================================
+   THEME TRANSITION — smooth switching (not instant)
+   ========================================================================== */
+
+html,
+html *,
+html *::before,
+html *::after {
+  transition-property: background-color, border-color, box-shadow, color;
+  transition-duration: 300ms;
+  transition-timing-function: ease-out;
+}
+
+/* Opt-out for animations that shouldn't be affected */
+@keyframes verdict-shimmer-bar,
+@keyframes score-ring-fill,
+@keyframes fade-in-up,
+@keyframes pulse-glow,
+@keyframes subtle-float,
+@keyframes verdict-border-spin,
+@keyframes particle-twinkle,
+@keyframes pi-badge-pulse,
+@keyframes wallet-border-spin,
+@keyframes loading-sparkle,
+@keyframes pi-logo-pulse,
+@keyframes gradient-mesh-flow,
+@keyframes glow-ring-pulse {
+  /* These run via animation, not transition */
+}
+
+.no-transition,
+.no-transition *,
+[style*="transition"] {
+  transition: none !important;
+}
+
+/* ==========================================================================
+   NOISE TEXTURE OVERLAY — subtle depth
+   ========================================================================== */
+
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9999;
+  opacity: 0.018;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+  background-size: 256px 256px;
+  mix-blend-mode: overlay;
+}
+
+.dark body::after {
+  opacity: 0.03;
+}
+
+/* ==========================================================================
    1. ANIMATION KEYFRAMES
-   Define reusable keyframe animations for dark mode visual effects
    ========================================================================== */
 
 @keyframes verdict-shimmer-bar {
-  0% {
-    background-position: -200% 0;
-  }
-  100% {
-    background-position: 200% 0;
-  }
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
 }
 
 @keyframes score-ring-fill {
-  0% {
-    stroke-dashoffset: 283;
-  }
+  0% { stroke-dashoffset: 283; }
 }
 
 @keyframes fade-in-up {
-  0% {
-    opacity: 0;
-    transform: translateY(12px);
-  }
-  100% {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  0% { opacity: 0; transform: translateY(12px); }
+  100% { opacity: 1; transform: translateY(0); }
 }
 
 @keyframes pulse-glow {
@@ -167,62 +224,84 @@
 }
 
 @keyframes subtle-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-2px); }
+}
+
+/* Pi Auth Gate animations */
+@keyframes pi-logo-pulse {
   0%, 100% {
-    transform: translateY(0);
+    box-shadow:
+      0 0 20px oklch(0.55 0.25 295 / 30%),
+      0 0 60px oklch(0.55 0.25 295 / 15%);
+    transform: scale(1);
   }
   50% {
-    transform: translateY(-2px);
+    box-shadow:
+      0 0 30px oklch(0.55 0.25 295 / 50%),
+      0 0 80px oklch(0.55 0.25 295 / 25%),
+      0 0 120px oklch(0.55 0.25 295 / 10%);
+    transform: scale(1.05);
   }
+}
+
+@keyframes glow-ring-pulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 0.4;
+  }
+  50% {
+    transform: scale(1.15);
+    opacity: 0.1;
+  }
+}
+
+@keyframes gradient-mesh-flow {
+  0% { transform: translate(0%, 0%) rotate(0deg); }
+  25% { transform: translate(2%, -1%) rotate(90deg); }
+  50% { transform: translate(-1%, 2%) rotate(180deg); }
+  75% { transform: translate(-2%, -1%) rotate(270deg); }
+  100% { transform: translate(0%, 0%) rotate(360deg); }
 }
 
 /* ==========================================================================
-   2. DARK MODE CARD SURFACE LAYERING
-   Multi-depth elevated surfaces with colored shadow tints, inner edge
-   highlights, gradient borders, and non-flat backgrounds.
+   2. DARK MODE CARD SURFACE LAYERING — Pi Purple Tinted
    ========================================================================== */
 
-/* Base card — depth level 0 (lowest, e.g. page background containers) */
+/* Base card — depth level 0 */
 .dark .bg-card {
   background: linear-gradient(
     165deg,
-    oklch(0.22 0.003 260) 0%,
-    oklch(0.205 0 0) 40%,
-    oklch(0.195 0.002 240) 100%
+    oklch(0.19 0.025 285) 0%,
+    oklch(0.17 0.015 285) 40%,
+    oklch(0.16 0.01 280) 100%
   );
-  border: 1px solid oklch(1 0 0 / 7%);
+  border: 1px solid oklch(0.55 0.25 295 / 8%);
   box-shadow:
-    /* Cool ambient shadow — bottom depth */
-    0 1px 3px oklch(0.1 0.02 260 / 50%),
-    0 4px 12px oklch(0.1 0.02 260 / 30%),
-    /* Warm bounce light from below */
-    0 8px 32px oklch(0.15 0.01 30 / 15%),
-    /* Inner top-left edge highlight for "lit from above" feel */
+    0 1px 3px oklch(0.10 0.03 280 / 50%),
+    0 4px 12px oklch(0.10 0.03 280 / 30%),
+    0 8px 32px oklch(0.12 0.01 30 / 15%),
     inset 0 1px 0 oklch(1 0 0 / 8%),
     inset 0.5px 0 0 oklch(1 0 0 / 4%),
-    /* Subtle inner bottom shadow */
     inset 0 -1px 0 oklch(0 0 0 / 20%);
 }
 
-/* Elevated card — depth level 1 (standard cards, panels) */
+/* Elevated card — depth level 1 */
 .dark [class*="rounded-"][class*="border"][class*="p-"],
 .dark [class*="rounded-"][class*="shadow"] {
   background: linear-gradient(
     170deg,
-    oklch(0.23 0.004 260) 0%,
-    oklch(0.21 0.002 260) 50%,
-    oklch(0.20 0.001 250) 100%
+    oklch(0.20 0.03 285) 0%,
+    oklch(0.18 0.018 285) 50%,
+    oklch(0.17 0.012 280) 100%
   );
-  border-color: oklch(1 0 0 / 8%);
+  border-color: oklch(0.55 0.25 295 / 10%);
   box-shadow:
-    /* Primary cool depth shadow */
-    0 2px 6px oklch(0.08 0.025 260 / 60%),
-    0 6px 20px oklch(0.08 0.025 260 / 35%),
-    /* Warm accent bounce from surface below */
-    0 12px 40px oklch(0.12 0.015 30 / 20%),
-    /* Top/left inner highlight — simulates top-down lighting */
+    0 2px 6px oklch(0.08 0.03 280 / 60%),
+    0 6px 20px oklch(0.08 0.03 280 / 35%),
+    0 12px 40px oklch(0.10 0.015 30 / 20%),
     inset 0 1px 0 oklch(1 0 0 / 10%),
     inset 0.5px 0 0 oklch(1 0 0 / 5%),
-    /* Bottom inner shadow for depth recession */
     inset 0 -1px 0 oklch(0 0 0 / 25%);
 }
 
@@ -232,141 +311,159 @@
 .dark [role="dialog"] {
   background: linear-gradient(
     168deg,
-    oklch(0.25 0.005 260) 0%,
-    oklch(0.22 0.003 258) 45%,
-    oklch(0.21 0.002 255) 100%
+    oklch(0.22 0.035 285) 0%,
+    oklch(0.19 0.02 282) 45%,
+    oklch(0.18 0.015 280) 100%
   );
-  border: 1px solid oklch(1 0 0 / 10%);
+  border: 1px solid oklch(0.55 0.25 295 / 12%);
   box-shadow:
-    /* Deep cool ambient */
-    0 4px 8px oklch(0.05 0.03 260 / 70%),
-    0 12px 32px oklch(0.05 0.03 260 / 45%),
-    0 24px 64px oklch(0.08 0.02 260 / 25%),
-    /* Warm reflected light */
+    0 4px 8px oklch(0.05 0.03 280 / 70%),
+    0 12px 32px oklch(0.05 0.03 280 / 45%),
+    0 24px 64px oklch(0.08 0.02 280 / 25%),
     0 8px 20px oklch(0.12 0.02 30 / 15%),
-    /* Strong top/left highlight — closest to light source */
     inset 0 1.5px 0 oklch(1 0 0 / 12%),
     inset 1px 0 0 oklch(1 0 0 / 6%),
     inset 0 -1.5px 0 oklch(0 0 0 / 30%);
 }
 
 /* ==========================================================================
-   3. GLASSMORPHISM REFINEMENT
-   Subtle frosted glass effect on cards in dark mode — semi-transparent
-   backgrounds, backdrop blur, and a delicate inner glow.
+   3. GLASSMORPHISM REFINEMENT — Pi Purple Inner Glow
    ========================================================================== */
 
 .dark .bg-card {
   backdrop-filter: blur(12px) saturate(1.2);
   -webkit-backdrop-filter: blur(12px) saturate(1.2);
-  background-color: oklch(0.205 0 0 / 85%);
+  background-color: oklch(0.17 0.015 285 / 85%);
   background-image: linear-gradient(
     165deg,
-    oklch(0.22 0.003 260 / 40%) 0%,
+    oklch(0.20 0.03 285 / 40%) 0%,
     transparent 60%
   );
-  /* Inner glow — subtle light bleed from edges */
   box-shadow:
-    /* Existing shadows from layering section + inner glow */
-    0 1px 3px oklch(0.1 0.02 260 / 50%),
-    0 4px 12px oklch(0.1 0.02 260 / 30%),
-    0 8px 32px oklch(0.15 0.01 30 / 15%),
+    0 1px 3px oklch(0.10 0.03 280 / 50%),
+    0 4px 12px oklch(0.10 0.03 280 / 30%),
+    0 8px 32px oklch(0.12 0.01 30 / 15%),
     inset 0 1px 0 oklch(1 0 0 / 8%),
     inset 0.5px 0 0 oklch(1 0 0 / 4%),
     inset 0 -1px 0 oklch(0 0 0 / 20%),
-    /* Inner glow — radial, subtle, all edges */
-    inset 0 0 30px oklch(0.488 0.243 264.376 / 3%);
+    inset 0 0 30px oklch(0.55 0.25 295 / 3%);
 }
 
-/* Elevated glassmorphism layer */
 .dark [class*="rounded-"][class*="border"][class*="p-"] {
   backdrop-filter: blur(16px) saturate(1.3);
   -webkit-backdrop-filter: blur(16px) saturate(1.3);
-  background-color: oklch(0.21 0.002 260 / 80%);
+  background-color: oklch(0.18 0.018 285 / 80%);
   background-image: linear-gradient(
     170deg,
-    oklch(0.25 0.005 260 / 30%) 0%,
+    oklch(0.22 0.035 285 / 30%) 0%,
     transparent 50%
   );
   box-shadow:
-    0 2px 6px oklch(0.08 0.025 260 / 60%),
-    0 6px 20px oklch(0.08 0.025 260 / 35%),
-    0 12px 40px oklch(0.12 0.015 30 / 20%),
+    0 2px 6px oklch(0.08 0.03 280 / 60%),
+    0 6px 20px oklch(0.08 0.03 280 / 35%),
+    0 12px 40px oklch(0.10 0.015 30 / 20%),
     inset 0 1px 0 oklch(1 0 0 / 10%),
     inset 0.5px 0 0 oklch(1 0 0 / 5%),
     inset 0 -1px 0 oklch(0 0 0 / 25%),
-    inset 0 0 40px oklch(0.488 0.243 264.376 / 4%);
+    inset 0 0 40px oklch(0.55 0.25 295 / 4%);
 }
 
-/* Popover / modal glassmorphism */
 .dark [data-radix-popper-content-wrapper] > *,
 .dark [role="dialog"] {
   backdrop-filter: blur(24px) saturate(1.4);
   -webkit-backdrop-filter: blur(24px) saturate(1.4);
-  background-color: oklch(0.22 0.003 258 / 90%);
+  background-color: oklch(0.19 0.02 282 / 90%);
   background-image: linear-gradient(
     168deg,
-    oklch(0.28 0.006 260 / 25%) 0%,
+    oklch(0.25 0.04 285 / 25%) 0%,
     transparent 45%
   );
   box-shadow:
-    0 4px 8px oklch(0.05 0.03 260 / 70%),
-    0 12px 32px oklch(0.05 0.03 260 / 45%),
-    0 24px 64px oklch(0.08 0.02 260 / 25%),
+    0 4px 8px oklch(0.05 0.03 280 / 70%),
+    0 12px 32px oklch(0.05 0.03 280 / 45%),
+    0 24px 64px oklch(0.08 0.02 280 / 25%),
     0 8px 20px oklch(0.12 0.02 30 / 15%),
     inset 0 1.5px 0 oklch(1 0 0 / 12%),
     inset 1px 0 0 oklch(1 0 0 / 6%),
     inset 0 -1.5px 0 oklch(0 0 0 / 30%),
-    inset 0 0 50px oklch(0.488 0.243 264.376 / 5%);
+    inset 0 0 50px oklch(0.55 0.25 295 / 5%);
 }
 
 /* ==========================================================================
-   4. CUSTOM SCROLLBARS (Dark Mode)
-   Thin 6px rounded thumb scrollbars that match the dark theme palette.
+   4. CUSTOM SCROLLBARS — Purple Track (Both Modes)
    ========================================================================== */
 
+* {
+  scrollbar-width: thin;
+  scrollbar-color: oklch(0.55 0.25 295 / 40%) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: oklch(0.55 0.25 295 / 30%);
+  border-radius: 999px;
+  border: 1px solid transparent;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: oklch(0.55 0.25 295 / 50%);
+}
+
+::-webkit-scrollbar-thumb:active {
+  background: oklch(0.55 0.25 295 / 65%);
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Dark mode scrollbar overrides */
 .dark {
   scrollbar-width: thin;
-  scrollbar-color: oklch(0.488 0.243 264.376 / 50%) oklch(0.205 0 0 / 80%);
+  scrollbar-color: oklch(0.55 0.25 295 / 50%) oklch(0.17 0.015 285 / 80%);
 }
 
 .dark ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 4px;
+  height: 4px;
 }
 
 .dark ::-webkit-scrollbar-track {
-  background: oklch(0.195 0.002 240 / 80%);
+  background: oklch(0.16 0.01 280 / 80%);
   border-radius: 999px;
 }
 
 .dark ::-webkit-scrollbar-thumb {
-  background: oklch(0.488 0.243 264.376 / 40%);
+  background: oklch(0.55 0.25 295 / 40%);
   border-radius: 999px;
-  border: 1px solid oklch(0.1 0 0 / 50%);
-  transition: background 0.2s ease;
+  border: 1px solid oklch(0.10 0 0 / 50%);
 }
 
 .dark ::-webkit-scrollbar-thumb:hover {
-  background: oklch(0.488 0.243 264.376 / 60%);
+  background: oklch(0.55 0.25 295 / 60%);
 }
 
 .dark ::-webkit-scrollbar-thumb:active {
-  background: oklch(0.488 0.243 264.376 / 75%);
+  background: oklch(0.55 0.25 295 / 75%);
 }
 
-/* Scrollbar corner cleanup */
 .dark ::-webkit-scrollbar-corner {
   background: transparent;
 }
 
 /* ==========================================================================
-   5. SHIMMER / GLOW EFFECTS FOR SPECIAL ELEMENTS
-   Verdict banner, critical issue cards, and score rings get subtle glow
-   and animated shimmer effects in dark mode.
+   5. SHIMMER / GLOW EFFECTS — Pi Purple Tinted
    ========================================================================== */
 
-/* --- Verdict banner shimmer --- */
 .dark .verdict-banner,
 .dark [class*="verdict"],
 .dark [data-testid*="verdict"] {
@@ -376,7 +473,6 @@
   animation: verdict-shimmer-bar 3s ease-in-out infinite;
 }
 
-/* Pseudo-element shimmer overlay */
 .dark .verdict-banner::before,
 .dark [class*="verdict"]::before {
   content: "";
@@ -396,17 +492,15 @@
   z-index: 1;
 }
 
-/* Verdict banner outer glow */
 .dark .verdict-banner,
 .dark [class*="verdict"] {
   box-shadow:
-    0 0 15px oklch(0.488 0.243 264.376 / 15%),
-    0 0 40px oklch(0.488 0.243 264.376 / 8%),
+    0 0 15px oklch(0.55 0.25 295 / 15%),
+    0 0 40px oklch(0.55 0.25 295 / 8%),
     inset 0 1px 0 oklch(1 0 0 / 10%),
     inset 0 -1px 0 oklch(0 0 0 / 20%);
 }
 
-/* --- Critical / blocking issue cards glow --- */
 .dark [class*="critical"],
 .dark [class*="blocking"],
 .dark [data-severity="critical"],
@@ -416,29 +510,26 @@
   box-shadow:
     0 0 12px oklch(0.704 0.191 22.216 / 15%),
     0 0 30px oklch(0.704 0.191 22.216 / 8%),
-    0 2px 8px oklch(0.08 0.025 260 / 40%),
+    0 2px 8px oklch(0.08 0.025 280 / 40%),
     inset 0 1px 0 oklch(1 0 0 / 6%),
     inset 0 0 20px oklch(0.704 0.191 22.216 / 5%);
   border-color: oklch(0.704 0.191 22.216 / 25%) !important;
 }
 
-/* Blocking deploy badge pulse-glow */
 .dark .pulse-glow,
 .dark [class*="pulse-glow"],
 .dark [class*="badge"][class*="destructive"] {
   animation: pulse-glow 2s ease-in-out infinite;
 }
 
-/* --- Score ring glow --- */
 .dark svg[class*="score"],
 .dark svg[role="img"][aria-label*="score"],
 .dark [class*="score-ring"] svg {
   filter:
-    drop-shadow(0 0 6px oklch(0.488 0.243 264.376 / 30%))
-    drop-shadow(0 0 16px oklch(0.488 0.243 264.376 / 15%));
+    drop-shadow(0 0 6px oklch(0.55 0.25 295 / 30%))
+    drop-shadow(0 0 16px oklch(0.55 0.25 295 / 15%));
 }
 
-/* Score ring fill animation — applied via the stroke */
 .dark [class*="score-ring"] circle[class*="stroke-"],
 .dark [class*="score-ring"] circle[stroke-dasharray] {
   animation: score-ring-fill 1.5s ease-out forwards;
@@ -446,108 +537,43 @@
 
 /* ==========================================================================
    6. DARK MODE SEVERITY COLOR OVERRIDES
-   Make red / orange / amber severity indicators more vivid and readable
-   against the dark background by boosting lightness and chroma slightly.
    ========================================================================== */
 
-/* Critical / error — vivid red, boosted for dark contrast */
-.dark .text-red-500 {
-  color: oklch(0.72 0.22 22) !important;
-}
-.dark .text-red-400 {
-  color: oklch(0.75 0.21 22) !important;
-}
-.dark .text-red-600 {
-  color: oklch(0.65 0.22 22) !important;
-}
-.dark .bg-red-500\/10 {
-  background-color: oklch(0.704 0.191 22.216 / 15%) !important;
-}
-.dark .bg-red-500\/20 {
-  background-color: oklch(0.704 0.191 22.216 / 22%) !important;
-}
-.dark .border-red-500\/30 {
-  border-color: oklch(0.704 0.191 22.216 / 35%) !important;
-}
-.dark .border-red-500\/50 {
-  border-color: oklch(0.704 0.191 22.216 / 55%) !important;
-}
+.dark .text-red-500 { color: oklch(0.72 0.22 22) !important; }
+.dark .text-red-400 { color: oklch(0.75 0.21 22) !important; }
+.dark .text-red-600 { color: oklch(0.65 0.22 22) !important; }
+.dark .bg-red-500\/10 { background-color: oklch(0.704 0.191 22.216 / 15%) !important; }
+.dark .bg-red-500\/20 { background-color: oklch(0.704 0.191 22.216 / 22%) !important; }
+.dark .border-red-500\/30 { border-color: oklch(0.704 0.191 22.216 / 35%) !important; }
+.dark .border-red-500\/50 { border-color: oklch(0.704 0.191 22.216 / 55%) !important; }
 
-/* High / warning — vivid orange, warmer in dark mode */
-.dark .text-orange-500 {
-  color: oklch(0.73 0.20 50) !important;
-}
-.dark .text-orange-400 {
-  color: oklch(0.76 0.19 50) !important;
-}
-.dark .text-orange-600 {
-  color: oklch(0.67 0.20 50) !important;
-}
-.dark .bg-orange-500\/10 {
-  background-color: oklch(0.645 0.246 16.439 / 15%) !important;
-}
-.dark .bg-orange-500\/20 {
-  background-color: oklch(0.645 0.246 16.439 / 22%) !important;
-}
-.dark .border-orange-500\/30 {
-  border-color: oklch(0.645 0.246 16.439 / 35%) !important;
-}
+.dark .text-orange-500 { color: oklch(0.73 0.20 50) !important; }
+.dark .text-orange-400 { color: oklch(0.76 0.19 50) !important; }
+.dark .text-orange-600 { color: oklch(0.67 0.20 50) !important; }
+.dark .bg-orange-500\/10 { background-color: oklch(0.645 0.246 16.439 / 15%) !important; }
+.dark .bg-orange-500\/20 { background-color: oklch(0.645 0.246 16.439 / 22%) !important; }
+.dark .border-orange-500\/30 { border-color: oklch(0.645 0.246 16.439 / 35%) !important; }
 
-/* Medium / caution — vivid amber, brighter in dark mode */
-.dark .text-amber-500 {
-  color: oklch(0.80 0.18 75) !important;
-}
-.dark .text-amber-400 {
-  color: oklch(0.83 0.17 75) !important;
-}
-.dark .text-amber-600 {
-  color: oklch(0.74 0.18 75) !important;
-}
-.dark .bg-amber-500\/10 {
-  background-color: oklch(0.769 0.188 70.08 / 15%) !important;
-}
-.dark .bg-amber-500\/20 {
-  background-color: oklch(0.769 0.188 70.08 / 22%) !important;
-}
-.dark .border-amber-500\/30 {
-  border-color: oklch(0.769 0.188 70.08 / 35%) !important;
-}
+.dark .text-amber-500 { color: oklch(0.80 0.18 75) !important; }
+.dark .text-amber-400 { color: oklch(0.83 0.17 75) !important; }
+.dark .text-amber-600 { color: oklch(0.74 0.18 75) !important; }
+.dark .bg-amber-500\/10 { background-color: oklch(0.769 0.188 70.08 / 15%) !important; }
+.dark .bg-amber-500\/20 { background-color: oklch(0.769 0.188 70.08 / 22%) !important; }
+.dark .border-amber-500\/30 { border-color: oklch(0.769 0.188 70.08 / 35%) !important; }
 
-/* Low / info — keep blue tones but ensure readability */
-.dark .text-blue-500 {
-  color: oklch(0.68 0.20 250) !important;
-}
-.dark .text-blue-400 {
-  color: oklch(0.72 0.19 250) !important;
-}
-.dark .bg-blue-500\/10 {
-  background-color: oklch(0.488 0.243 264.376 / 15%) !important;
-}
-.dark .bg-blue-500\/20 {
-  background-color: oklch(0.488 0.243 264.376 / 22%) !important;
-}
+.dark .text-blue-500 { color: oklch(0.68 0.20 250) !important; }
+.dark .text-blue-400 { color: oklch(0.72 0.19 250) !important; }
+.dark .bg-blue-500\/10 { background-color: oklch(0.55 0.25 295 / 15%) !important; }
+.dark .bg-blue-500\/20 { background-color: oklch(0.55 0.25 295 / 22%) !important; }
 
-/* Passed / success — vivid green for dark readability */
-.dark .text-green-500 {
-  color: oklch(0.72 0.20 150) !important;
-}
-.dark .text-green-400 {
-  color: oklch(0.76 0.19 150) !important;
-}
-.dark .bg-green-500\/10 {
-  background-color: oklch(0.696 0.17 162.48 / 15%) !important;
-}
-.dark .bg-green-500\/20 {
-  background-color: oklch(0.696 0.17 162.48 / 22%) !important;
-}
-.dark .border-green-500\/30 {
-  border-color: oklch(0.696 0.17 162.48 / 35%) !important;
-}
+.dark .text-green-500 { color: oklch(0.72 0.20 150) !important; }
+.dark .text-green-400 { color: oklch(0.76 0.19 150) !important; }
+.dark .bg-green-500\/10 { background-color: oklch(0.696 0.17 162.48 / 15%) !important; }
+.dark .bg-green-500\/20 { background-color: oklch(0.696 0.17 162.48 / 22%) !important; }
+.dark .border-green-500\/30 { border-color: oklch(0.696 0.17 162.48 / 35%) !important; }
 
 /* ==========================================================================
-   7. FADE-IN-UP ANIMATION UTILITY
-   Elements entering the viewport get a smooth entrance animation.
-   Apply via `animate-fade-in-up` class (defined in @theme utilities below).
+   7. ANIMATION UTILITIES
    ========================================================================== */
 
 @utility animate-fade-in-up {
@@ -566,37 +592,23 @@
   animation: subtle-float 3s ease-in-out infinite;
 }
 
-/* Staggered delay utilities for sequential entrance */
-@utility animate-delay-100 {
-  animation-delay: 100ms;
-}
-@utility animate-delay-200 {
-  animation-delay: 200ms;
-}
-@utility animate-delay-300 {
-  animation-delay: 300ms;
-}
-@utility animate-delay-400 {
-  animation-delay: 400ms;
-}
-@utility animate-delay-500 {
-  animation-delay: 500ms;
-}
+@utility animate-delay-100 { animation-delay: 100ms; }
+@utility animate-delay-200 { animation-delay: 200ms; }
+@utility animate-delay-300 { animation-delay: 300ms; }
+@utility animate-delay-400 { animation-delay: 400ms; }
+@utility animate-delay-500 { animation-delay: 500ms; }
 
 /* ==========================================================================
    8. ADDITIONAL DARK MODE REFINEMENTS
-   Sidebar depth, input fields, table rows, and misc. polish.
    ========================================================================== */
 
-/* Sidebar depth — subtle separation from main content */
 .dark .sidebar {
   box-shadow:
-    1px 0 0 oklch(1 0 0 / 6%),
-    2px 0 8px oklch(0.08 0.02 260 / 30%),
-    4px 0 20px oklch(0.08 0.02 260 / 15%);
+    1px 0 0 oklch(0.55 0.25 295 / 6%),
+    2px 0 8px oklch(0.08 0.03 280 / 30%),
+    4px 0 20px oklch(0.08 0.03 280 / 15%);
 }
 
-/* Input fields — recessed look in dark mode */
 .dark input,
 .dark textarea,
 .dark select {
@@ -605,34 +617,29 @@
     inset 0 0.5px 0 oklch(0 0 0 / 15%);
 }
 
-/* Table row hover — subtle lift effect */
 .dark tr:hover {
-  background: oklch(1 0 0 / 3%);
-  box-shadow: inset 0 0 0 1px oklch(1 0 0 / 5%);
+  background: oklch(0.55 0.25 295 / 3%);
+  box-shadow: inset 0 0 0 1px oklch(0.55 0.25 295 / 5%);
 }
 
-/* Divider / separator lines — softer in dark mode */
 .dark hr,
 .dark [role="separator"] {
-  border-color: oklch(1 0 0 / 6%);
-  box-shadow: 0 1px 0 oklch(1 0 0 / 3%);
+  border-color: oklch(0.55 0.25 295 / 6%);
+  box-shadow: 0 1px 0 oklch(0.55 0.25 295 / 3%);
 }
 
-/* Badge / chip depth in dark mode */
 .dark .badge,
 .dark [class*="badge"] {
   box-shadow:
-    0 1px 2px oklch(0.08 0.02 260 / 40%),
+    0 1px 2px oklch(0.08 0.03 280 / 40%),
     inset 0 0.5px 0 oklch(1 0 0 / 8%);
 }
 
 /* ==========================================================================
    9. PRINT STYLES
-   Hide non-essential UI, ensure clean printer-friendly output.
    ========================================================================== */
 
 @media print {
-  /* Hide navigation, scrollbars, interactive elements */
   nav,
   .sidebar,
   [role="navigation"],
@@ -643,8 +650,6 @@
   .animate-pulse-glow {
     display: none !important;
   }
-
-  /* Reset dark mode for printing — use light colors */
   * {
     color: oklch(0.15 0 0) !important;
     background: oklch(1 0 0) !important;
@@ -654,28 +659,21 @@
     -webkit-backdrop-filter: none !important;
     text-shadow: none !important;
   }
-
-  /* Ensure links have visible underlines */
   a[href]::after {
     content: " (" attr(href) ")";
     font-size: 0.85em;
     color: oklch(0.4 0 0);
   }
-
-  /* Prevent page breaks inside cards */
   .bg-card,
   [class*="rounded-"][class*="p-"] {
     break-inside: avoid;
     page-break-inside: avoid;
     border: 1px solid oklch(0.85 0 0) !important;
   }
-
-  /* Show all expanded content (no collapse) */
   details,
   [class*="collapsible"] {
     display: contents !important;
   }
-
   body {
     font-size: 12pt;
     line-height: 1.5;
@@ -685,10 +683,8 @@
 
 /* ==========================================================================
    10. RTL SUPPORT
-   Fixes for right-to-left layout in Arabic.
    ========================================================================== */
 
-/* Hide horizontal scrollbar on tabs */
 .no-scrollbar {
   -ms-overflow-style: none;
   scrollbar-width: none;
@@ -697,24 +693,20 @@
   display: none;
 }
 
-/* Ensure SVG charts render correctly in RTL */
 [dir="rtl"] svg {
   direction: ltr;
 }
 
-/* RTL-safe select styling */
 [dir="rtl"] select {
   background-position: left 0.5rem center;
   padding-left: 2rem;
   padding-right: 0.75rem;
 }
 
-/* RTL dropdown alignment */
 [dir="rtl"] [data-radix-popper-content-wrapper] {
   direction: rtl;
 }
 
-/* RTL sheet from left side */
 [dir="rtl"] [data-side="left"] {
   --radix-dialog-content-transform: translateX(100%);
 }
@@ -722,7 +714,6 @@
   --radix-dialog-content-transform: translateX(-100%);
 }
 
-/* Ensure code blocks stay LTR in RTL context */
 [dir="rtl"] code,
 [dir="rtl"] pre,
 [dir="rtl"] .font-mono {
@@ -731,7 +722,6 @@
   unicode-bidi: embed;
 }
 
-/* Pi Browser mobile optimization */
 @supports (padding-top: env(safe-area-inset-top)) {
   header.sticky {
     padding-top: env(safe-area-inset-top);
@@ -742,26 +732,44 @@
 }
 
 /* ==========================================================================
-   11. LIGHT MODE DEPTH ENHANCEMENTS
-   Add layering and glassmorphism to light mode cards, matching dark mode quality.
+   11. LIGHT MODE CARD DEPTH — Pi Branded
    ========================================================================== */
 
 .bg-card {
-  background: linear-gradient(135deg, oklch(0.995 0.002 280) 0%, oklch(1 0 0) 100%);
-  box-shadow: 0 1px 3px oklch(0.2 0.02 260 / 8%), 0 8px 24px oklch(0.2 0.02 260 / 5%);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  background: linear-gradient(
+    165deg,
+    oklch(0.99 0.008 295) 0%,
+    oklch(1 0 0) 50%,
+    oklch(0.998 0.004 300) 100%
+  );
+  border: 1px solid oklch(0.55 0.25 295 / 8%);
+  box-shadow:
+    0 1px 2px oklch(0.20 0.04 280 / 6%),
+    0 4px 12px oklch(0.20 0.04 280 / 4%),
+    inset 0 1px 0 oklch(1 0 0 / 80%);
+}
+
+.bg-card:hover {
+  box-shadow:
+    0 2px 8px oklch(0.20 0.04 280 / 10%),
+    0 8px 24px oklch(0.20 0.04 280 / 6%),
+    inset 0 1px 0 oklch(1 0 0 / 90%);
 }
 
 /* Light mode elevated surfaces */
 [class*="rounded-"][class*="border"][class*="p-"] {
-  background: linear-gradient(135deg, oklch(0.997 0.003 280) 0%, oklch(1 0 0) 100%);
-  box-shadow: 0 2px 6px oklch(0.2 0.02 260 / 10%), 0 8px 24px oklch(0.2 0.02 260 / 6%);
+  background: linear-gradient(
+    135deg,
+    oklch(0.995 0.01 295) 0%,
+    oklch(1 0 0) 100%
+  );
+  box-shadow:
+    0 2px 6px oklch(0.20 0.04 280 / 10%),
+    0 8px 24px oklch(0.20 0.04 280 / 6%);
 }
 
 /* ==========================================================================
    12. PI BRAND GRADIENT UTILITIES
-   Pi Network purple/gold brand utilities for consistent theming.
    ========================================================================== */
 
 @utility pi-gradient {
@@ -769,124 +777,129 @@
 }
 
 @utility pi-gradient-text {
-  background: linear-gradient(135deg, oklch(0.55 0.25 295) 0%, oklch(0.75 0.18 80) 100%);
+  background: linear-gradient(135deg, oklch(0.65 0.28 295), oklch(0.75 0.18 80));
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
 }
 
 @utility pi-glow {
-  box-shadow: 0 0 20px oklch(0.55 0.25 295 / 20%), 0 0 60px oklch(0.55 0.25 295 / 10%);
+  box-shadow: 0 0 30px oklch(0.55 0.25 295 / 20%);
 }
 
 /* ==========================================================================
-   13. GLOBAL SMOOTH SCROLLBARS (Light + Dark)
-   Consistent thin rounded scrollbar styling for both themes.
+   13. STANDARD PI CARD UTILITY
    ========================================================================== */
 
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+.pi-card {
+  background: oklch(1 0 0);
+  border: 1px solid oklch(0.55 0.25 295 / 8%);
+  border-radius: var(--radius-lg);
+  padding: 1.5rem;
+  box-shadow:
+    0 1px 2px oklch(0.20 0.04 280 / 6%),
+    0 4px 12px oklch(0.20 0.04 280 / 4%),
+    inset 0 1px 0 oklch(1 0 0 / 80%);
+  transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
 }
 
-::-webkit-scrollbar-track {
-  background: transparent;
+.pi-card:hover {
+  transform: translateY(-2px);
+  box-shadow:
+    0 4px 8px oklch(0.20 0.04 280 / 10%),
+    0 12px 32px oklch(0.20 0.04 280 / 7%),
+    inset 0 1px 0 oklch(1 0 0 / 90%);
+  border-color: oklch(0.55 0.25 295 / 15%);
 }
 
-::-webkit-scrollbar-thumb {
-  background: oklch(0.7 0 0 / 30%);
-  border-radius: 999px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: oklch(0.7 0 0 / 50%);
-}
-
-/* ==========================================================================
-   14. CAIRO FONT INTEGRATION
-   Ensure Cairo Arabic font is prioritized. The --font-sans override is
-   handled in the primary @theme inline block above.
-   ========================================================================== */
-
-/* ==========================================================================
-   15. LIGHT MODE CARD DEPTH — Matching Dark Quality
-   Richer light mode cards with multi-layer shadows and inner highlights.
-   ========================================================================== */
-
-.bg-card {
+.dark .pi-card {
   background: linear-gradient(
     165deg,
-    oklch(0.995 0.003 280) 0%,
-    oklch(1 0 0) 50%,
-    oklch(0.998 0.001 300) 100%
+    oklch(0.19 0.025 285) 0%,
+    oklch(0.17 0.015 285) 40%,
+    oklch(0.16 0.01 280) 100%
   );
-  border: 1px solid oklch(0.85 0.01 270 / 50%);
+  border-color: oklch(0.55 0.25 295 / 8%);
+  backdrop-filter: blur(12px) saturate(1.2);
+  -webkit-backdrop-filter: blur(12px) saturate(1.2);
   box-shadow:
-    0 1px 2px oklch(0.2 0.02 260 / 6%),
-    0 4px 12px oklch(0.2 0.02 260 / 4%),
-    inset 0 1px 0 oklch(1 0 0 / 80%);
+    0 1px 3px oklch(0.10 0.03 280 / 50%),
+    0 4px 12px oklch(0.10 0.03 280 / 30%),
+    inset 0 1px 0 oklch(1 0 0 / 8%),
+    inset 0 0 30px oklch(0.55 0.25 295 / 3%);
 }
 
-.bg-card:hover {
+.dark .pi-card:hover {
   box-shadow:
-    0 2px 8px oklch(0.2 0.02 260 / 10%),
-    0 8px 24px oklch(0.2 0.02 260 / 6%),
-    inset 0 1px 0 oklch(1 0 0 / 90%);
+    0 4px 8px oklch(0.10 0.03 280 / 60%),
+    0 12px 32px oklch(0.10 0.03 280 / 40%),
+    inset 0 1px 0 oklch(1 0 0 / 10%),
+    inset 0 0 40px oklch(0.55 0.25 295 / 5%);
+  border-color: oklch(0.55 0.25 295 / 15%);
 }
 
-/* Light mode scrollbar */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+/* ==========================================================================
+   14. PI SURFACE UTILITY (Modals, Sheets, Elevated Surfaces)
+   ========================================================================== */
+
+.pi-surface {
+  background: white/5;
+  backdrop-filter: blur(24px) saturate(1.4);
+  -webkit-backdrop-filter: blur(24px) saturate(1.4);
+  border: 1px solid white/10;
 }
-::-webkit-scrollbar-track {
-  background: oklch(0.96 0 0);
-  border-radius: 999px;
+
+.dark .pi-surface {
+  background: oklch(0.19 0.02 282 / 90%);
+  border: 1px solid oklch(0.55 0.25 295 / 12%);
+  box-shadow:
+    0 4px 8px oklch(0.05 0.03 280 / 70%),
+    0 12px 32px oklch(0.05 0.03 280 / 45%),
+    0 24px 64px oklch(0.08 0.02 280 / 25%),
+    inset 0 1.5px 0 oklch(1 0 0 / 12%),
+    inset 0 -1.5px 0 oklch(0 0 0 / 30%);
 }
-::-webkit-scrollbar-thumb {
-  background: oklch(0.75 0.02 260 / 30%);
-  border-radius: 999px;
+
+/* ==========================================================================
+   15. GLASSMORPHISM STANDARD
+   ========================================================================== */
+
+.GLASS_STAT {
+  background: white/5;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid white/10;
 }
-::-webkit-scrollbar-thumb:hover {
-  background: oklch(0.65 0.04 260 / 40%);
+
+.dark .GLASS_STAT {
+  background: oklch(0.18 0.018 285 / 80%);
+  border: 1px solid oklch(0.55 0.25 295 / 10%);
+  backdrop-filter: blur(16px) saturate(1.3);
+  -webkit-backdrop-filter: blur(16px) saturate(1.3);
 }
 
 /* ==========================================================================
    16. VERDICT BANNER — Revolutionary Visual Effects
-   Gradient border spin, particle twinkle, and Pi badge pulse.
    ========================================================================== */
 
-/* Animated gradient border — conic gradient rotation */
 @keyframes verdict-border-spin {
-  0% {
-    transform: rotate(0deg);
-  }
-  100% {
-    transform: rotate(360deg);
-  }
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
 }
 
 .animate-verdict-border-spin {
   animation: verdict-border-spin 6s linear infinite;
 }
 
-/* Particle / star twinkle effect */
 @keyframes particle-twinkle {
-  0%, 100% {
-    opacity: 0.15;
-    transform: scale(1);
-  }
-  50% {
-    opacity: 0.7;
-    transform: scale(1.8);
-  }
+  0%, 100% { opacity: 0.15; transform: scale(1); }
+  50% { opacity: 0.7; transform: scale(1.8); }
 }
 
 .animate-particle-twinkle {
   animation: particle-twinkle 3s ease-in-out infinite;
 }
 
-/* Pi Network badge pulse in footer */
 @keyframes pi-badge-pulse {
   0%, 100% {
     box-shadow: 0 0 4px oklch(0.55 0.25 295 / 30%);
@@ -902,7 +915,6 @@
   animation: pi-badge-pulse 2.5s ease-in-out infinite;
 }
 
-/* Verdict banner wrapper — clip for gradient border */
 .verdict-banner-wrapper {
   position: relative;
 }
@@ -912,41 +924,31 @@
 }
 
 /* ==========================================================================
-   16. WALLET & LOADING ANIMATIONS
-   Additional animations for new dashboard components.
+   17. WALLET & LOADING ANIMATIONS
    ========================================================================== */
 
-/* Wallet card gradient border spin */
 @keyframes wallet-border-spin {
-  0% {
-    transform: rotate(0deg);
-  }
-  100% {
-    transform: rotate(360deg);
-  }
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
 }
 
 .animate-wallet-border-spin {
   animation: wallet-border-spin 6s linear infinite;
 }
 
-/* Loading screen sparkle effect */
 @keyframes loading-sparkle {
-  0%, 100% {
-    opacity: 0.1;
-    transform: scale(0.8) translateY(0);
-  }
-  50% {
-    opacity: 0.6;
-    transform: scale(1.5) translateY(-8px);
-  }
+  0%, 100% { opacity: 0.1; transform: scale(0.8) translateY(0); }
+  50% { opacity: 0.6; transform: scale(1.5) translateY(-8px); }
 }
 
 .animate-loading-sparkle {
   animation: loading-sparkle 3s ease-in-out infinite;
 }
 
-/* Custom scrollbar for wallet transactions */
+/* ==========================================================================
+   18. CUSTOM SCROLLBAR (WALLET / COMPONENT-LEVEL)
+   ========================================================================== */
+
 .custom-scrollbar::-webkit-scrollbar {
   width: 4px;
 }

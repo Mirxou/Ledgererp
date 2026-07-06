@@ -32,6 +32,7 @@ import { ScoreComparisonChart } from "@/components/charts/ScoreComparisonChart";
 import { FixProgressGauge } from "@/components/charts/FixProgressGauge";
 import { StatCard } from "@/components/dashboard/StatCard";
 import { AdvancedVerdictBanner } from "@/components/dashboard/AdvancedVerdictBanner";
+import { DashboardSkeleton } from "@/components/dashboard/DashboardSkeleton";
 import { ExportDropdown } from "@/components/dashboard/ExportDropdown";
 import { SecurityZones } from "@/components/dashboard/SecurityZones";
 import { CriticalIssueCard } from "@/components/issues/CriticalIssueCard";
@@ -57,11 +58,14 @@ import { PwaInstallPrompt } from "@/components/dashboard/PwaInstallPrompt";
 import { PiWalletCard } from "@/components/dashboard/PiWalletCard";
 import { PiEcosystemStats } from "@/components/dashboard/PiEcosystemStats";
 import { PiComplianceChecker } from "@/components/dashboard/PiComplianceChecker";
+import { PiAuthGate } from "@/components/onboarding/PiAuthGate";
+import { AppHeader } from "@/components/layout/AppHeader";
+import { AppFooter } from "@/components/layout/AppFooter";
 
 /* ── Data Layer ───────────────────────────────────────────────────────── */
 
 import {
-  AuditReport, Issue, CARD_DEPTH,
+  AuditReport, Issue,
   exportJSON, exportCSV, copyToClipboard,
 } from "@/lib/audit-data";
 import { useIssueStore, type IssueWithStatus } from "@/lib/store";
@@ -269,19 +273,7 @@ export default function AuditDashboard() {
 
   /* ── Render ────────────────────────────────────────────────────────── */
 
-  if (loading) return (
-    <div className="min-h-screen flex flex-col bg-background text-foreground" dir="rtl">
-      <div className="flex-1 flex items-center justify-center">
-        <div className="text-center space-y-4">
-          <div className="relative inline-block">
-            <ShieldAlert className="h-12 w-12 text-primary animate-pulse" />
-          </div>
-          <p className="text-sm text-muted-foreground font-medium">جاري تحميل تقرير التدقيق الأمني...</p>
-        </div>
-      </div>
-      <footer className="mt-auto border-t py-6"><div className="max-w-7xl mx-auto px-4 text-center text-xs text-muted-foreground">Ledgererp — Pi Network</div></footer>
-    </div>
-  );
+  if (loading) return <DashboardSkeleton tab={activeTab} />;
 
   if (!report) return (
     <div className="min-h-screen flex flex-col bg-background text-foreground" dir="rtl">
@@ -295,45 +287,23 @@ export default function AuditDashboard() {
   );
 
   return (
+    <PiAuthGate>
     <div className="min-h-screen flex flex-col bg-background text-foreground" dir="rtl">
       <PwaInstallPrompt />
 
       {/* ═══════════════════════════════════════════════════════════════
           HEADER
          ═══════════════════════════════════════════════════════════════ */}
-      <header className="sticky top-0 z-50 border-b bg-background/80 backdrop-blur-xl">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-14 sm:h-16">
-            {/* Pi Profile — LEFT side in RTL (flex end) */}
-            <div className="flex items-center gap-2 flex-shrink-0 order-last sm:order-last">
-              <PiUserProfile />
-            </div>
-            {/* Title + Bell — CENTER */}
-            <div className="flex items-center gap-2.5 min-w-0 order-first sm:order-1">
-              <NotificationBell />
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-600 to-purple-800 flex items-center justify-center flex-shrink-0 shadow-lg">
-                <ShieldAlert className="h-4.5 w-4.5 text-white" />
-              </div>
-              <div className="min-w-0">
-                <h1 className="text-sm sm:text-base font-bold leading-tight truncate">تدقيق Ledgererp الأمني</h1>
-                <p className="text-[10px] text-muted-foreground hidden sm:block">Pi Network — Security Audit Dashboard</p>
-              </div>
-            </div>
-            {/* Export + Theme — RIGHT side in RTL (flex start) */}
-            <div className="flex items-center gap-2 flex-shrink-0 order-2">
-              <ExportDropdown report={report} copied={copied} onExport={handleExport} />
-              <PiNetworkStatus />
-              <Button
-                variant="ghost" size="icon" className="h-8 w-8"
-                onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-                aria-label="تبديل السمة"
-              >
-                {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-              </Button>
-            </div>
-          </div>
+      <AppHeader activeTab={activeTab} onTabChange={setActiveTab} />
+
+      {/* Export + Pi Status — inline actions bar below header */}
+      <div className="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-2 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <ExportDropdown report={report} copied={copied} onExport={handleExport} />
+          <PiNetworkStatus />
         </div>
-      </header>
+        <QuickActions />
+      </div>
 
       {/* ═══════════════════════════════════════════════════════════════
           MAIN CONTENT
@@ -344,7 +314,7 @@ export default function AuditDashboard() {
         <AdvancedVerdictBanner report={report} />
 
         {/* ──── STAT CARDS ──────────────────────────────────────────── */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4">
           <StatCard icon={ShieldAlert} label="إجمالي المشاكل" value={report.summary.totalIssues} sub={`${report.meta.totalFiles} ملف`} color="bg-gradient-to-br from-slate-600 to-slate-800" delay={0} />
           <StatCard icon={XCircle} label="حرج" value={report.summary.critical} sub={`${report.summary.blockingDeployment} تعطل النشر`} color="bg-gradient-to-br from-red-500 to-red-700" delay={100} />
           <StatCard icon={AlertTriangle} label="مرتفع" value={report.summary.high} color="bg-gradient-to-br from-orange-500 to-orange-700" delay={200} />
@@ -353,37 +323,43 @@ export default function AuditDashboard() {
 
         {/* ──── TABS ────────────────────────────────────────────────── */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="w-full flex overflow-x-auto no-scrollbar">
-            <TabsTrigger value="overview" className="flex-1 min-w-0 text-xs sm:text-sm gap-1.5">
+          <TabsList className="w-full bg-muted/50 rounded-2xl p-1.5 gap-1 flex overflow-x-auto no-scrollbar">
+            <TabsTrigger value="overview" className="flex-1 min-w-0 text-xs sm:text-sm gap-1.5 rounded-xl px-4 py-2.5 font-medium data-[state=active]:bg-background data-[state=active]:shadow-sm data-[state=active]:text-foreground data-[state=inactive]:text-muted-foreground hover:text-foreground/80 transition-all relative">
               <LayoutGrid className="h-3.5 w-3.5 hidden sm:block" />نظرة عامة
+              <span className="tab-indicator" />
             </TabsTrigger>
-            <TabsTrigger value="critical" className="flex-1 min-w-0 text-xs sm:text-sm gap-1.5">
+            <TabsTrigger value="critical" className="flex-1 min-w-0 text-xs sm:text-sm gap-1.5 rounded-xl px-4 py-2.5 font-medium data-[state=active]:bg-background data-[state=active]:shadow-sm data-[state=active]:text-foreground data-[state=inactive]:text-muted-foreground hover:text-foreground/80 transition-all relative">
               <Flame className="h-3.5 w-3.5 hidden sm:block" />حرج
-              <Badge variant="destructive" className="text-[9px] h-4 px-1 min-w-[18px] flex items-center justify-center">{report.summary.critical}</Badge>
+              <Badge variant="destructive" className="text-[10px] h-4 rounded-full px-1.5 min-w-[18px] flex items-center justify-center">{report.summary.critical}</Badge>
+              <span className="tab-indicator" />
             </TabsTrigger>
-            <TabsTrigger value="high" className="flex-1 min-w-0 text-xs sm:text-sm gap-1.5">
+            <TabsTrigger value="high" className="flex-1 min-w-0 text-xs sm:text-sm gap-1.5 rounded-xl px-4 py-2.5 font-medium data-[state=active]:bg-background data-[state=active]:shadow-sm data-[state=active]:text-foreground data-[state=inactive]:text-muted-foreground hover:text-foreground/80 transition-all relative">
               <Zap className="h-3.5 w-3.5 hidden sm:block" />مرتفع
-              <Badge className="bg-orange-500/15 text-orange-600 dark:text-orange-400 text-[9px] h-4 px-1 min-w-[18px] flex items-center justify-center border-0">{report.summary.high}</Badge>
+              <Badge className="bg-orange-500/15 text-orange-600 dark:text-orange-400 text-[10px] h-4 rounded-full px-1.5 min-w-[18px] flex items-center justify-center border-0">{report.summary.high}</Badge>
+              <span className="tab-indicator" />
             </TabsTrigger>
-            <TabsTrigger value="medium" className="flex-1 min-w-0 text-xs sm:text-sm gap-1.5">
+            <TabsTrigger value="medium" className="flex-1 min-w-0 text-xs sm:text-sm gap-1.5 rounded-xl px-4 py-2.5 font-medium data-[state=active]:bg-background data-[state=active]:shadow-sm data-[state=active]:text-foreground data-[state=inactive]:text-muted-foreground hover:text-foreground/80 transition-all relative">
               <AlertTriangle className="h-3.5 w-3.5 hidden sm:block" />متوسط
-              <Badge className="bg-amber-500/15 text-amber-600 dark:text-amber-400 text-[9px] h-4 px-1 min-w-[18px] flex items-center justify-center border-0">{report.summary.medium}</Badge>
+              <Badge className="bg-amber-500/15 text-amber-600 dark:text-amber-400 text-[10px] h-4 rounded-full px-1.5 min-w-[18px] flex items-center justify-center border-0">{report.summary.medium}</Badge>
+              <span className="tab-indicator" />
             </TabsTrigger>
-            <TabsTrigger value="fixes" className="flex-1 min-w-0 text-xs sm:text-sm gap-1.5">
+            <TabsTrigger value="fixes" className="flex-1 min-w-0 text-xs sm:text-sm gap-1.5 rounded-xl px-4 py-2.5 font-medium data-[state=active]:bg-background data-[state=active]:shadow-sm data-[state=active]:text-foreground data-[state=inactive]:text-muted-foreground hover:text-foreground/80 transition-all relative">
               <Wrench className="h-3.5 w-3.5 hidden sm:block" />إصلاحات
+              <span className="tab-indicator" />
             </TabsTrigger>
-            <TabsTrigger value="pi-network" className="flex-1 min-w-0 text-xs sm:text-sm gap-1.5">
+            <TabsTrigger value="pi-network" className="flex-1 min-w-0 text-xs sm:text-sm gap-1.5 rounded-xl px-4 py-2.5 font-medium data-[state=active]:bg-background data-[state=active]:shadow-sm data-[state=active]:text-foreground data-[state=inactive]:text-muted-foreground hover:text-foreground/80 transition-all relative">
               <Globe className="h-3.5 w-3.5 hidden sm:block" />شبكة بي
+              <span className="tab-indicator" />
             </TabsTrigger>
           </TabsList>
 
           {/* ──── OVERVIEW TAB ──────────────────────────────────────── */}
           <TabsContent value="overview" className="space-y-6">
 
-            {/* Fix Progress Card + Gauge */}
-            <div className="grid md:grid-cols-2 gap-6">
+            {/* Row 1: FixProgress + Gauge + ActivityTimeline */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
               <FixProgressCard issues={dbIssues.length > 0 ? dbIssues : []} />
-              <Card className={CARD_DEPTH}>
+              <Card className="rounded-2xl border border-border/50 hover:border-border/80 transition-colors duration-300">
                 <CardContent className="p-4 flex items-center justify-center">
                   <FixProgressGauge
                     fixed={dbIssues.filter((i) => i.status === "fixed").length}
@@ -392,20 +368,13 @@ export default function AuditDashboard() {
                   />
                 </CardContent>
               </Card>
-            </div>
-
-            {/* Gamification + Activity Timeline */}
-            <div className="grid md:grid-cols-2 gap-6">
-              <GamificationPanel />
               <ActivityTimeline />
             </div>
 
-            {/* Severity Trend Chart (7-Day) */}
-            <SeverityTrendChart />
-
-            {/* Score Rings + Radar */}
-            <div className="grid md:grid-cols-2 gap-6">
-              <Card className={CARD_DEPTH}>
+            {/* Row 2: Trend + Radar + ScoreRings */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+              <SeverityTrendChart />
+              <Card className="rounded-2xl border border-border/50 hover:border-border/80 transition-colors duration-300">
                 <CardContent className="p-4">
                   <SecurityRadarChart
                     scores={{
@@ -421,22 +390,22 @@ export default function AuditDashboard() {
                 </CardContent>
               </Card>
               <div className="grid grid-cols-2 gap-4">
-                <Card className={CARD_DEPTH}>
+                <Card className="rounded-2xl border border-border/50 hover:border-border/80 transition-colors duration-300">
                   <CardContent className="p-4 flex flex-col items-center">
                     <ScoreRing score={report.scores.backend.overall} label="الخادم" size={100} />
                   </CardContent>
                 </Card>
-                <Card className={CARD_DEPTH}>
+                <Card className="rounded-2xl border border-border/50 hover:border-border/80 transition-colors duration-300">
                   <CardContent className="p-4 flex flex-col items-center">
                     <ScoreRing score={report.scores.frontend.overall} label="الواجهة الأمامية" size={100} />
                   </CardContent>
                 </Card>
-                <Card className={CARD_DEPTH}>
+                <Card className="rounded-2xl border border-border/50 hover:border-border/80 transition-colors duration-300">
                   <CardContent className="p-4 flex flex-col items-center">
                     <ScoreRing score={report.scores.piNetwork.overall} label="شبكة بي" size={100} />
                   </CardContent>
                 </Card>
-                <Card className={CARD_DEPTH}>
+                <Card className="rounded-2xl border border-border/50 hover:border-border/80 transition-colors duration-300">
                   <CardContent className="p-4 flex flex-col items-center">
                     <ScoreRing score={report.scores.overall} label="النتيجة العامة" size={100} />
                   </CardContent>
@@ -444,19 +413,19 @@ export default function AuditDashboard() {
               </div>
             </div>
 
-            {/* Backend & Frontend Scores + Donut */}
-            <div className="grid md:grid-cols-2 gap-6">
-              <Card className={CARD_DEPTH}>
+            {/* Row 3: Comparison + Donut */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <Card className="rounded-2xl border border-border/50 hover:border-border/80 transition-colors duration-300">
                 <CardHeader className="pb-3">
                   <PiSectionHeader icon={<Server className="h-4 w-4" />}>درجات الخادم</PiSectionHeader>
                 </CardHeader>
-                <CardContent className="space-y-4">
+                <CardContent className="pt-0 space-y-4">
                   <LabeledProgress label="جودة الكود" value={report.scores.backend.codeQuality} />
                   <LabeledProgress label="الأمان" value={report.scores.backend.security} />
                   <LabeledProgress label="البنية" value={report.scores.backend.architecture} />
                 </CardContent>
               </Card>
-              <Card className={CARD_DEPTH}>
+              <Card className="rounded-2xl border border-border/50 hover:border-border/80 transition-colors duration-300">
                 <CardHeader className="pb-3">
                   <PiSectionHeader icon={
                     <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></svg>
@@ -464,11 +433,13 @@ export default function AuditDashboard() {
                     توزيع المشاكل حسب الخطورة
                   </PiSectionHeader>
                 </CardHeader>
-                <CardContent className="flex justify-center py-2">
+                <CardContent className="flex justify-center pt-0">
                   <DonutChart data={donutData} size={180} />
                 </CardContent>
               </Card>
             </div>
+
+            <Separator className="my-2" />
 
             {/* Score Comparison Chart */}
             <ScoreComparisonChart
@@ -478,19 +449,7 @@ export default function AuditDashboard() {
               overall={report.scores.overall}
             />
 
-            {/* Category Breakdown Chart */}
-            <Card className={CARD_DEPTH}>
-              <CardHeader className="pb-3">
-                <PiSectionHeader icon={<BarChart3 className="h-4 w-4" />}>توزيع المشاكل حسب الفئة</PiSectionHeader>
-              </CardHeader>
-              <CardContent>
-                <ScrollArea className="w-full" style={{ maxHeight: 400 }}>
-                  <HorizontalBarChart data={categoryBarData} />
-                </ScrollArea>
-              </CardContent>
-            </Card>
-
-            {/* Category Treemap */}
+            {/* Category Treemap — full width */}
             <CategoryTreemapChart
               data={(report.categoryBreakdown ?? []).map((c) => ({
                 name: c.category,
@@ -500,19 +459,33 @@ export default function AuditDashboard() {
               }))}
             />
 
-            {/* File Heatmap */}
-            <Card className={CARD_DEPTH}>
-              <CardHeader className="pb-3">
-                <PiSectionHeader icon={<FileCode2 className="h-4 w-4" />}>خريطة الملفات الأكثر مشاكل</PiSectionHeader>
-              </CardHeader>
-              <CardContent>
-                <ScrollArea className="w-full" style={{ maxHeight: 400 }}>
-                  <HorizontalBarChart data={fileHeatData} />
-                </ScrollArea>
-              </CardContent>
-            </Card>
+            {/* Category breakdown + File heatmap */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <Card className="rounded-2xl border border-border/50 hover:border-border/80 transition-colors duration-300">
+                <CardHeader className="pb-3">
+                  <PiSectionHeader icon={<BarChart3 className="h-4 w-4" />}>توزيع المشاكل حسب الفئة</PiSectionHeader>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  <ScrollArea className="w-full" style={{ maxHeight: 400 }}>
+                    <HorizontalBarChart data={categoryBarData} />
+                  </ScrollArea>
+                </CardContent>
+              </Card>
+              <Card className="rounded-2xl border border-border/50 hover:border-border/80 transition-colors duration-300">
+                <CardHeader className="pb-3">
+                  <PiSectionHeader icon={<FileCode2 className="h-4 w-4" />}>خريطة الملفات الأكثر مشاكل</PiSectionHeader>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  <ScrollArea className="w-full" style={{ maxHeight: 400 }}>
+                    <HorizontalBarChart data={fileHeatData} />
+                  </ScrollArea>
+                </CardContent>
+              </Card>
+            </div>
 
-            {/* Security Zones */}
+            <Separator className="my-2" />
+
+            {/* Security Zones — full width */}
             <SecurityZones
               report={report}
               securityOpen={securityOpen}
@@ -520,109 +493,114 @@ export default function AuditDashboard() {
               onOpenIssue={(issue) => openSheet(issue, "CRITICAL")}
             />
 
-            {/* Recommendations */}
-            <Card className={CARD_DEPTH}>
-              <CardHeader className="pb-3">
-                <PiSectionHeader icon={<Target className="h-4 w-4" />}>التوصيات حسب الأولوية</PiSectionHeader>
-              </CardHeader>
-              <CardContent>
-                <ScrollArea className="w-full" style={{ maxHeight: 500 }}>
-                  <div className="space-y-2">
-                    {report.recommendations.map((rec) => (
-                      <div key={rec.priority} className="flex items-start gap-3 p-3 rounded-xl bg-muted-foreground/5 border border-border/50 hover:border-border transition-colors">
-                        <div className="flex-shrink-0 w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center">
-                          <span className="text-xs font-bold text-primary">{rec.priority}</span>
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs font-semibold leading-relaxed">{rec.title}</p>
-                          <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                            <Badge variant="outline" className="text-[9px]">
-                              {rec.effort === "Small" ? "جهد صغير" : rec.effort === "Medium" ? "جهد متوسط" : "جهد كبير"}
-                            </Badge>
-                            <Badge variant="outline" className={`text-[9px] ${rec.impact === "Critical" ? "text-red-500 border-red-500/30" : rec.impact === "High" ? "text-orange-500 border-orange-500/30" : "text-amber-500 border-amber-500/30"}`}>
-                              {rec.impact === "Critical" ? "تأثير حرج" : rec.impact === "High" ? "تأثير مرتفع" : "تأثير متوسط"}
-                            </Badge>
+            {/* Recommendations + Architecture */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <Card className="rounded-2xl border border-border/50 hover:border-border/80 transition-colors duration-300">
+                <CardHeader className="pb-3">
+                  <PiSectionHeader icon={<Target className="h-4 w-4" />}>التوصيات حسب الأولوية</PiSectionHeader>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  <ScrollArea className="w-full" style={{ maxHeight: 500 }}>
+                    <div className="space-y-2">
+                      {report.recommendations.map((rec) => (
+                        <div key={rec.priority} className="flex items-start gap-3 p-3 rounded-xl bg-muted-foreground/5 border border-border/50 hover:border-border transition-colors">
+                          <div className="flex-shrink-0 w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center">
+                            <span className="text-xs font-bold text-primary">{rec.priority}</span>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-semibold leading-relaxed">{rec.title}</p>
+                            <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                              <Badge variant="outline" className="text-[9px]">
+                                {rec.effort === "Small" ? "جهد صغير" : rec.effort === "Medium" ? "جهد متوسط" : "جهد كبير"}
+                              </Badge>
+                              <Badge variant="outline" className={`text-[9px] ${rec.impact === "Critical" ? "text-red-500 border-red-500/30" : rec.impact === "High" ? "text-orange-500 border-orange-500/30" : "text-amber-500 border-amber-500/30"}`}>
+                                {rec.impact === "Critical" ? "تأثير حرج" : rec.impact === "High" ? "تأثير مرتفع" : "تأثير متوسط"}
+                              </Badge>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    ))}
-                  </div>
-                </ScrollArea>
-              </CardContent>
-            </Card>
-
-            {/* Architecture Problems */}
-            <Card className={CARD_DEPTH}>
-              <CardHeader className="pb-3">
-                <PiSectionHeader icon={<Activity className="h-4 w-4" />}>مشاكل البنية المعمارية</PiSectionHeader>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {report.architectureProblems.map((prob, i) => (
-                  <div key={i} className="flex items-start gap-3 p-4 rounded-xl bg-muted-foreground/5 border border-border/50">
-                    <div className="w-7 h-7 rounded-full bg-orange-100 dark:bg-orange-900/40 flex items-center justify-center flex-shrink-0 mt-0.5">
-                      <span className="text-xs font-bold text-orange-600 dark:text-orange-400">{i + 1}</span>
+                      ))}
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <h4 className="text-sm font-semibold mb-1">{prob.title}</h4>
-                      <p className="text-xs text-muted-foreground leading-relaxed">{prob.description}</p>
+                  </ScrollArea>
+                </CardContent>
+              </Card>
+              <Card className="rounded-2xl border border-border/50 hover:border-border/80 transition-colors duration-300">
+                <CardHeader className="pb-3">
+                  <PiSectionHeader icon={<Activity className="h-4 w-4" />}>مشاكل البنية المعمارية</PiSectionHeader>
+                </CardHeader>
+                <CardContent className="pt-2 space-y-3">
+                  {report.architectureProblems.map((prob, i) => (
+                    <div key={i} className="flex items-start gap-3 p-4 rounded-xl bg-muted-foreground/5 border border-border/50">
+                      <div className="w-7 h-7 rounded-full bg-orange-100 dark:bg-orange-900/40 flex items-center justify-center flex-shrink-0 mt-0.5">
+                        <span className="text-xs font-bold text-orange-600 dark:text-orange-400">{i + 1}</span>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <h4 className="text-sm font-semibold mb-1">{prob.title}</h4>
+                        <p className="text-xs text-muted-foreground leading-relaxed">{prob.description}</p>
+                      </div>
                     </div>
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-
-            {/* Code Quality */}
-            <Card className={CARD_DEPTH}>
-              <CardHeader className="pb-3">
-                <PiSectionHeader icon={<Code2 className="h-4 w-4" />}>جودة الكود</PiSectionHeader>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-3 flex items-center gap-1.5">
-                    <FolderOpen className="h-3.5 w-3.5" />أكبر الملفات
-                  </h4>
-                  <div className="space-y-2">
-                    {report.codeQuality.largestFiles.slice(0, 5).map((f) => (
-                      <div key={f.file} className="flex items-center justify-between text-xs p-2.5 rounded-lg bg-muted-foreground/5">
-                        <code className="font-mono text-muted-foreground truncate max-w-[60%]" dir="ltr">{f.file}</code>
-                        <div className="flex items-center gap-3 text-muted-foreground/70 flex-shrink-0">
-                          <span>{f.lines} سطر</span>
-                          <span>{(f.size / 1024).toFixed(1)}KB</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-                <Separator />
-                <div>
-                  <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-3 flex items-center gap-1.5">
-                    <FileWarning className="h-3.5 w-3.5" />ملاحظات TODO/FIXME
-                  </h4>
-                  <div className="space-y-2">
-                    {report.codeQuality.todoFixme.map((t, i) => (
-                      <div key={i} className="flex items-start gap-2 text-xs p-2.5 rounded-lg bg-amber-50/50 dark:bg-amber-950/20 border border-amber-200/50 dark:border-amber-900/40">
-                        <code className="font-mono text-amber-600 dark:text-amber-400 flex-shrink-0">{t.file}</code>
-                        <span className="text-muted-foreground truncate">{t.text}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Tech Stack */}
-            <Card className={CARD_DEPTH}>
-              <CardHeader className="pb-3">
-                <PiSectionHeader icon={<Cpu className="h-4 w-4" />}>التقنيات المستخدمة</PiSectionHeader>
-              </CardHeader>
-              <CardContent>
-                <div className="flex flex-wrap gap-2">
-                  {report.meta.techStack.map((tech) => (
-                    <Badge key={tech} variant="secondary" className="text-xs px-3 py-1 font-medium">{tech}</Badge>
                   ))}
-                </div>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Code Quality + Tech Stack */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <Card className="rounded-2xl border border-border/50 hover:border-border/80 transition-colors duration-300">
+                <CardHeader className="pb-3">
+                  <PiSectionHeader icon={<Code2 className="h-4 w-4" />}>جودة الكود</PiSectionHeader>
+                </CardHeader>
+                <CardContent className="pt-0 space-y-4">
+                  <div>
+                    <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-3 flex items-center gap-1.5">
+                      <FolderOpen className="h-3.5 w-3.5" />أكبر الملفات
+                    </h4>
+                    <div className="space-y-2">
+                      {report.codeQuality.largestFiles.slice(0, 5).map((f) => (
+                        <div key={f.file} className="flex items-center justify-between text-xs p-2.5 rounded-lg bg-muted-foreground/5">
+                          <code className="font-mono text-muted-foreground truncate max-w-[60%]" dir="ltr">{f.file}</code>
+                          <div className="flex items-center gap-3 text-muted-foreground/70 flex-shrink-0">
+                            <span>{f.lines} سطر</span>
+                            <span>{(f.size / 1024).toFixed(1)}KB</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <Separator />
+                  <div>
+                    <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-3 flex items-center gap-1.5">
+                      <FileWarning className="h-3.5 w-3.5" />ملاحظات TODO/FIXME
+                    </h4>
+                    <div className="space-y-2">
+                      {report.codeQuality.todoFixme.map((t, i) => (
+                        <div key={i} className="flex items-start gap-2 text-xs p-2.5 rounded-lg bg-amber-50/50 dark:bg-amber-950/20 border border-amber-200/50 dark:border-amber-900/40">
+                          <code className="font-mono text-amber-600 dark:text-amber-400 flex-shrink-0">{t.file}</code>
+                          <span className="text-muted-foreground truncate">{t.text}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card className="rounded-2xl border border-border/50 hover:border-border/80 transition-colors duration-300">
+                <CardHeader className="pb-3">
+                  <PiSectionHeader icon={<Cpu className="h-4 w-4" />}>التقنيات المستخدمة</PiSectionHeader>
+                </CardHeader>
+                <CardContent className="pt-2">
+                  <div className="flex flex-wrap gap-2">
+                    {report.meta.techStack.map((tech) => (
+                      <Badge key={tech} variant="secondary" className="text-xs px-3 py-1 font-medium">{tech}</Badge>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            <Separator className="my-2" />
+
+            {/* Gamification — full width */}
+            <GamificationPanel />
           </TabsContent>
 
           {/* ──── CRITICAL TAB ──────────────────────────────────────── */}
@@ -692,7 +670,7 @@ export default function AuditDashboard() {
               </select>
             </div>
             <p className="text-xs text-muted-foreground">{filteredHigh.length} من {report.highIssues.length} مشكلة مرتفعة</p>
-            <Card className={CARD_DEPTH}>
+            <Card className="rounded-2xl border border-border/50 hover:border-border/80 transition-colors duration-300">
               <CardContent className="p-2">
                 {filteredHigh.map((issue) => (
                   <IssueRow
@@ -736,7 +714,7 @@ export default function AuditDashboard() {
               </select>
             </div>
             <p className="text-xs text-muted-foreground">{filteredMedium.length} من {report.mediumIssues.length} مشكلة متوسطة</p>
-            <Card className={CARD_DEPTH}>
+            <Card className="rounded-2xl border border-border/50 hover:border-border/80 transition-colors duration-300">
               <CardContent className="p-2">
                 {filteredMedium.map((issue) => (
                   <IssueRow
@@ -758,7 +736,7 @@ export default function AuditDashboard() {
           {/* ──── FIXES TAB ─────────────────────────────────────────── */}
           <TabsContent value="fixes" className="space-y-6">
             {/* Progress + Timeline */}
-            <div className="grid md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               <FixProgressCard issues={dbIssues.length > 0 ? dbIssues : []} />
               <FixTimeline />
             </div>
@@ -812,7 +790,7 @@ export default function AuditDashboard() {
                 </div>
               </div>
             ) : (
-              <Card className={CARD_DEPTH}>
+              <Card className="rounded-2xl border border-border/50 hover:border-border/80 transition-colors duration-300">
                 <CardContent className="p-2">
                   {fixesFilteredIssues.map((dbIssue) => {
                     const fakeIssue: Issue = {
@@ -919,49 +897,10 @@ export default function AuditDashboard() {
       <AiAdvisorChat />
 
       {/* ═══════════════════════════════════════════════════════════════
-          FOOTER (sticky)
+          FOOTER
          ═══════════════════════════════════════════════════════════════ */}
-      <footer className="mt-auto border-t bg-white/60 dark:bg-slate-950/60 backdrop-blur-md">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
-            <div className="text-xs text-muted-foreground text-center sm:text-right">
-              <div className="flex items-center justify-center sm:justify-start gap-2 mb-0.5">
-                {/* Pi Shield Logo */}
-                <svg className="h-4 w-4 flex-shrink-0" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M12 2L3 7v5c0 5.25 3.83 10.16 9 11.25C17.17 22.16 21 17.25 21 12V7l-9-5z" fill="url(#piShieldGrad2)" />
-                  <text x="12" y="15" textAnchor="middle" fontSize="8" fontWeight="bold" fill="white">π</text>
-                  <circle cx="18" cy="6" r="3" fill="oklch(0.85 0.18 80)" stroke="white" strokeWidth="1.5" />
-                  <path d="M17 6l1 1 2-2" stroke="white" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" fill="none" />
-                  <defs>
-                    <linearGradient id="piShieldGrad2" x1="3" y1="2" x2="21" y2="22">
-                      <stop stopColor="oklch(0.55 0.25 295)" />
-                      <stop offset="1" stopColor="oklch(0.40 0.20 270)" />
-                    </linearGradient>
-                  </defs>
-                </svg>
-                <p className="font-semibold">Ledgererp</p>
-                <Badge className="pi-gradient border-0 text-[9px] font-bold gap-1 px-2 py-0.5 text-white animate-pi-badge-pulse">
-                  مدعوم بـ Pi Network
-                </Badge>
-              </div>
-              <p>
-                تم الإنشاء {new Date(report.meta.auditDate).toLocaleDateString("ar-DZ")} &bull; {report.meta.totalFiles} ملف &bull; {report.meta.totalLines} سطر &bull; {report.summary.totalIssues} مشكلة
-              </p>
-            </div>
-            <div className="flex items-center gap-2 flex-wrap justify-center">
-              <Badge variant="outline" className="text-[10px] gap-1 px-2 py-0.5"><XCircle className="h-2.5 w-2.5 text-red-500" />{report.summary.critical} حرج</Badge>
-              <Badge variant="outline" className="text-[10px] gap-1 px-2 py-0.5"><AlertTriangle className="h-2.5 w-2.5 text-orange-500" />{report.summary.high} مرتفع</Badge>
-              <Badge variant="outline" className="text-[10px] gap-1 px-2 py-0.5"><ShieldAlert className="h-2.5 w-2.5 text-amber-500" />{report.summary.medium} متوسط</Badge>
-              <Badge variant="outline" className="text-[10px] gap-1 px-2 py-0.5"><ShieldCheck className="h-2.5 w-2.5 text-sky-500" />{report.summary.low} منخفض</Badge>
-              <a href={report.meta.repository} target="_blank" rel="noopener noreferrer" aria-label="عرض المستودع على GitHub">
-                <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
-                  <Github className="h-3.5 w-3.5" />
-                </Button>
-              </a>
-            </div>
-          </div>
-        </div>
-      </footer>
+      <AppFooter />
     </div>
+    </PiAuthGate>
   );
 }

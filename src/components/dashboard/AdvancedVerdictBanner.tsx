@@ -2,10 +2,8 @@
 
 import { useState, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ShieldCheck, AlertTriangle, XCircle, ChevronDown, Flame, ServerCrash } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { ChevronDown } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { AnimatedNumber } from "@/components/charts/ScoreRing";
 import { AuditReport } from "@/lib/audit-data";
 
 /* ════════════════════════════════════════════════════════════════════════════
@@ -16,77 +14,53 @@ type RiskLevel = "severe" | "high" | "medium" | "acceptable" | "excellent";
 
 interface RiskConfig {
   label: string;
-  color: string;
-  darkColor: string;
-  bgGradient: string;
-  darkBgGradient: string;
-  borderColor: string;
-  darkBorderColor: string;
-  icon: React.ReactNode;
-  glowColor: string;
-  dotColor: string;
+  pillClass: string;
+  bgClass: string;
+  borderClass: string;
+  scoreTextClass: string;
+  stepsNeeded: (critical: number, high: number) => string;
 }
 
 const RISK_LEVELS: Record<RiskLevel, RiskConfig> = {
   severe: {
     label: "خطر شديد",
-    color: "text-red-600",
-    darkColor: "dark:text-red-400",
-    bgGradient: "from-red-500/20 via-red-600/10 to-red-500/5",
-    darkBgGradient: "dark:from-red-900/40 dark:via-red-800/20 dark:to-red-900/10",
-    borderColor: "border-red-300/60",
-    darkBorderColor: "dark:border-red-800/40",
-    icon: <XCircle className="h-7 w-7" />,
-    glowColor: "oklch(0.65 0.22 20 / 15%)",
-    dotColor: "bg-red-500",
+    pillClass: "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20",
+    bgClass: "bg-gradient-to-br from-red-50/80 via-background to-red-50/40 dark:from-red-950/30 dark:via-background dark:to-red-950/15",
+    borderClass: "border-red-200/60 dark:border-red-800/30",
+    scoreTextClass: "text-red-600 dark:text-red-400",
+    stepsNeeded: (c, h) => `إصلاح ${Math.ceil(c * 0.4)} مشكلة حرجة + ${Math.ceil(h * 0.2)} مرتفعة`,
   },
   high: {
     label: "خطر مرتفع",
-    color: "text-orange-600",
-    darkColor: "dark:text-orange-400",
-    bgGradient: "from-orange-500/20 via-orange-600/10 to-orange-500/5",
-    darkBgGradient: "dark:from-orange-900/40 dark:via-orange-800/20 dark:to-orange-900/10",
-    borderColor: "border-orange-300/60",
-    darkBorderColor: "dark:border-orange-800/40",
-    icon: <XCircle className="h-7 w-7" />,
-    glowColor: "oklch(0.70 0.18 50 / 15%)",
-    dotColor: "bg-orange-500",
+    pillClass: "bg-orange-500/10 text-orange-600 dark:text-orange-400 border-orange-500/20",
+    bgClass: "bg-gradient-to-br from-orange-50/80 via-background to-orange-50/40 dark:from-orange-950/30 dark:via-background dark:to-orange-950/15",
+    borderClass: "border-orange-200/60 dark:border-orange-800/30",
+    scoreTextClass: "text-orange-600 dark:text-orange-400",
+    stepsNeeded: (c, h) => `إصلاح ${Math.ceil(c * 0.5)} مشكلة حرجة + ${Math.ceil(h * 0.3)} مرتفعة`,
   },
   medium: {
     label: "خطر متوسط",
-    color: "text-yellow-600",
-    darkColor: "dark:text-yellow-400",
-    bgGradient: "from-yellow-500/20 via-yellow-600/10 to-yellow-500/5",
-    darkBgGradient: "dark:from-yellow-900/40 dark:via-yellow-800/20 dark:to-yellow-900/10",
-    borderColor: "border-yellow-300/60",
-    darkBorderColor: "dark:border-yellow-800/40",
-    icon: <AlertTriangle className="h-7 w-7" />,
-    glowColor: "oklch(0.80 0.16 85 / 15%)",
-    dotColor: "bg-yellow-500",
+    pillClass: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20",
+    bgClass: "bg-gradient-to-br from-amber-50/80 via-background to-amber-50/40 dark:from-amber-950/30 dark:via-background dark:to-amber-950/15",
+    borderClass: "border-amber-200/60 dark:border-amber-800/30",
+    scoreTextClass: "text-amber-600 dark:text-amber-400",
+    stepsNeeded: (c, h) => `إصلاح ${c} مشكلة حرجة + ${Math.ceil(h * 0.2)} مرتفعة`,
   },
   acceptable: {
     label: "مقبول",
-    color: "text-lime-600",
-    darkColor: "dark:text-lime-400",
-    bgGradient: "from-lime-500/20 via-lime-600/10 to-lime-500/5",
-    darkBgGradient: "dark:from-lime-900/40 dark:via-lime-800/20 dark:to-lime-900/10",
-    borderColor: "border-lime-300/60",
-    darkBorderColor: "dark:border-lime-800/40",
-    icon: <ShieldCheck className="h-7 w-7" />,
-    glowColor: "oklch(0.70 0.18 130 / 15%)",
-    dotColor: "bg-lime-500",
+    pillClass: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20",
+    bgClass: "bg-gradient-to-br from-emerald-50/80 via-background to-emerald-50/40 dark:from-emerald-950/30 dark:via-background dark:to-emerald-950/15",
+    borderClass: "border-emerald-200/60 dark:border-emerald-800/30",
+    scoreTextClass: "text-emerald-600 dark:text-emerald-400",
+    stepsNeeded: () => "تحسين بسيط للوصول إلى المستوى الممتاز",
   },
   excellent: {
     label: "ممتاز",
-    color: "text-green-600",
-    darkColor: "dark:text-green-400",
-    bgGradient: "from-green-500/20 via-green-600/10 to-green-500/5",
-    darkBgGradient: "dark:from-green-900/40 dark:via-green-800/20 dark:to-green-900/10",
-    borderColor: "border-green-300/60",
-    darkBorderColor: "dark:border-green-800/40",
-    icon: <ShieldCheck className="h-7 w-7" />,
-    glowColor: "oklch(0.65 0.20 150 / 15%)",
-    dotColor: "bg-green-500",
+    pillClass: "bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20",
+    bgClass: "bg-gradient-to-br from-green-50/80 via-background to-green-50/40 dark:from-green-950/30 dark:via-background dark:to-green-950/15",
+    borderClass: "border-green-200/60 dark:border-green-800/30",
+    scoreTextClass: "text-green-600 dark:text-green-400",
+    stepsNeeded: () => "التطبيق يلبي معايير أمنية عالية",
   },
 };
 
@@ -99,328 +73,127 @@ function getRiskLevel(score: number): RiskLevel {
 }
 
 /* ════════════════════════════════════════════════════════════════════════════
-   ANIMATED SCORE RING
-   ════════════════════════════════════════════════════════════════════════════ */
-
-function VerdictScoreRing({ score, risk }: { score: number; risk: RiskConfig }) {
-  const size = 120;
-  const radius = (size - 16) / 2;
-  const circumference = 2 * Math.PI * radius;
-  const offset = circumference - (score / 100) * circumference;
-
-  const ringColor = score >= 76
-    ? "oklch(0.65 0.20 150)"
-    : score >= 51
-      ? "oklch(0.80 0.16 85)"
-      : score >= 26
-        ? "oklch(0.70 0.18 50)"
-        : "oklch(0.65 0.22 20)";
-
-  const ringColorEnd = score >= 76
-    ? "oklch(0.55 0.22 145)"
-    : score >= 51
-      ? "oklch(0.85 0.14 80)"
-      : score >= 26
-        ? "oklch(0.65 0.20 40)"
-        : "oklch(0.55 0.20 15)";
-
-  const gradId = "verdict-ring-grad";
-
-  return (
-    <div className="relative flex items-center justify-center flex-shrink-0">
-      <motion.div
-        initial={{ scale: 0, rotate: -90 }}
-        animate={{ scale: 1, rotate: 0 }}
-        transition={{ delay: 0.2, duration: 0.8, type: "spring", stiffness: 100 }}
-      >
-        <svg width={size} height={size} className="-rotate-90">
-          <defs>
-            <linearGradient id={gradId} x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor={ringColor} />
-              <stop offset="100%" stopColor={ringColorEnd} />
-            </linearGradient>
-          </defs>
-          {/* Track */}
-          <circle
-            cx={size / 2} cy={size / 2} r={radius}
-            fill="none" strokeWidth="4"
-            className="stroke-muted-foreground/10"
-          />
-          {/* Score arc */}
-          <motion.circle
-            cx={size / 2} cy={size / 2} r={radius}
-            fill="none" strokeWidth="6" strokeLinecap="round"
-            stroke={`url(#${gradId})`}
-            initial={{ strokeDashoffset: circumference }}
-            animate={{ strokeDashoffset: offset }}
-            transition={{ delay: 0.5, duration: 1.5, ease: "easeOut" }}
-            style={{ strokeDasharray: circumference }}
-          />
-        </svg>
-        <div className="absolute inset-0 flex flex-col items-center justify-center">
-          <span className={`text-2xl font-black ${risk.color} ${risk.darkColor}`}>
-            <AnimatedNumber value={score} />
-          </span>
-          <span className="text-[9px] text-muted-foreground font-medium">درجة الأمان</span>
-        </div>
-      </motion.div>
-    </div>
-  );
-}
-
-/* ════════════════════════════════════════════════════════════════════════════
-   BACKGROUND PARTICLES
-   ════════════════════════════════════════════════════════════════════════════ */
-
-function BackgroundParticles() {
-  const particles = useMemo(() =>
-    Array.from({ length: 18 }, (_, i) => ({
-      id: i,
-      top: `${5 + ((i * 41 + 17) % 90)}%`,
-      left: `${3 + ((i * 59 + 11) % 94)}%`,
-      size: 2 + (i % 4),
-      delay: `${(i * 0.45) % 4}s`,
-      duration: `${2.5 + (i % 3) * 0.7}s`,
-    })),
-  []);
-
-  return (
-    <div className="absolute inset-0 overflow-hidden pointer-events-none" aria-hidden="true">
-      {particles.map((p) => (
-        <div
-          key={p.id}
-          className="absolute rounded-full animate-particle-twinkle"
-          style={{
-            top: p.top,
-            left: p.left,
-            width: p.size,
-            height: p.size,
-            background: "white",
-            opacity: 0.12,
-            animationDelay: p.delay,
-            animationDuration: p.duration,
-          }}
-        />
-      ))}
-    </div>
-  );
-}
-
-/* ════════════════════════════════════════════════════════════════════════════
-   KEY STATS ROW
-   ════════════════════════════════════════════════════════════════════════════ */
-
-function KeyStat({ icon, label, value, color }: {
-  icon: React.ReactNode; label: string; value: string | number; color: string;
-}) {
-  return (
-    <motion.div
-      className="flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl bg-white/10 dark:bg-white/5 border border-white/10"
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: 0.6 }}
-    >
-      <div className={`${color} flex-shrink-0`}>{icon}</div>
-      <div>
-        <p className="text-xs font-bold text-white">{value}</p>
-        <p className="text-[9px] text-white/60">{label}</p>
-      </div>
-    </motion.div>
-  );
-}
-
-/* ════════════════════════════════════════════════════════════════════════════
    MAIN COMPONENT — AdvancedVerdictBanner
    ════════════════════════════════════════════════════════════════════════════ */
 
 export function AdvancedVerdictBanner({ report }: { report: AuditReport }) {
-  const [showDetails, setShowDetails] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   const score = report.scores.overall;
   const riskLevel = getRiskLevel(score);
   const risk = RISK_LEVELS[riskLevel];
 
+  const description = useMemo(() => {
+    if (score <= 25) return `${report.summary.critical} ثغرة حرجة تمنع النشر على Mainnet`;
+    if (score <= 50) return `${report.summary.critical} ثغرة حرجة و ${report.summary.high} مشكلة مرتفعة تحتاج إصلاح عاجل`;
+    if (score <= 75) return `تحسينات مطلوبة: ${report.summary.critical} حرج + ${report.summary.high} مرتفع`;
+    if (score <= 90) return `مستوى أمان جيد — بعض التحسينات البسيطة مطلوبة`;
+    return "مستوى أمان ممتاز — التطبيق جاهز للنشر";
+  }, [score, report.summary.critical, report.summary.high]);
+
+  const scoreBarPct = score;
+  const stepsText = risk.stepsNeeded(report.summary.critical, report.summary.high);
+
   return (
-    <motion.div
-      className="relative rounded-2xl overflow-hidden"
-      initial={{ opacity: 0, y: 16 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.6 }}
-    >
-      {/* Animated gradient border */}
-      <div className="absolute -inset-[2px] rounded-2xl overflow-hidden animate-verdict-border-spin">
-        <div
-          className="absolute inset-0"
-          style={{
-            background: score >= 76
-              ? "conic-gradient(from 0deg, oklch(0.65 0.20 150 / 60%), oklch(0.55 0.22 145 / 40%), oklch(0.65 0.20 150 / 20%), oklch(0.55 0.22 145 / 60%), oklch(0.65 0.20 150 / 60%))"
-              : score >= 51
-                ? "conic-gradient(from 0deg, oklch(0.80 0.16 85 / 60%), oklch(0.85 0.14 80 / 40%), oklch(0.80 0.16 85 / 20%), oklch(0.85 0.14 80 / 60%), oklch(0.80 0.16 85 / 60%))"
-                : score >= 26
-                  ? "conic-gradient(from 0deg, oklch(0.70 0.18 50 / 60%), oklch(0.65 0.20 40 / 40%), oklch(0.70 0.18 50 / 20%), oklch(0.65 0.20 40 / 60%), oklch(0.70 0.18 50 / 60%))"
-                  : "conic-gradient(from 0deg, oklch(0.65 0.22 20 / 60%), oklch(0.55 0.20 15 / 40%), oklch(0.65 0.22 20 / 20%), oklch(0.55 0.20 15 / 60%), oklch(0.65 0.22 20 / 60%))",
-            filter: "blur(1px)",
-          }}
-        />
-      </div>
+    <div className={`rounded-2xl p-6 border ${risk.borderClass} ${risk.bgClass} transition-colors duration-300`}>
+      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-5">
+        {/* Left: Score */}
+        <div className="flex items-baseline gap-1 flex-shrink-0">
+          <span className={`text-5xl sm:text-6xl font-black tracking-tighter leading-none ${risk.scoreTextClass}`}>
+            {score}
+          </span>
+          <span className="text-xl text-muted-foreground font-light">/</span>
+          <span className="text-lg text-muted-foreground/60 font-light">100</span>
+        </div>
 
-      {/* Main banner content */}
-      <div
-        className={`relative z-10 rounded-2xl border-0 p-5 sm:p-6 overflow-hidden bg-gradient-to-br ${risk.bgGradient} ${risk.darkBgGradient}`}
-        style={{
-          backdropFilter: "blur(20px) saturate(1.4)",
-          WebkitBackdropFilter: "blur(20px) saturate(1.4)",
-        }}
-      >
-        {/* Background particles */}
-        <BackgroundParticles />
+        {/* Center: Label + description */}
+        <div className="flex-1 min-w-0 space-y-2">
+          <Badge
+            variant="outline"
+            className={`text-xs font-semibold px-3 py-1 rounded-full border ${risk.pillClass}`}
+          >
+            {risk.label}
+          </Badge>
+          <p className="text-sm text-muted-foreground leading-relaxed">{description}</p>
+        </div>
 
-        {/* Subtle glow */}
-        <div
-          className="absolute inset-0 pointer-events-none"
-          style={{ background: `radial-gradient(ellipse at 30% 50%, ${risk.glowColor} 0%, transparent 60%)` }}
-        />
-
-        {/* Content */}
-        <div className="relative z-10 flex flex-col sm:flex-row items-center gap-5">
-          {/* Score Ring */}
-          <VerdictScoreRing score={score} risk={risk} />
-
-          {/* Info */}
-          <div className="flex-1 min-w-0 text-center sm:text-right">
-            <div className="flex items-center justify-center sm:justify-start gap-2.5 mb-2">
-              <div className={`${risk.color} ${risk.darkColor}`}>
-                {risk.icon}
-              </div>
-              <motion.h2
-                className="text-lg sm:text-xl font-black"
-                initial={{ opacity: 0, x: -10 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.3 }}
-              >
-                حكم الأمان:{" "}
-                <span className={score > 50 ? "pi-gradient-text" : `${risk.color} ${risk.darkColor}`}>
-                  {score}/100
-                </span>
-              </motion.h2>
-            </div>
-
-            {/* Risk level badge */}
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.4 }}
-              className="flex items-center justify-center sm:justify-start gap-2 mb-3"
-            >
-              <span className={`w-2.5 h-2.5 rounded-full ${risk.dotColor} animate-pulse`} />
-              <span className={`text-sm font-bold ${risk.color} ${risk.darkColor}`}>
-                {risk.label}
-              </span>
-            </motion.div>
-
-            {/* Key stats row */}
-            <div className="flex items-center justify-center sm:justify-start gap-2 flex-wrap">
-              <KeyStat
-                icon={<Flame className="h-4 w-4 text-red-400" />}
-                label="حرج"
-                value={report.summary.critical}
-                color="text-red-400"
-              />
-              <KeyStat
-                icon={<AlertTriangle className="h-4 w-4 text-orange-400" />}
-                label="مرتفع"
-                value={report.summary.high}
-                color="text-orange-400"
-              />
-              <KeyStat
-                icon={<ServerCrash className="h-4 w-4 text-rose-400" />}
-                label="تعطل النشر"
-                value={report.summary.blockingDeployment}
-                color="text-rose-400"
-              />
-            </div>
+        {/* Right: Severity pills */}
+        <div className="flex items-center gap-2 flex-shrink-0 flex-wrap">
+          <div className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-red-500/8 border border-red-500/15">
+            <span className="w-2 h-2 rounded-full bg-red-500" />
+            <span className="text-xs font-bold text-red-600 dark:text-red-400">{report.summary.critical}</span>
+            <span className="text-[11px] text-muted-foreground">حرج</span>
+          </div>
+          <div className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-orange-500/8 border border-orange-500/15">
+            <span className="w-2 h-2 rounded-full bg-orange-500" />
+            <span className="text-xs font-bold text-orange-600 dark:text-orange-400">{report.summary.high}</span>
+            <span className="text-[11px] text-muted-foreground">مرتفع</span>
+          </div>
+          <div className="hidden sm:flex items-center gap-1.5 px-3 py-2 rounded-xl bg-amber-500/8 border border-amber-500/15">
+            <span className="w-2 h-2 rounded-full bg-amber-500" />
+            <span className="text-xs font-bold text-amber-600 dark:text-amber-400">{report.summary.medium}</span>
+            <span className="text-[11px] text-muted-foreground">متوسط</span>
           </div>
         </div>
+      </div>
 
-        {/* Expandable details section */}
-        <div className="relative z-10 mt-4">
-          <motion.button
-            onClick={() => setShowDetails(!showDetails)}
-            className="flex items-center gap-2 mx-auto text-xs font-semibold text-white/60 hover:text-white/90 transition-colors"
-            whileTap={{ scale: 0.97 }}
+      {/* Expand toggle */}
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="flex items-center gap-1.5 mx-auto mt-4 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+      >
+        <span>{expanded ? "إخفاء التفاصيل" : "عرض التفاصيل"}</span>
+        <motion.div animate={{ rotate: expanded ? 180 : 0 }} transition={{ duration: 0.25 }}>
+          <ChevronDown className="h-3.5 w-3.5" />
+        </motion.div>
+      </button>
+
+      {/* Expandable details */}
+      <AnimatePresence initial={false}>
+        {expanded && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.35, ease: [0.25, 0.46, 0.45, 0.94] }}
+            className="overflow-hidden"
           >
-            <span>{showDetails ? "إخفاء التفاصيل" : "عرض التفاصيل"}</span>
-            <motion.div animate={{ rotate: showDetails ? 180 : 0 }} transition={{ duration: 0.3 }}>
-              <ChevronDown className="h-4 w-4" />
-            </motion.div>
-          </motion.button>
-
-          <AnimatePresence>
-            {showDetails && (
-              <motion.div
-                initial={{ height: 0, opacity: 0 }}
-                animate={{ height: "auto", opacity: 1 }}
-                exit={{ height: 0, opacity: 0 }}
-                transition={{ duration: 0.4, ease: "easeOut" }}
-                className="overflow-hidden"
-              >
-                <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <RiskBreakdownItem label="ثغرات حرجة" count={report.summary.critical} total={report.summary.totalIssues} color="bg-red-500" />
-                  <RiskBreakdownItem label="مشاكل مرتفعة" count={report.summary.high} total={report.summary.totalIssues} color="bg-orange-500" />
-                  <RiskBreakdownItem label="مشاكل متوسطة" count={report.summary.medium} total={report.summary.totalIssues} color="bg-amber-500" />
-                  <RiskBreakdownItem label="مشاكل منخفضة" count={report.summary.low} total={report.summary.totalIssues} color="bg-sky-500" />
+            <div className="mt-4 space-y-4">
+              {/* Score breakdown bar */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground font-medium">النتيجة الحالية</span>
+                  <span className={`font-bold ${risk.scoreTextClass}`}>{score}/100</span>
                 </div>
-
-                {/* Risk summary text */}
-                <div className="mt-4 p-3 rounded-xl bg-white/5 border border-white/10">
-                  <p className="text-xs text-white/70 leading-relaxed">
-                    {score <= 25
-                      ? "التطبيق يحتوي على ثغرات أمنية خطيرة تجعله غير آمن للاستخدام أو النشر. يجب إصلاح جميع المشاكل الحرجة فوراً."
-                      : score <= 50
-                        ? "التطبيق يعاني من مشاكل أمنية كبيرة تحتاج إلى إصلاح عاجل قبل التفكير في النشر."
-                        : score <= 75
-                          ? "مستوى الأمان متوسط. هناك تحسينات مطلوبة لكن التطبيق ليس في حالة حرجة."
-                          : score <= 90
-                            ? "مستوى الأمان مقبول. بعض التحسينات البسيطة قد ترفع الدرجة إلى ممتاز."
-                            : "مستوى الأمان ممتاز! التطبيق يلبي معايير أمنية عالية."}
-                  </p>
+                <div className="h-2.5 rounded-full bg-muted overflow-hidden">
+                  <motion.div
+                    className={`h-full rounded-full ${
+                      score <= 25 ? "bg-red-500" : score <= 50 ? "bg-orange-500" : score <= 75 ? "bg-amber-500" : score <= 90 ? "bg-emerald-500" : "bg-green-500"
+                    }`}
+                    initial={{ width: 0 }}
+                    animate={{ width: `${scoreBarPct}%` }}
+                    transition={{ duration: 0.8, ease: "easeOut" }}
+                  />
                 </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
-      </div>
-    </motion.div>
-  );
-}
+                {/* Severity breakdown mini bars */}
+                <div className="flex gap-1 mt-2">
+                  <div className="flex-1 h-1 rounded-full bg-red-500/60" style={{ flexBasis: `${Math.max(report.summary.critical, 2)}%` }} />
+                  <div className="flex-1 h-1 rounded-full bg-orange-500/60" style={{ flexBasis: `${Math.max(report.summary.high, 3)}%` }} />
+                  <div className="flex-1 h-1 rounded-full bg-amber-500/60" style={{ flexBasis: `${Math.max(report.summary.medium, 3)}%` }} />
+                  <div className="flex-1 h-1 rounded-full bg-sky-500/60" style={{ flexBasis: `${Math.max(report.summary.low, 2)}%` }} />
+                </div>
+              </div>
 
-/* ════════════════════════════════════════════════════════════════════════════
-   RISK BREAKDOWN ITEM
-   ════════════════════════════════════════════════════════════════════════════ */
-
-function RiskBreakdownItem({ label, count, total, color }: {
-  label: string; count: number; total: number; color: string;
-}) {
-  const pct = total > 0 ? Math.round((count / total) * 100) : 0;
-
-  return (
-    <motion.div
-      className="px-3 py-2.5 rounded-xl bg-white/5 border border-white/10"
-      initial={{ opacity: 0, x: -10 }}
-      animate={{ opacity: 1, x: 0 }}
-      transition={{ duration: 0.3 }}
-    >
-      <div className="flex items-center justify-between mb-1.5">
-        <span className="text-[11px] text-white/70 font-medium">{label}</span>
-        <span className="text-xs font-bold text-white">{count} <span className="text-white/40 font-normal">({pct}%)</span></span>
-      </div>
-      <div className="h-1.5 rounded-full bg-white/10 overflow-hidden">
-        <motion.div
-          className={`h-full rounded-full ${color}`}
-          initial={{ width: 0 }}
-          animate={{ width: `${pct}%` }}
-          transition={{ delay: 0.2, duration: 0.8, ease: "easeOut" }}
-        />
-      </div>
-    </motion.div>
+              {/* Steps needed */}
+              <div className="p-3.5 rounded-xl bg-muted/50 border border-border/40">
+                <p className="text-xs text-muted-foreground">
+                  <span className="font-semibold text-foreground">الخطوات المطلوبة للوصول إلى 60+: </span>
+                  {stepsText}
+                </p>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
   );
 }
