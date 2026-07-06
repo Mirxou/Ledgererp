@@ -8,7 +8,7 @@ import {
   LayoutGrid, Flame, Zap, Globe, ShieldX, Server,
   BarChart3, Search, FileCode2, FileWarning, Code2,
   Activity, FolderOpen, Cpu, Target, Gauge, Github,
-  Sun, Moon, Wrench,
+  Sun, Moon, Wrench, Trophy, Radar,
 } from "lucide-react";
 import {
   Card, CardContent, CardDescription, CardHeader, CardTitle,
@@ -58,6 +58,11 @@ import { PwaInstallPrompt } from "@/components/dashboard/PwaInstallPrompt";
 import { PiWalletCard } from "@/components/dashboard/PiWalletCard";
 import { PiEcosystemStats } from "@/components/dashboard/PiEcosystemStats";
 import { PiComplianceChecker } from "@/components/dashboard/PiComplianceChecker";
+import { CommandPalette } from "@/components/dashboard/CommandPalette";
+import { ThreatLevelIndicator } from "@/components/dashboard/ThreatLevelIndicator";
+import { GlobalLeaderboard } from "@/components/dashboard/GlobalLeaderboard";
+import { LiveThreatFeed } from "@/components/dashboard/LiveThreatFeed";
+import { SecurityScoreBreakdown } from "@/components/dashboard/SecurityScoreBreakdown";
 import { PiAuthGate } from "@/components/onboarding/PiAuthGate";
 import { AppHeader } from "@/components/layout/AppHeader";
 import { AppFooter } from "@/components/layout/AppFooter";
@@ -301,6 +306,7 @@ export default function AuditDashboard() {
         <div className="flex items-center gap-2">
           <ExportDropdown report={report} copied={copied} onExport={handleExport} />
           <PiNetworkStatus />
+          <ThreatLevelIndicator />
         </div>
         <QuickActions />
       </div>
@@ -411,6 +417,12 @@ export default function AuditDashboard() {
                   </CardContent>
                 </Card>
               </div>
+            </div>
+
+            {/* Row 2.5: Live Feed + Score Breakdown */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <LiveThreatFeed />
+              <SecurityScoreBreakdown />
             </div>
 
             {/* Row 3: Comparison + Donut */}
@@ -849,6 +861,9 @@ export default function AuditDashboard() {
               <SubscriptionCards currentTier={currentTier} />
             </div>
 
+            {/* Global Leaderboard */}
+            <GlobalLeaderboard />
+
             {/* Live Pi Network Monitoring Dashboard */}
             <PiNetworkMonitor />
           </TabsContent>
@@ -875,6 +890,11 @@ export default function AuditDashboard() {
         open={aiDialogOpen}
         onOpenChange={setAiDialogOpen}
       />
+
+      {/* ═══════════════════════════════════════════════════════════════
+          COMMAND PALETTE (Cmd+K)
+         ═══════════════════════════════════════════════════════════════ */}
+      <CommandPalette />
 
       {/* ═══════════════════════════════════════════════════════════════
           QUICK ACTIONS FAB
