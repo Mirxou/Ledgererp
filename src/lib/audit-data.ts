@@ -135,18 +135,34 @@ export const SECURITY_ZONES = [
 
 /* ── Export Utilities ─────────────────────────────────────────────────── */
 
-export function exportJSON(report: AuditReport) {
-  const criticalExport = report.criticalFindings.map((i) => ({
+interface ExportIssue {
+  id: string;
+  severity: string;
+  source: string;
+  file: string;
+  line: number;
+  category: string;
+  title: string;
+  description: string;
+  recommendation: string;
+}
+
+function toExportIssues(report: AuditReport): ExportIssue[] {
+  const critical: ExportIssue[] = report.criticalFindings.map((i) => ({
     id: i.id, severity: "critical", source: i.source, file: i.file,
     line: i.line, category: i.category, title: i.title,
     description: i.description, recommendation: i.recommendation,
   }));
-  const highExport = report.highIssues.map((i) => ({
+  const high: ExportIssue[] = report.highIssues.map((i) => ({
     id: i.id, severity: "high", source: i.source, file: i.file,
     line: i.line || 0, category: i.category, title: i.title,
+    description: "", recommendation: "",
   }));
-  const all = [...criticalExport, ...highExport];
+  return [...critical, ...high];
+}
 
+export function exportJSON(report: AuditReport) {
+  const all = toExportIssues(report);
   const blob = new Blob(
     [JSON.stringify({ meta: report.meta, summary: report.summary, issues: all }, null, 2)],
     { type: "application/json" },
@@ -160,24 +176,15 @@ export function exportJSON(report: AuditReport) {
 }
 
 export function exportCSV(report: AuditReport) {
-  const criticalExport = report.criticalFindings.map((i) => ({
-    id: i.id, severity: "critical", source: i.source, file: i.file,
-    line: i.line, category: i.category, title: i.title,
-    description: i.description, recommendation: i.recommendation,
-  }));
-  const highExport = report.highIssues.map((i) => ({
-    id: i.id, severity: "high", source: i.source, file: i.file,
-    line: i.line || 0, category: i.category, title: i.title,
-  }));
-  const all = [...criticalExport, ...highExport];
-
+  const all = toExportIssues(report);
   const headers = "ID,Severity,Source,File,Line,Category,Title,Description,Recommendation";
+  const esc = (s: string) => s.replace(/"/g, '""');
   const rows = all.map((i) =>
     [
       i.id, i.severity, i.source, i.file, i.line, i.category,
-      `"${(i.title || "").replace(/"/g, '""')}"`,
-      `"${((i as Issue).description || "").replace(/"/g, '""')}"`,
-      `"${((i as Issue).recommendation || "").replace(/"/g, '""')}"`,
+      `"${esc(i.title || "")}"`,
+      `"${esc(i.description || "")}"`,
+      `"${esc(i.recommendation || "")}"`,
     ].join(","),
   );
   const blob = new Blob(
@@ -193,16 +200,7 @@ export function exportCSV(report: AuditReport) {
 }
 
 export function copyToClipboard(report: AuditReport) {
-  const criticalExport = report.criticalFindings.map((i) => ({
-    id: i.id, severity: "critical", source: i.source, file: i.file,
-    line: i.line, category: i.category, title: i.title,
-    description: i.description, recommendation: i.recommendation,
-  }));
-  const highExport = report.highIssues.map((i) => ({
-    id: i.id, severity: "high", source: i.source, file: i.file,
-    line: i.line || 0, category: i.category, title: i.title,
-  }));
-  const all = [...criticalExport, ...highExport];
+  const all = toExportIssues(report);
   navigator.clipboard.writeText(
     JSON.stringify({ meta: report.meta, summary: report.summary, issues: all }, null, 2),
   );

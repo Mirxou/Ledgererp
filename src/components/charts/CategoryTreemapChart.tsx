@@ -6,8 +6,18 @@ import { motion } from "framer-motion";
 import {
   Treemap,
   ResponsiveContainer,
-  type TreemapNode,
 } from "recharts";
+
+type TreemapNode = {
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
+  name?: string;
+  value?: number;
+  depth?: number;
+  index?: number;
+};
 import { LayoutGrid } from "lucide-react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { PiSectionHeader } from "@/components/ui/PiSectionHeader";
@@ -67,7 +77,7 @@ function CustomContent(props: Record<string, unknown>) {
   if (!x || !y || !width || !height || !name) return null;
   if (width < 50 || height < 36) return null;
 
-  const item: CategoryData = { name, size: value ?? 0, critical: props.critical, high: props.high };
+  const item: CategoryData = { name: name ?? "", size: value ?? 0, critical: props.critical as number | undefined, high: props.high as number | undefined };
   const severity = getSeverityLevel(item);
   const colors = COLORS[severity];
 

@@ -34,7 +34,7 @@ export async function POST(req: NextRequest) {
 
 أجب باللغة العربية بشكل احترافي ومفصل.`;
 
-    const ai = new ZAI();
+    const ai = await ZAI.create();
     const completion = await ai.chat.completions.create({
       model: "deepseek-chat",
       messages: [

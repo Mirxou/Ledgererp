@@ -57,7 +57,7 @@ export async function POST(request: NextRequest) {
       day: "numeric",
     });
 
-    const filterDesc = [];
+    const filterDesc: string[] = [];
     if (filters?.severity && filters.severity !== "ALL")
       filterDesc.push(`الخطورة: ${SEVERITY_MAP[filters.severity]?.label ?? filters.severity}`);
     if (filters?.status && filters.status !== "ALL")

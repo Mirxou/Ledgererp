@@ -25,8 +25,8 @@ import { toast } from "sonner";
    ════════════════════════════════════════════════════════════════════════════ */
 
 interface QuickActionsProps {
-  onQuickAiAnalysis: (issue: IssueWithStatus) => void;
-  onRefresh: () => void;
+  onQuickAiAnalysis?: (issue: IssueWithStatus) => void;
+  onRefresh?: () => void;
 }
 
 export function QuickActions({ onQuickAiAnalysis, onRefresh }: QuickActionsProps) {
@@ -38,7 +38,7 @@ export function QuickActions({ onQuickAiAnalysis, onRefresh }: QuickActionsProps
       (i) => i.severity === "CRITICAL" && i.status === "open"
     );
     if (criticalOpen) {
-      onQuickAiAnalysis(criticalOpen);
+      onQuickAiAnalysis?.(criticalOpen);
     } else {
       toast.info("لا توجد مشاكل حرجة مفتوحة للتحليل");
     }
@@ -96,7 +96,6 @@ export function QuickActions({ onQuickAiAnalysis, onRefresh }: QuickActionsProps
           align="start"
           side="top"
           className="w-56 animate-in fade-in-0 slide-in-from-bottom-2 duration-200"
-          dir="rtl"
         >
           <DropdownMenuItem
             onClick={handleQuickAi}
@@ -140,7 +139,7 @@ export function QuickActions({ onQuickAiAnalysis, onRefresh }: QuickActionsProps
             </div>
           </DropdownMenuItem>
           <DropdownMenuItem
-            onClick={onRefresh}
+            onClick={() => onRefresh?.()}
             className="gap-3 cursor-pointer py-2.5"
           >
             <RefreshCw className="h-4 w-4 text-amber-500" />

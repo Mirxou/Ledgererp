@@ -51,8 +51,8 @@ ${contextSummary}
 - ركّز على الصورة الكلية للأمان
 - اقترح خطوات عملية وواقعية`;
 
-    const messages = [
-      { role: "system" as const, content: systemPrompt },
+    const messages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
+      { role: "system", content: systemPrompt },
     ];
 
     // Add conversation context if provided
@@ -65,7 +65,7 @@ ${contextSummary}
     }
 
     // Add current message
-    messages.push({ role: "user" as const, content: message });
+    messages.push({ role: "user", content: message });
 
     /* ── Call AI ─────────────────────────────────────────────────── */
     const ai = await ZAI.create();

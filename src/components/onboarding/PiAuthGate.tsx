@@ -11,7 +11,7 @@ import { usePi } from "@/lib/pi-context";
    ════════════════════════════════════════════════════════════════════════════ */
 
 export function PiAuthGate({ children }: { children: React.ReactNode }) {
-  const { piUser, authenticate } = usePi();
+  const { piUser, piAuth } = usePi();
   const [isVisitor, setIsVisitor] = useState(() => {
     if (typeof window !== "undefined") {
       return localStorage.getItem("ledgererp-visitor") === "true";
@@ -30,7 +30,7 @@ export function PiAuthGate({ children }: { children: React.ReactNode }) {
   const handlePiAuth = async () => {
     setAuthLoading(true);
     try {
-      await authenticate();
+      await piAuth();
       localStorage.setItem("ledgererp-pi-auth", "true");
     } catch {
       // Auth failed or not in Pi Browser — still let them in
