@@ -910,3 +910,56 @@
 .verdict-banner-wrapper > .animate-verdict-border-spin {
   z-index: 0;
 }
+
+/* ==========================================================================
+   16. WALLET & LOADING ANIMATIONS
+   Additional animations for new dashboard components.
+   ========================================================================== */
+
+/* Wallet card gradient border spin */
+@keyframes wallet-border-spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-wallet-border-spin {
+  animation: wallet-border-spin 6s linear infinite;
+}
+
+/* Loading screen sparkle effect */
+@keyframes loading-sparkle {
+  0%, 100% {
+    opacity: 0.1;
+    transform: scale(0.8) translateY(0);
+  }
+  50% {
+    opacity: 0.6;
+    transform: scale(1.5) translateY(-8px);
+  }
+}
+
+.animate-loading-sparkle {
+  animation: loading-sparkle 3s ease-in-out infinite;
+}
+
+/* Custom scrollbar for wallet transactions */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: oklch(0.55 0.25 295 / 30%);
+  border-radius: 999px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: oklch(0.55 0.25 295 / 50%);
+}

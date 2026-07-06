@@ -25,8 +25,13 @@ import { Input } from "@/components/ui/input";
 import { ScoreRing } from "@/components/charts/ScoreRing";
 import { DonutChart } from "@/components/charts/DonutChart";
 import { HorizontalBarChart } from "@/components/charts/HorizontalBarChart";
+import { SeverityTrendChart } from "@/components/charts/SeverityTrendChart";
+import { SecurityRadarChart } from "@/components/charts/SecurityRadarChart";
+import { CategoryTreemapChart } from "@/components/charts/CategoryTreemapChart";
+import { ScoreComparisonChart } from "@/components/charts/ScoreComparisonChart";
+import { FixProgressGauge } from "@/components/charts/FixProgressGauge";
 import { StatCard } from "@/components/dashboard/StatCard";
-import { VerdictBanner } from "@/components/dashboard/VerdictBanner";
+import { AdvancedVerdictBanner } from "@/components/dashboard/AdvancedVerdictBanner";
 import { ExportDropdown } from "@/components/dashboard/ExportDropdown";
 import { SecurityZones } from "@/components/dashboard/SecurityZones";
 import { CriticalIssueCard } from "@/components/issues/CriticalIssueCard";
@@ -41,11 +46,17 @@ import { PiUserProfile } from "@/components/dashboard/PiUserProfile";
 import { SubscriptionCards } from "@/components/dashboard/SubscriptionCard";
 import { NotificationBell } from "@/components/dashboard/NotificationBell";
 import { QuickActions } from "@/components/dashboard/QuickActions";
+import { GamificationPanel } from "@/components/dashboard/GamificationPanel";
+import { ActivityTimeline } from "@/components/dashboard/ActivityTimeline";
+import { AiAdvisorChat } from "@/components/dashboard/AiAdvisorChat";
 import { usePi } from "@/lib/pi-context";
 import { toast } from "sonner";
 import { PiNetworkMonitor } from "@/components/dashboard/PiNetworkMonitor";
 import { PiNetworkStatus } from "@/components/dashboard/PiNetworkStatus";
 import { PwaInstallPrompt } from "@/components/dashboard/PwaInstallPrompt";
+import { PiWalletCard } from "@/components/dashboard/PiWalletCard";
+import { PiEcosystemStats } from "@/components/dashboard/PiEcosystemStats";
+import { PiComplianceChecker } from "@/components/dashboard/PiComplianceChecker";
 
 /* ── Data Layer ───────────────────────────────────────────────────────── */
 
@@ -330,7 +341,7 @@ export default function AuditDashboard() {
       <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-6 space-y-6">
 
         {/* ──── VERDICT BANNER ──────────────────────────────────────── */}
-        <VerdictBanner report={report} />
+        <AdvancedVerdictBanner report={report} />
 
         {/* ──── STAT CARDS ──────────────────────────────────────────── */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
@@ -369,31 +380,68 @@ export default function AuditDashboard() {
           {/* ──── OVERVIEW TAB ──────────────────────────────────────── */}
           <TabsContent value="overview" className="space-y-6">
 
-            {/* Fix Progress Card */}
-            <FixProgressCard issues={dbIssues.length > 0 ? dbIssues : []} />
+            {/* Fix Progress Card + Gauge */}
+            <div className="grid md:grid-cols-2 gap-6">
+              <FixProgressCard issues={dbIssues.length > 0 ? dbIssues : []} />
+              <Card className={CARD_DEPTH}>
+                <CardContent className="p-4 flex items-center justify-center">
+                  <FixProgressGauge
+                    fixed={dbIssues.filter((i) => i.status === "fixed").length}
+                    total={dbIssues.length || 95}
+                    showHeader={false}
+                  />
+                </CardContent>
+              </Card>
+            </div>
 
-            {/* Score Rings */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {/* Gamification + Activity Timeline */}
+            <div className="grid md:grid-cols-2 gap-6">
+              <GamificationPanel />
+              <ActivityTimeline />
+            </div>
+
+            {/* Severity Trend Chart (7-Day) */}
+            <SeverityTrendChart />
+
+            {/* Score Rings + Radar */}
+            <div className="grid md:grid-cols-2 gap-6">
               <Card className={CARD_DEPTH}>
-                <CardContent className="p-4 flex flex-col items-center">
-                  <ScoreRing score={report.scores.backend.overall} label="الخادم" size={100} />
+                <CardContent className="p-4">
+                  <SecurityRadarChart
+                    scores={{
+                      الأمان: report.scores.backend.security,
+                      البنية: report.scores.backend.architecture,
+                      "جودة الكود": report.scores.backend.codeQuality,
+                      التشفير: Math.round((report.scores.backend.security + report.scores.frontend.security) / 2),
+                      المصادقة: report.scores.backend.security,
+                      الأداء: report.scores.backend.codeQuality,
+                    }}
+                    showHeader={false}
+                  />
                 </CardContent>
               </Card>
-              <Card className={CARD_DEPTH}>
-                <CardContent className="p-4 flex flex-col items-center">
-                  <ScoreRing score={report.scores.frontend.overall} label="الواجهة الأمامية" size={100} />
-                </CardContent>
-              </Card>
-              <Card className={CARD_DEPTH}>
-                <CardContent className="p-4 flex flex-col items-center">
-                  <ScoreRing score={report.scores.piNetwork.overall} label="شبكة بي" size={100} />
-                </CardContent>
-              </Card>
-              <Card className={CARD_DEPTH}>
-                <CardContent className="p-4 flex flex-col items-center">
-                  <ScoreRing score={report.scores.overall} label="النتيجة العامة" size={100} />
-                </CardContent>
-              </Card>
+              <div className="grid grid-cols-2 gap-4">
+                <Card className={CARD_DEPTH}>
+                  <CardContent className="p-4 flex flex-col items-center">
+                    <ScoreRing score={report.scores.backend.overall} label="الخادم" size={100} />
+                  </CardContent>
+                </Card>
+                <Card className={CARD_DEPTH}>
+                  <CardContent className="p-4 flex flex-col items-center">
+                    <ScoreRing score={report.scores.frontend.overall} label="الواجهة الأمامية" size={100} />
+                  </CardContent>
+                </Card>
+                <Card className={CARD_DEPTH}>
+                  <CardContent className="p-4 flex flex-col items-center">
+                    <ScoreRing score={report.scores.piNetwork.overall} label="شبكة بي" size={100} />
+                  </CardContent>
+                </Card>
+                <Card className={CARD_DEPTH}>
+                  <CardContent className="p-4 flex flex-col items-center">
+                    <ScoreRing score={report.scores.overall} label="النتيجة العامة" size={100} />
+                  </CardContent>
+                </Card>
+              </div>
             </div>
 
             {/* Backend & Frontend Scores + Donut */}
@@ -422,6 +470,14 @@ export default function AuditDashboard() {
               </Card>
             </div>
 
+            {/* Score Comparison Chart */}
+            <ScoreComparisonChart
+              backend={report.scores.backend}
+              frontend={report.scores.frontend}
+              piNetwork={report.scores.piNetwork}
+              overall={report.scores.overall}
+            />
+
             {/* Category Breakdown Chart */}
             <Card className={CARD_DEPTH}>
               <CardHeader className="pb-3">
@@ -433,6 +489,16 @@ export default function AuditDashboard() {
                 </ScrollArea>
               </CardContent>
             </Card>
+
+            {/* Category Treemap */}
+            <CategoryTreemapChart
+              data={(report.categoryBreakdown ?? []).map((c) => ({
+                name: c.category,
+                size: c.total,
+                critical: c.critical,
+                high: c.high,
+              }))}
+            />
 
             {/* File Heatmap */}
             <Card className={CARD_DEPTH}>
@@ -783,6 +849,15 @@ export default function AuditDashboard() {
           {/* ──── PI NETWORK TAB ────────────────────────────────────── */}
           <TabsContent value="pi-network" className="space-y-6">
 
+            {/* Pi Wallet Card */}
+            <PiWalletCard />
+
+            {/* Pi Ecosystem Stats */}
+            <PiEcosystemStats />
+
+            {/* Pi Compliance Checker */}
+            <PiComplianceChecker />
+
             {/* Subscription Plans */}
             <div className="space-y-4">
               <PiSectionHeader icon={<svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2L3 7v5c0 5.25 3.83 10.16 9 11.25C17.17 22.16 21 17.25 21 12V7l-9-5z"/><path d="M12 8v4"/><path d="M12 16h.01"/></svg>}>خطط الاشتراك</PiSectionHeader>
@@ -798,138 +873,6 @@ export default function AuditDashboard() {
 
             {/* Live Pi Network Monitoring Dashboard */}
             <PiNetworkMonitor />
-
-            <Separator className="my-2" />
-
-            {/* Pi Network Compliance Score Ring */}
-            <Card className={CARD_DEPTH}>
-              <CardHeader className="pb-4">
-                <CardTitle className="text-sm flex items-center gap-2 text-purple-600 dark:text-purple-400">
-                  <Globe className="h-4 w-4" />درجة التوافق مع شبكة بي
-                </CardTitle>
-                <CardDescription>تقييم شامل لجاهزية شبكة بي</CardDescription>
-              </CardHeader>
-              <CardContent className="flex justify-center">
-                <ScoreRing score={report.scores.piNetwork.overall} label="توافق شبكة بي" size={140} />
-              </CardContent>
-            </Card>
-
-            {/* Blocking Issues */}
-            <Card className={`border-red-200/60 dark:border-red-900/40 ${CARD_DEPTH}`}>
-              <CardHeader className="pb-4">
-                <CardTitle className="text-base flex items-center gap-2 text-red-600 dark:text-red-400">
-                  <XCircle className="h-5 w-5" />{report.piNetworkCompliance.blockingIssues.length} مشاكل تعطل النشر
-                </CardTitle>
-                <CardDescription>يجب حل جميع هذه المشاكل قبل أن توافق شبكة بي على التطبيق</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  {report.piNetworkCompliance.blockingIssues.map((issue, i) => (
-                    <div key={i} className="flex items-start gap-3 p-4 rounded-xl bg-red-50/70 dark:bg-red-950/20 border border-red-200/60 dark:border-red-900/40">
-                      <XCircle className="h-4 w-4 text-red-500 mt-0.5 flex-shrink-0" />
-                      <p className="text-sm leading-relaxed break-words">{issue}</p>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Non-Custodial Claim Verification */}
-            <Card className={`border-red-200/60 dark:border-red-900/40 ${CARD_DEPTH}`}>
-              <CardHeader className="pb-4">
-                <CardTitle className="text-sm flex items-center gap-2 text-red-600 dark:text-red-400">
-                  <ShieldX className="h-4 w-4" />التحقق من ادعاء عدم الحضانة
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="p-5 rounded-xl bg-red-50/70 dark:bg-red-950/20 border border-red-200/60 dark:border-red-900/40">
-                  <div className="flex items-start gap-4">
-                    <div className="w-12 h-12 rounded-xl bg-red-100 dark:bg-red-900/50 flex items-center justify-center flex-shrink-0">
-                      <XCircle className="h-6 w-6 text-red-600 dark:text-red-400" />
-                    </div>
-                    <div className="flex-1">
-                      <h4 className="font-bold text-sm text-red-700 dark:text-red-400 mb-2">الادعاء كاذب — النظام حضانتي بالأساس</h4>
-                      <p className="text-xs text-muted-foreground leading-relaxed mb-3">
-                        يدّعي README و SECURITY.md و manifest أن هذا نظام &ldquo;غير حضانتي&rdquo;.
-                        لكن الخادم يُشتق جميع مفاتيح Stellar السرية للمستخدمين بشكل حتمي من{" "}
-                        <code className="mx-1 px-1.5 py-0.5 bg-red-100 dark:bg-red-900/50 rounded text-red-700 dark:text-red-400 font-mono text-[10px]" dir="ltr">
-                          SHA256(SECRET_KEY:UID)
-                        </code>{" "}
-                        ويتولى توقيع جميع المعاملات من جانب الخادم. إذا تسرب المفتاح الرئيسي، فإن جميع محافظ المستخدمين على المنصة ستُخترق.
-                      </p>
-                      <div className="flex flex-wrap gap-2">
-                        <Badge className="bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-400 text-[10px] border-red-200 dark:border-red-800">ادعاء كاذب</Badge>
-                        <Badge className="bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-400 text-[10px] border-red-200 dark:border-red-800">أمان بالتخفي</Badge>
-                        <Badge className="bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-400 text-[10px] border-red-200 dark:border-red-800">نقطة فشل واحدة</Badge>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <div className="grid md:grid-cols-2 gap-6">
-              {/* Deployment Issues */}
-              <Card className={CARD_DEPTH}>
-                <CardHeader className="pb-4">
-                  <PiSectionHeader icon={<Server className="h-4 w-4 text-orange-500" />} count={report.piNetworkCompliance.deploymentIssues.length}>مشاكل النشر</PiSectionHeader>
-                </CardHeader>
-                <CardContent className="space-y-2.5">
-                  {report.piNetworkCompliance.deploymentIssues.map((issue, i) => (
-                    <div key={i} className="flex items-start gap-2.5 text-xs p-3 rounded-lg bg-orange-50/70 dark:bg-orange-950/20 border border-orange-200/50 dark:border-orange-900/40">
-                      <AlertTriangle className="h-3.5 w-3.5 text-orange-500 mt-0.5 flex-shrink-0" />
-                      <span className="leading-relaxed break-words">{issue}</span>
-                    </div>
-                  ))}
-                </CardContent>
-              </Card>
-
-              {/* Security Headers */}
-              <Card className={CARD_DEPTH}>
-                <CardHeader className="pb-4">
-                  <PiSectionHeader icon={<ShieldAlert className="h-4 w-4 text-amber-500" />} count={report.piNetworkCompliance.securityHeaders.length}>رؤوس أمان مفقودة</PiSectionHeader>
-                </CardHeader>
-                <CardContent className="space-y-2.5">
-                  {report.piNetworkCompliance.securityHeaders.map((issue, i) => (
-                    <div key={i} className="flex items-start gap-2.5 text-xs p-3 rounded-lg bg-amber-50/70 dark:bg-amber-950/20 border border-amber-200/50 dark:border-amber-900/40">
-                      <AlertTriangle className="h-3.5 w-3.5 text-amber-500 mt-0.5 flex-shrink-0" />
-                      <span className="leading-relaxed break-words">{issue}</span>
-                    </div>
-                  ))}
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Manifest Issues */}
-            <Card className={CARD_DEPTH}>
-              <CardHeader className="pb-4">
-                <PiSectionHeader icon={<FileWarning className="h-4 w-4 text-violet-500" />} count={report.piNetworkCompliance.manifestIssues.length}>مشاكل توافق Manifest</PiSectionHeader>
-              </CardHeader>
-              <CardContent className="space-y-2.5">
-                {report.piNetworkCompliance.manifestIssues.map((issue, i) => (
-                  <div key={i} className="flex items-start gap-2.5 text-xs p-3 rounded-lg bg-violet-50/70 dark:bg-violet-950/20 border border-violet-200/50 dark:border-violet-900/40">
-                    <AlertTriangle className="h-3.5 w-3.5 text-violet-500 mt-0.5 flex-shrink-0" />
-                    <span className="leading-relaxed break-words">{issue}</span>
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-
-            {/* Pi Network Detailed Scores */}
-            <Card className={CARD_DEPTH}>
-              <CardHeader className="pb-4">
-                <PiSectionHeader icon={<Gauge className="h-4 w-4" />}>درجات شبكة بي التفصيلية</PiSectionHeader>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <LabeledProgress label="توافق Manifest" value={report.scores.piNetwork.manifestCompliance} />
-                <LabeledProgress label="التحقق من النطاق" value={report.scores.piNetwork.domainVerification} />
-                <LabeledProgress label="إدارة مفتاح API" value={report.scores.piNetwork.apiKeyManagement} />
-                <LabeledProgress label="سير الدفع" value={report.scores.piNetwork.paymentFlow} />
-                <LabeledProgress label="KYC / KYB" value={report.scores.piNetwork.kycKyb} />
-                <LabeledProgress label="جاهزية النشر" value={report.scores.piNetwork.deploymentReadiness} />
-                <LabeledProgress label="عدم الحضانة" value={report.scores.piNetwork.nonCustodial} />
-              </CardContent>
-            </Card>
           </TabsContent>
         </Tabs>
       </main>
@@ -969,6 +912,11 @@ export default function AuditDashboard() {
           toast.success("تم تحديث البيانات");
         }}
       />
+
+      {/* ═══════════════════════════════════════════════════════════════
+          AI ADVISOR CHAT
+         ═══════════════════════════════════════════════════════════════ */}
+      <AiAdvisorChat />
 
       {/* ═══════════════════════════════════════════════════════════════
           FOOTER (sticky)
