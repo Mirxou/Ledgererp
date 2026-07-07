@@ -1,7 +1,6 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  output: "standalone",
   reactStrictMode: false,
   // Allow Preview Panel cross-origin access
   allowedDevOrigins: ["http://127.0.0.1:81", "http://localhost:3000"],
