@@ -31,22 +31,22 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  title: "Ledgererp — تقرير التدقيق الأمني | Pi Network",
+  title: "Ledgererp — دراسة معمقة: إكوسيستم Pi والتجارة الإلكترونية",
   description:
-    "تقرير تدقيق أمني شامل لنظام Ledgererp ERP على شبكة Pi Network. تحليل 67 ملفًا و4800+ سطر كود.",
+    "دراسة معمقة من منظور الدكتور نيكولاس كوكاليس حول إكوسيستم شبكة Pi وأهمية تطبيقات الفواتير والضمان للتجارة الإلكترونية.",
   keywords: [
-    "Pi Network", "Ledgererp", "تدقيق أمني", "ERP", "غير حضانتي",
-    "Pi Browser", "Stellar", "Blockchain", "FastAPI", "develop.pinet.com",
+    "Pi Network", "Ledgererp", "دراسة إكوسيستم", "فواتير", "ضمان",
+    "Pi Browser", "Escrow", "Commerce", "Mainnet", "develop.pinet.com",
     "Security Audit", "أمان",
   ],
-  authors: [{ name: "فريق أمان Ledgererp", url: "https://github.com/Mirxou/Ledgererp" }],
+  authors: [{ name: "Ledgererp", url: "https://github.com/Mirxou/Ledgererp" }],
   icons: {
     icon: "/pi-shield-logo.svg",
     apple: "/apple-touch-icon.svg",
   },
   openGraph: {
-    title: "تقرير التدقيق الأمني — Ledgererp",
-    description: "تدقيق أمني لـ Ledgererp على شبكة Pi — 114 مشكلة، 23 حرجة. تحليل شامل مع توصيات قابلة للتنفيذ.",
+    title: "دراسة إكوسيستم Pi — Ledgererp",
+    description: "دراسة معمقة حول إكوسيستم Pi Network وأهمية تطبيقات الفواتير والضمان التجاري.",
     url: "https://ledgererp.online",
     siteName: "Ledgererp",
     type: "website",
@@ -54,14 +54,14 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "تقرير التدقيق الأمني — Ledgererp",
-    description: "تدقيق Ledgererp الأمني — 114 مشكلة، 23 ثغرة حرجة.",
+    title: "دراسة إكوسيستم Pi — Ledgererp",
+    description: "دراسة معمقة حول إكوسيستم Pi Network وتطبيقات التجارة الإلكترونية.",
   },
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "Ledgererp Audit",
+    title: "Ledgererp — Pi Study",
   },
   formatDetection: {
     telephone: false,

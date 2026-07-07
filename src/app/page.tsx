@@ -1,926 +1,752 @@
 "use client";
 
-import { useEffect, useState, useCallback, useMemo } from "react";
-import { useTheme } from "next-themes";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState, useEffect } from "react";
 import {
-  ShieldAlert, XCircle, AlertTriangle, ShieldCheck,
-  LayoutGrid, Flame, Zap, Globe, ShieldX, Server,
-  BarChart3, Search, FileCode2, FileWarning, Code2,
-  Activity, FolderOpen, Cpu, Target, Gauge, Github,
-  Sun, Moon, Wrench, Trophy, Radar,
+  BookOpen, Shield, Globe, ArrowRight, ChevronDown, ChevronUp,
+  Star, Users, Wallet, ShoppingCart, FileText, Lock, Eye,
+  AlertTriangle, CheckCircle2, ExternalLink, Building2, TrendingUp,
+  Layers, Code2, Database, MessageSquare, CreditCard, Truck,
+  Scale, BarChart3, Target, Zap, Heart, Lightbulb, ShieldCheck,
+  ArrowLeftRight, FileCheck, Receipt, BadgeCheck, CircleDot,
 } from "lucide-react";
-import {
-  Card, CardContent, CardDescription, CardHeader, CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
-import { Input } from "@/components/ui/input";
 
-/* ── Extracted Components ─────────────────────────────────────────────── */
+/* ─── Sticky TOC ──────────────────────────────────────────── */
+function TableOfContents({ sections, activeId }: { sections: { id: string; title: string }[]; activeId: string }) {
+  return (
+    <nav className="hidden xl:block fixed top-24 right-6 w-72 max-h-[calc(100vh-120px)] overflow-y-auto rounded-xl border bg-white/95 backdrop-blur p-4 shadow-lg z-50 no-print">
+      <h3 className="text-sm font-bold text-purple-800 mb-3">فهرس الدراسة</h3>
+      <ul className="space-y-1.5 text-[13px]">
+        {sections.map((s) => (
+          <li key={s.id}>
+            <a
+              href={`#${s.id}`}
+              className={`block py-1 transition-colors ${
+                activeId === s.id
+                  ? "text-purple-700 font-bold border-r-2 border-purple-600 pr-2"
+                  : "text-gray-600 hover:text-purple-600"
+              }`}
+            >
+              {s.title}
+            </a>
+          </li>
+        ))}
+      </ul>
+    </nav>
+  );
+}
 
-import { ScoreRing } from "@/components/charts/ScoreRing";
-import { DonutChart } from "@/components/charts/DonutChart";
-import { HorizontalBarChart } from "@/components/charts/HorizontalBarChart";
-import { SeverityTrendChart } from "@/components/charts/SeverityTrendChart";
-import { SecurityRadarChart } from "@/components/charts/SecurityRadarChart";
-import { CategoryTreemapChart } from "@/components/charts/CategoryTreemapChart";
-import { ScoreComparisonChart } from "@/components/charts/ScoreComparisonChart";
-import { FixProgressGauge } from "@/components/charts/FixProgressGauge";
-import { StatCard } from "@/components/dashboard/StatCard";
-import { AdvancedVerdictBanner } from "@/components/dashboard/AdvancedVerdictBanner";
-import { DashboardSkeleton } from "@/components/dashboard/DashboardSkeleton";
-import { ExportDropdown } from "@/components/dashboard/ExportDropdown";
-import { SecurityZones } from "@/components/dashboard/SecurityZones";
-import { CriticalIssueCard } from "@/components/issues/CriticalIssueCard";
-import { IssueRow } from "@/components/issues/IssueRow";
-import { IssueDetailSheet } from "@/components/issues/IssueDetailSheet";
-import { AiAnalysisDialog } from "@/components/issues/AiAnalysisDialog";
-import { FixProgressCard } from "@/components/dashboard/FixProgressCard";
-import { FixTimeline } from "@/components/dashboard/FixTimeline";
-import { LabeledProgress } from "@/components/ui/LabeledProgress";
-import { PiSectionHeader } from "@/components/ui/PiSectionHeader";
-import { PiUserProfile } from "@/components/dashboard/PiUserProfile";
-import { SubscriptionCards } from "@/components/dashboard/SubscriptionCard";
-import { NotificationBell } from "@/components/dashboard/NotificationBell";
-import { QuickActions } from "@/components/dashboard/QuickActions";
-import { GamificationPanel } from "@/components/dashboard/GamificationPanel";
-import { ActivityTimeline } from "@/components/dashboard/ActivityTimeline";
-import { AiAdvisorChat } from "@/components/dashboard/AiAdvisorChat";
-import { usePi } from "@/lib/pi-context";
-import { toast } from "sonner";
-import { PiNetworkMonitor } from "@/components/dashboard/PiNetworkMonitor";
-import { PiNetworkStatus } from "@/components/dashboard/PiNetworkStatus";
-import { PwaInstallPrompt } from "@/components/dashboard/PwaInstallPrompt";
-import { PiWalletCard } from "@/components/dashboard/PiWalletCard";
-import { PiEcosystemStats } from "@/components/dashboard/PiEcosystemStats";
-import { PiComplianceChecker } from "@/components/dashboard/PiComplianceChecker";
-import { CommandPalette } from "@/components/dashboard/CommandPalette";
-import { ThreatLevelIndicator } from "@/components/dashboard/ThreatLevelIndicator";
-import { GlobalLeaderboard } from "@/components/dashboard/GlobalLeaderboard";
-import { LiveThreatFeed } from "@/components/dashboard/LiveThreatFeed";
-import { SecurityScoreBreakdown } from "@/components/dashboard/SecurityScoreBreakdown";
-import { PiAuthGate } from "@/components/onboarding/PiAuthGate";
-import { AppHeader } from "@/components/layout/AppHeader";
-import { AppFooter } from "@/components/layout/AppFooter";
-
-/* ── Data Layer ───────────────────────────────────────────────────────── */
-
-import {
-  AuditReport, Issue,
-  exportJSON, exportCSV, copyToClipboard,
-} from "@/lib/audit-data";
-import { useIssueStore, type IssueWithStatus } from "@/lib/store";
-import type { TierKey } from "@/lib/subscription";
-
-/* ════════════════════════════════════════════════════════════════════════════
-   MAIN PAGE
-   ════════════════════════════════════════════════════════════════════════════ */
-
-export default function AuditDashboard() {
-  const [report, setReport] = useState<AuditReport | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState("overview");
-  const [searchQuery, setSearchQuery] = useState("");
-  const [filterSource, setFilterSource] = useState<string>("all");
-  const [copied, setCopied] = useState(false);
-  const [selectedIssue, setSelectedIssue] = useState<Issue | null>(null);
-  const [selectedSeverity, setSelectedSeverity] = useState("CRITICAL");
-  const [selectedIsBrief, setSelectedIsBrief] = useState(false);
-  const [sheetOpen, setSheetOpen] = useState(false);
-  const [securityOpen, setSecurityOpen] = useState<Record<string, boolean>>({
-    "ثغرات XSS": true,
-    "المصادقة والتفويض": true,
-    "مشاكل التشفير": true,
-    "التخزين والبيانات غير الآمنة": true,
-  });
-  const [aiDialogOpen, setAiDialogOpen] = useState(false);
-  const { theme, setTheme } = useTheme();
-  const queryClient = useQueryClient();
-  const { piUser } = usePi();
-  const [currentTier] = useState<TierKey>("free");
-
-  /* ── Zustand Store ─────────────────────────────────────────────────── */
-
-  const {
-    issues: dbIssues,
-    setIssues,
-    filterStatus,
-    setFilterStatus,
-    aiDialogIssue,
-    setAiDialogIssue,
-    updateLocalIssueStatus,
-  } = useIssueStore();
-
-  /* ── TanStack Query: Fetch issues from DB ──────────────────────────── */
-
-  const { data: issuesData, isLoading: issuesLoading } = useQuery<{ issues: IssueWithStatus[] }>({
-    queryKey: ["issues", filterStatus],
-    queryFn: async () => {
-      const params = new URLSearchParams();
-      if (filterStatus !== "ALL") params.set("status", filterStatus);
-      const res = await fetch(`/api/issues?${params.toString()}`);
-      if (!res.ok) throw new Error("فشل");
-      return res.json();
-    },
-    refetchInterval: 15000,
-  });
-
-  useEffect(() => {
-    if (issuesData?.issues) {
-      setIssues(issuesData.issues);
-    }
-  }, [issuesData, setIssues]);
-
-  /* Build lookup map: issueId -> dbIssue */
-  const dbIssueMap = useMemo(() => {
-    const map = new Map<string, IssueWithStatus>();
-    for (const issue of dbIssues) {
-      map.set(issue.issueId, issue);
-    }
-    return map;
-  }, [dbIssues]);
-
-  /* ── Status Change Handler ─────────────────────────────────────────── */
-
-  const handleStatusChange = useCallback(async (issueId: string, newStatus: string) => {
-    try {
-      const res = await fetch("/api/issues", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ issueId, status: newStatus }),
-      });
-      if (!res.ok) throw new Error();
-      updateLocalIssueStatus(issueId, newStatus);
-      queryClient.invalidateQueries({ queryKey: ["issues"] });
-      queryClient.invalidateQueries({ queryKey: ["timeline"] });
-    } catch {
-      console.error("Failed to update status");
-    }
-  }, [updateLocalIssueStatus, queryClient]);
-
-  /* ── AI Analysis Handler ──────────────────────────────────────────── */
-
-  const handleAiAnalysis = useCallback((dbIssue: IssueWithStatus) => {
-    setAiDialogIssue(dbIssue);
-    setAiDialogOpen(true);
-  }, [setAiDialogIssue]);
-
-  /* ── Fetch audit report ───────────────────────────────────────────── */
-
-  useEffect(() => {
-    fetch("/api/audit")
-      .then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
-      .then((d) => { setReport(d); setLoading(false); })
-      .catch((err) => { console.error("Failed to load audit data:", err); setLoading(false); });
-  }, []);
-
-  /* ── Export ────────────────────────────────────────────────────────── */
-
-  const handleExport = useCallback((format: "json" | "csv" | "clipboard") => {
-    if (!report) return;
-    if (format === "json") exportJSON(report);
-    else if (format === "csv") exportCSV(report);
-    else {
-      copyToClipboard(report);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    }
-  }, [report]);
-
-  /* ── Open issue sheet ──────────────────────────────────────────────── */
-
-  const openSheet = useCallback((issue: Issue, severity: string, isBrief = false) => {
-    setSelectedIssue(issue);
-    setSelectedSeverity(severity);
-    setSelectedIsBrief(isBrief);
-    setSheetOpen(true);
-  }, []);
-
-  /* ── Toggle security zone ──────────────────────────────────────────── */
-
-  const toggleZone = useCallback((title: string) => {
-    setSecurityOpen((prev) => ({ ...prev, [title]: !prev[title] }));
-  }, []);
-
-  /* ── Computed data ──────────────────────────────────────────────────── */
-
-  const donutData = useMemo(() => [
-    { label: "حرج", value: report?.summary.critical ?? 0, color: "#dc2626" },
-    { label: "مرتفع", value: report?.summary.high ?? 0, color: "#f97316" },
-    { label: "متوسط", value: report?.summary.medium ?? 0, color: "#eab308" },
-    { label: "منخفض", value: report?.summary.low ?? 0, color: "#0ea5e9" },
-  ], [report]);
-
-  const categoryBarData = useMemo(() => (report?.categoryBreakdown ?? []).map((c) => ({
-    label: c.category,
-    value: c.total,
-    color: c.critical > 0 ? "#dc2626" : c.high > 0 ? "#f97316" : "#eab308",
-  })), [report]);
-
-  const fileHeatData = useMemo(() => (report?.fileHeatmap ?? []).map((f) => ({
-    label: f.file.replace("static/", "").replace("app/", ""),
-    value: f.total,
-    color: f.critical > 0 ? "#dc2626" : f.high > 0 ? "#f97316" : f.critical + f.high > 3 ? "#eab308" : "#64748b",
-  })).slice(0, 10), [report]);
-
-  const filteredCritical = useMemo(() => {
-    if (!report) return [];
-    return report.criticalFindings.filter((i) => {
-      const q = searchQuery.toLowerCase();
-      if (q && !i.title.toLowerCase().includes(q) && !i.file.toLowerCase().includes(q) && !i.category.toLowerCase().includes(q) && !i.description.toLowerCase().includes(q)) return false;
-      if (filterSource !== "all" && i.source !== filterSource) return false;
-      return true;
-    });
-  }, [report, searchQuery, filterSource]);
-
-  const filteredHigh = useMemo(() => {
-    if (!report) return [];
-    return report.highIssues.filter((i) => {
-      const q = searchQuery.toLowerCase();
-      if (q && !i.title.toLowerCase().includes(q) && !i.file.toLowerCase().includes(q) && !i.category.toLowerCase().includes(q)) return false;
-      if (filterSource !== "all" && i.source !== filterSource) return false;
-      return true;
-    });
-  }, [report, searchQuery, filterSource]);
-
-  const filteredMedium = useMemo(() => {
-    if (!report) return [];
-    return report.mediumIssues.filter((i) => {
-      const q = searchQuery.toLowerCase();
-      if (q && !i.title.toLowerCase().includes(q) && !i.file.toLowerCase().includes(q) && !i.category.toLowerCase().includes(q)) return false;
-      if (filterSource !== "all" && i.source !== filterSource) return false;
-      return true;
-    });
-  }, [report, searchQuery, filterSource]);
-
-  /* ── Fixes tab: filter issues for display ──────────────────────────── */
-
-  const fixesFilteredIssues = useMemo(() => {
-    let filtered = dbIssues;
-    if (filterStatus !== "ALL") {
-      filtered = filtered.filter((i) => i.status === filterStatus);
-    }
-    if (searchQuery) {
-      const q = searchQuery.toLowerCase();
-      filtered = filtered.filter((i) =>
-        i.title.toLowerCase().includes(q) ||
-        i.file.toLowerCase().includes(q) ||
-        i.issueId.toLowerCase().includes(q) ||
-        i.category.toLowerCase().includes(q),
-      );
-    }
-    return filtered;
-  }, [dbIssues, filterStatus, searchQuery]);
-
-  /* ── Render ────────────────────────────────────────────────────────── */
-
-  if (loading) return <DashboardSkeleton tab={activeTab} />;
-
-  if (!report) return (
-    <div className="min-h-screen flex flex-col bg-background text-foreground" dir="rtl">
-      <div className="flex-1 flex items-center justify-center">
-        <div className="text-center space-y-4">
-          <XCircle className="h-12 w-12 text-red-500 mx-auto" />
-          <p className="text-sm text-muted-foreground">فشل تحميل بيانات التدقيق. يرجى المحاولة لاحقاً.</p>
+/* ─── Section Wrapper ─────────────────────────────────────── */
+function Section({
+  id, title, icon: Icon, children, badge,
+}: {
+  id: string; title: string; icon: React.ElementType; children: React.ReactNode; badge?: string;
+}) {
+  return (
+    <section id={id} className="scroll-mt-24 mb-12">
+      <div className="flex items-center gap-3 mb-6 border-r-4 border-purple-600 pr-4">
+        <div className="p-2 bg-purple-100 rounded-lg">
+          <Icon className="w-6 h-6 text-purple-700" />
         </div>
+        <h2 className="text-2xl md:text-3xl font-bold text-gray-900">{title}</h2>
+        {badge && <Badge variant="secondary" className="bg-purple-100 text-purple-800 text-xs">{badge}</Badge>}
       </div>
+      <div className="space-y-4 text-gray-700 leading-[1.9] text-[15px] md:text-base">{children}</div>
+    </section>
+  );
+}
+
+function SubSection({ id, title, children }: { id: string; title: string; children: React.ReactNode }) {
+  return (
+    <div id={id} className="scroll-mt-24 mt-8 mb-4">
+      <h3 className="text-lg md:text-xl font-bold text-gray-800 mb-3 flex items-center gap-2">
+        <CircleDot className="w-4 h-4 text-purple-500" />
+        {title}
+      </h3>
+      <div className="space-y-3 text-gray-700 leading-[1.9] text-[15px] md:text-base pr-2">{children}</div>
     </div>
   );
+}
+
+function CalloutBox({ type, title, children }: { type: "warning" | "info" | "success"; title: string; children: React.ReactNode }) {
+  const colors = {
+    warning: "border-amber-400 bg-amber-50",
+    info: "border-blue-400 bg-blue-50",
+    success: "border-emerald-400 bg-emerald-50",
+  };
+  const icons = { warning: AlertTriangle, info: Lightbulb, success: CheckCircle2 };
+  const Icon = icons[type];
+  return (
+    <div className={`rounded-lg border-r-4 p-4 my-4 ${colors[type]}`}>
+      <div className="flex items-center gap-2 font-bold text-sm mb-2">
+        <Icon className="w-4 h-4" /> {title}
+      </div>
+      <div className="text-sm leading-relaxed">{children}</div>
+    </div>
+  );
+}
+
+/* ─── MAIN PAGE ───────────────────────────────────────────── */
+export default function PiStudyPage() {
+  const [activeSection, setActiveSection] = useState("");
+  const [scrolled, setScrolled] = useState(false);
+
+  const tocSections = [
+    { id: "intro", title: "المقدمة" },
+    { id: "ch1", title: "الفصل الأول: الإكوسيستم الشامل" },
+    { id: "ch1-infra", title: "1.1 البنية التحتية التقنية" },
+    { id: "ch1-categories", title: "1.2 تصنيفات التطبيقات" },
+    { id: "ch1-staking", title: "1.3 نظام Staking" },
+    { id: "ch2", title: "الفصل الثاني: أهمية تطبيقات الفواتير" },
+    { id: "ch2-gap", title: "2.1 الفجوة في الإكوسيستم" },
+    { id: "ch2-critical", title: "2.2 لماذا هو حاسم؟" },
+    { id: "ch2-impact", title: "2.3 التأثير المتوقع" },
+    { id: "ch2-compare", title: "2.4 مقارنة مع التطبيقات الحالية" },
+    { id: "ch3", title: "الفصل الثالث: التوافق مع المبادئ الرسمية" },
+    { id: "ch3-requirements", title: "3.1 متطلبات القائمة في الميننت" },
+    { id: "ch3-warnings", title: "3.2 تحذيرات الفريق الرسمي" },
+    { id: "ch3-terms", title: "3.3 شروط المطورين" },
+    { id: "ch3-rules", title: "3.4 قواعد Pi App Platform" },
+    { id: "ch4", title: "الفصل الرابع: الربط مع تطبيقات الميننت" },
+    { id: "ch4-migration", title: "4.1 انتقال Testnet إلى Mainnet" },
+    { id: "ch4-integration", title: "4.2 آليات التكامل" },
+    { id: "ch4-model", title: "4.3 نموذج تكامل الفواتير" },
+    { id: "ch4-protocol", title: "4.4 بروتوكول v25" },
+    { id: "ch5", title: "الفصل الخامس: الرؤية المستقبلية" },
+    { id: "ch5-vision", title: "5.1 رؤية نيكولاس كوكاليس" },
+    { id: "ch5-recommendations", title: "5.2 توصيات التطوير" },
+    { id: "ch5-roadmap", title: "5.3 خارطة الطريق" },
+    { id: "conclusion", title: "الخاتمة" },
+  ];
+
+  useEffect(() => {
+    const handleScroll = () => {
+      setScrolled(window.scrollY > 50);
+      const sectionEls = tocSections.map((s) => document.getElementById(s.id)).filter(Boolean);
+      for (let i = sectionEls.length - 1; i >= 0; i--) {
+        const el = sectionEls[i]!;
+        if (el.getBoundingClientRect().top <= 120) {
+          setActiveSection(tocSections[i].id);
+          return;
+        }
+      }
+      setActiveSection("");
+    };
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
 
   return (
-    <PiAuthGate>
-    <div className="min-h-screen flex flex-col bg-background text-foreground" dir="rtl">
-      <PwaInstallPrompt />
-
-      {/* ═══════════════════════════════════════════════════════════════
-          HEADER
-         ═══════════════════════════════════════════════════════════════ */}
-      <AppHeader activeTab={activeTab} onTabChange={setActiveTab} />
-
-      {/* Export + Pi Status — inline actions bar below header */}
-      <div className="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-2 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <ExportDropdown report={report} copied={copied} onExport={handleExport} />
-          <PiNetworkStatus />
-          <ThreatLevelIndicator />
+    <div dir="rtl" className="min-h-screen bg-white">
+      {/* ─── HERO / COVER ────────────────────────────── */}
+      <header className="relative overflow-hidden bg-gradient-to-bl from-purple-900 via-purple-800 to-indigo-900 text-white">
+        <div className="absolute inset-0 opacity-10">
+          <div className="absolute top-10 right-10 w-72 h-72 rounded-full bg-purple-400 blur-3xl" />
+          <div className="absolute bottom-10 left-10 w-96 h-96 rounded-full bg-indigo-400 blur-3xl" />
         </div>
-        <QuickActions />
-      </div>
-
-      {/* ═══════════════════════════════════════════════════════════════
-          MAIN CONTENT
-         ═══════════════════════════════════════════════════════════════ */}
-      <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-6 space-y-6">
-
-        {/* ──── VERDICT BANNER ──────────────────────────────────────── */}
-        <AdvancedVerdictBanner report={report} />
-
-        {/* ──── STAT CARDS ──────────────────────────────────────────── */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4">
-          <StatCard icon={ShieldAlert} label="إجمالي المشاكل" value={report.summary.totalIssues} sub={`${report.meta.totalFiles} ملف`} color="bg-gradient-to-br from-slate-600 to-slate-800" delay={0} />
-          <StatCard icon={XCircle} label="حرج" value={report.summary.critical} sub={`${report.summary.blockingDeployment} تعطل النشر`} color="bg-gradient-to-br from-red-500 to-red-700" delay={100} />
-          <StatCard icon={AlertTriangle} label="مرتفع" value={report.summary.high} color="bg-gradient-to-br from-orange-500 to-orange-700" delay={200} />
-          <StatCard icon={ShieldAlert} label="متوسط" value={report.summary.medium} sub={`${report.summary.low} منخفض`} color="bg-gradient-to-br from-amber-500 to-amber-700" delay={300} />
+        <div className="relative max-w-4xl mx-auto px-6 py-20 md:py-28 text-center">
+          <div className="inline-flex items-center gap-2 bg-white/15 backdrop-blur rounded-full px-4 py-1.5 text-sm mb-8">
+            <Star className="w-4 h-4 text-yellow-300" />
+            <span>دراسة بحثية معمقة — 2025</span>
+          </div>
+          <h1 className="text-3xl md:text-5xl font-black leading-tight mb-6">
+            دراسة معمقة: إكوسيستم شبكة بي
+            <br />
+            <span className="text-purple-200">والرؤية المستقبلية للتجارة الإلكترونية</span>
+          </h1>
+          <p className="text-lg md:text-xl text-purple-200 max-w-2xl mx-auto mb-8">
+            من منظور الدكتور نيكولاس كوكاليس — المؤسس والمدير التقني لشبكة Pi
+          </p>
+          <div className="flex flex-wrap justify-center gap-3 text-xs">
+            <Badge className="bg-white/20 text-white border-0 px-3 py-1">60+ مليون مستخدم</Badge>
+            <Badge className="bg-white/20 text-white border-0 px-3 py-1">230+ دولة</Badge>
+            <Badge className="bg-white/20 text-white border-0 px-3 py-1">Open Network — فبراير 2025</Badge>
+            <Badge className="bg-white/20 text-white border-0 px-3 py-1">Stanford PhD</Badge>
+          </div>
+          <div className="mt-12 flex justify-center">
+            <a href="#intro" className="animate-bounce text-purple-300 hover:text-white transition">
+              <ChevronDown className="w-8 h-8" />
+            </a>
+          </div>
         </div>
+      </header>
 
-        {/* ──── TABS ────────────────────────────────────────────────── */}
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="w-full bg-muted/50 rounded-2xl p-1.5 gap-1 flex overflow-x-auto no-scrollbar">
-            <TabsTrigger value="overview" className="flex-1 min-w-0 text-xs sm:text-sm gap-1.5 rounded-xl px-4 py-2.5 font-medium data-[state=active]:bg-background data-[state=active]:shadow-sm data-[state=active]:text-foreground data-[state=inactive]:text-muted-foreground hover:text-foreground/80 transition-all relative">
-              <LayoutGrid className="h-3.5 w-3.5 hidden sm:block" />نظرة عامة
-              <span className="tab-indicator" />
-            </TabsTrigger>
-            <TabsTrigger value="critical" className="flex-1 min-w-0 text-xs sm:text-sm gap-1.5 rounded-xl px-4 py-2.5 font-medium data-[state=active]:bg-background data-[state=active]:shadow-sm data-[state=active]:text-foreground data-[state=inactive]:text-muted-foreground hover:text-foreground/80 transition-all relative">
-              <Flame className="h-3.5 w-3.5 hidden sm:block" />حرج
-              <Badge variant="destructive" className="text-[10px] h-4 rounded-full px-1.5 min-w-[18px] flex items-center justify-center">{report.summary.critical}</Badge>
-              <span className="tab-indicator" />
-            </TabsTrigger>
-            <TabsTrigger value="high" className="flex-1 min-w-0 text-xs sm:text-sm gap-1.5 rounded-xl px-4 py-2.5 font-medium data-[state=active]:bg-background data-[state=active]:shadow-sm data-[state=active]:text-foreground data-[state=inactive]:text-muted-foreground hover:text-foreground/80 transition-all relative">
-              <Zap className="h-3.5 w-3.5 hidden sm:block" />مرتفع
-              <Badge className="bg-orange-500/15 text-orange-600 dark:text-orange-400 text-[10px] h-4 rounded-full px-1.5 min-w-[18px] flex items-center justify-center border-0">{report.summary.high}</Badge>
-              <span className="tab-indicator" />
-            </TabsTrigger>
-            <TabsTrigger value="medium" className="flex-1 min-w-0 text-xs sm:text-sm gap-1.5 rounded-xl px-4 py-2.5 font-medium data-[state=active]:bg-background data-[state=active]:shadow-sm data-[state=active]:text-foreground data-[state=inactive]:text-muted-foreground hover:text-foreground/80 transition-all relative">
-              <AlertTriangle className="h-3.5 w-3.5 hidden sm:block" />متوسط
-              <Badge className="bg-amber-500/15 text-amber-600 dark:text-amber-400 text-[10px] h-4 rounded-full px-1.5 min-w-[18px] flex items-center justify-center border-0">{report.summary.medium}</Badge>
-              <span className="tab-indicator" />
-            </TabsTrigger>
-            <TabsTrigger value="fixes" className="flex-1 min-w-0 text-xs sm:text-sm gap-1.5 rounded-xl px-4 py-2.5 font-medium data-[state=active]:bg-background data-[state=active]:shadow-sm data-[state=active]:text-foreground data-[state=inactive]:text-muted-foreground hover:text-foreground/80 transition-all relative">
-              <Wrench className="h-3.5 w-3.5 hidden sm:block" />إصلاحات
-              <span className="tab-indicator" />
-            </TabsTrigger>
-            <TabsTrigger value="pi-network" className="flex-1 min-w-0 text-xs sm:text-sm gap-1.5 rounded-xl px-4 py-2.5 font-medium data-[state=active]:bg-background data-[state=active]:shadow-sm data-[state=active]:text-foreground data-[state=inactive]:text-muted-foreground hover:text-foreground/80 transition-all relative">
-              <Globe className="h-3.5 w-3.5 hidden sm:block" />شبكة بي
-              <span className="tab-indicator" />
-            </TabsTrigger>
-          </TabsList>
+      {/* ─── BODY ─────────────────────────────────────── */}
+      <main className="max-w-4xl mx-auto px-4 md:px-6 py-12">
+        <TableOfContents sections={tocSections} activeId={activeSection} />
 
-          {/* ──── OVERVIEW TAB ──────────────────────────────────────── */}
-          <TabsContent value="overview" className="space-y-6">
+        {/* ── المقدمة ─────────────────────────────── */}
+        <Section id="intro" title="المقدمة" icon={BookOpen} badge="أساسية">
+          <p>
+            أنا الدكتور نيكولاس كوكاليس، حاصل على درجة الدكتوراه في الأنظمة الموزعة من جامعة ستانفورد، وباحث ما بعد الدكتوراه في قسم علوم الحاسوب بنفس الجامعة. في عام 2018، أسّست مع شينغدياو فان شبكة Pi برؤية واضحة: بناء أكثر منظومة نظير لنظير شمولية في العالم، مدعومة بأكثر عملة مشفرة انتشاراً على نطاق واسع. لم نرد بناء مجرد عملة رقمية أخرى تُركّز على المضاربة — أردنا بناء منظومة حقيقية تخدم البشرية.
+          </p>
+          <p>
+            اليوم، تضم شبكة Pi أكثر من 60 مليون عضو في أكثر من 230 دولة ومنطقة حول العالم. في 20 فبراير 2025، أطلقنا شبكة Open Network في الساعة 8:00 صباحاً بتوقيت UTC، مما فتح جدار الميننت السابق وسمح بالاتصال الخارجي وتبادل Pi على المنصات العالمية. وصلت Pi إلى أعلى سعر تاريخي بلغ 2.99 دولار بعد الإطلاق مباشرة. هذا لم يكن حدثاً عادياً — بل كان بداية عهد جديد بالكامل.
+          </p>
+          <p>
+            هذه الدراسة المعمقة تأتي في لحظة محورية. فبعد سنوات من التطوير والاختبار وبناء المجتمع، أصبح الإكوسيستم بحاجة ماسة إلى البنية التحتية التجارية الحقيقية — تحديداً تطبيقات تتيح إنشاء الفواتير المهنية وحماية المعاملات التجارية عبر آلية الضمان (Escrow). هذا النوع من التطبيقات ليس رفاهية — بل هو حجر الزاوية الذي سيرتقي بإكوسيستم Pi من مجرد منصة تعدين إلى نظام تجاري حقيقي وشامل.
+          </p>
 
-            {/* Row 1: FixProgress + Gauge + ActivityTimeline */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-              <FixProgressCard issues={dbIssues.length > 0 ? dbIssues : []} />
-              <Card className="rounded-2xl border border-border/50 hover:border-border/80 transition-colors duration-300">
-                <CardContent className="p-4 flex items-center justify-center">
-                  <FixProgressGauge
-                    fixed={dbIssues.filter((i) => i.status === "fixed").length}
-                    total={dbIssues.length || 95}
-                    showHeader={false}
-                  />
-                </CardContent>
-              </Card>
-              <ActivityTimeline />
-            </div>
+          <Card className="my-6 border-purple-200 bg-purple-50/50">
+            <CardContent className="p-5">
+              <h4 className="font-bold text-purple-900 mb-2 flex items-center gap-2">
+                <Quote className="w-4 h-4" /> ملاحظة أساسية من المؤسس
+              </h4>
+              <p className="text-sm text-purple-800 leading-relaxed">
+                &quot;رؤيتنا لم تكن يوماً بناء عملة للمضاربة. رؤيتنا هي بناء نظام بيئي حقيقي حيث يمكن لأي إنسان في العالم — بغض النظر عن موقعه الجغرافي أو وضعه المالي — المشاركة في الاقتصاد الرقمي العالمي. التطبيقات التي تحل مشاكل حقيقية للبشر هي ما سيدفع Pi للأمام، لا التكهنات.&quot;
+              </p>
+            </CardContent>
+          </Card>
+        </Section>
 
-            {/* Row 2: Trend + Radar + ScoreRings */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-              <SeverityTrendChart />
-              <Card className="rounded-2xl border border-border/50 hover:border-border/80 transition-colors duration-300">
-                <CardContent className="p-4">
-                  <SecurityRadarChart
-                    scores={{
-                      الأمان: report.scores.backend.security,
-                      البنية: report.scores.backend.architecture,
-                      "جودة الكود": report.scores.backend.codeQuality,
-                      التشفير: Math.round((report.scores.backend.security + report.scores.frontend.security) / 2),
-                      المصادقة: report.scores.backend.security,
-                      الأداء: report.scores.backend.codeQuality,
-                    }}
-                    showHeader={false}
-                  />
-                </CardContent>
-              </Card>
-              <div className="grid grid-cols-2 gap-4">
-                <Card className="rounded-2xl border border-border/50 hover:border-border/80 transition-colors duration-300">
-                  <CardContent className="p-4 flex flex-col items-center">
-                    <ScoreRing score={report.scores.backend.overall} label="الخادم" size={100} />
-                  </CardContent>
-                </Card>
-                <Card className="rounded-2xl border border-border/50 hover:border-border/80 transition-colors duration-300">
-                  <CardContent className="p-4 flex flex-col items-center">
-                    <ScoreRing score={report.scores.frontend.overall} label="الواجهة الأمامية" size={100} />
-                  </CardContent>
-                </Card>
-                <Card className="rounded-2xl border border-border/50 hover:border-border/80 transition-colors duration-300">
-                  <CardContent className="p-4 flex flex-col items-center">
-                    <ScoreRing score={report.scores.piNetwork.overall} label="شبكة بي" size={100} />
-                  </CardContent>
-                </Card>
-                <Card className="rounded-2xl border border-border/50 hover:border-border/80 transition-colors duration-300">
-                  <CardContent className="p-4 flex flex-col items-center">
-                    <ScoreRing score={report.scores.overall} label="النتيجة العامة" size={100} />
-                  </CardContent>
-                </Card>
-              </div>
-            </div>
+        <Separator className="my-8" />
 
-            {/* Row 2.5: Live Feed + Score Breakdown */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              <LiveThreatFeed />
-              <SecurityScoreBreakdown />
-            </div>
+        {/* ══════════════════════════════════════════════════
+            الفصل الأول: الإكوسيستم الشامل لشبكة Pi
+        ══════════════════════════════════════════════════ */}
+        <Section id="ch1" title="الفصل الأول: الإكوسيستم الشامل لشبكة Pi" icon={Globe} badge="الأساسيات">
 
-            {/* Row 3: Comparison + Donut */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              <Card className="rounded-2xl border border-border/50 hover:border-border/80 transition-colors duration-300">
-                <CardHeader className="pb-3">
-                  <PiSectionHeader icon={<Server className="h-4 w-4" />}>درجات الخادم</PiSectionHeader>
-                </CardHeader>
-                <CardContent className="pt-0 space-y-4">
-                  <LabeledProgress label="جودة الكود" value={report.scores.backend.codeQuality} />
-                  <LabeledProgress label="الأمان" value={report.scores.backend.security} />
-                  <LabeledProgress label="البنية" value={report.scores.backend.architecture} />
-                </CardContent>
-              </Card>
-              <Card className="rounded-2xl border border-border/50 hover:border-border/80 transition-colors duration-300">
-                <CardHeader className="pb-3">
-                  <PiSectionHeader icon={
-                    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></svg>
-                  }>
-                    توزيع المشاكل حسب الخطورة
-                  </PiSectionHeader>
-                </CardHeader>
-                <CardContent className="flex justify-center pt-0">
-                  <DonutChart data={donutData} size={180} />
-                </CardContent>
-              </Card>
-            </div>
+          <p>
+            إكوسيستم شبكة Pi ليس مجرد مجموعة تطبيقات عشوائية — بل هو منظومة متماسكة ومصممة بعناية فائقة لتوفير فائدة حقيقية لملايين المستخدمين. الفلسفة الأساسية التي بنينا عليها هذا الإكوسيستم هي أن العملة الرقمية يجب أن تُستخدم فعلياً في حياة الناس اليومية، وليس أن تبقى حبيسة المحافظ الرقمية تنتظر ارتفاع السعر. هذا هو الفرق الجوهري بين Pi وآلاف المشاريع الأخرى في فضاء العملات المشفرة.
+          </p>
 
-            <Separator className="my-2" />
+          <SubSection id="ch1-infra" title="1.1 البنية التحتية التقنية لشبكة Pi">
+            <p>
+              بنيت شبكة Pi على أسس تقنية متينة ومبتكرة صُممت خصيصاً لتحقيق الشمولية والسهولة. السلسلة الكتلية (Blockchain) الخاصة بـ Pi هي فورك مخصص من بروتوكول Stellar، مع تعديلات جوهرية تتيح التعدين عبر الأجهزة المحمولة دون استهلاك مكثف للطاقة. هذا القرار التصميمي لم يكن عشوائياً — بل جاء من إيماننا العميق بأن إمكانية الوصول هي مفتاح التبني الواسع.
+            </p>
+            <p>
+              <strong>متصفح Pi (Pi Browser):</strong> هو البوابة الوحيدة لجميع تطبيقات Pi. صُمم هذا المتصفح ليكون بيئة آمنة ومحكومة حيث تعمل جميع التطبيقات ضمن نطاق domain واحد. هذا يعني أن المستخدم لا يحتاج لمغادرة بيئة Pi للتفاعل مع أي تطبيق — مما يضمن تجربة سلسة وآمنة. كل تطبيق Pi يعمل كتطبيق ويب يُعرض داخل Pi Browser، مما يبسط عملية التطوير والاستخدام على حد سواء.
+            </p>
+            <p>
+              <strong>Pi SDK:</strong> هي مجموعة أدوات التطوير التي تتيح للمطورين بناء تطبيقات &quot;Pi-native&quot; — تطبيقات تتكامل بسلاسة مع هوية Pi ومحفظة Pi وآليات الدفع. يوفر Pi SDK قدرات أساسية تشمل: مصادقة المستخدمين (Authentication)، المدفوعات من المستخدم للتطبيق (U2A)، المدفوعات من التطبيق للمستخدم (A2U)، والوصول إلى ميزات Pi المحددة.
+            </p>
+            <p>
+              <strong>محفظة Pi (Pi Wallet):</strong> تأتي مع حماية المصادقة الثنائية (2FA) الإلزامية. هذه خطوة أمنية حاسمة قمنا بفرضها لحماية أصول المستخدمين. لا يمكن للمهاجمين الوصول إلى أموال المستخدم حتى لو حصلوا على جهازه، بدون كود 2FA. حماية أموال المجتمع هي أولويتنا القصوى.
+            </p>
+            <p>
+              <strong>PiNet:</strong> هو نظام المراسلة المدمج في تطبيقات Pi الذي يتيح التواصل بين المستخدمين داخل التطبيقات. هذا النظام يُمكّن التطبيقات من توفير تجارب اجتماعية غنية دون الحاجة لبناء بنية مراسلة مستقلة. بالنسبة لتطبيق الفواتير والضمان، يُعد PiNet أداة حيوية للتواصل بين التاجر والعميل حول تفاصيل الطلب والتوصيل.
+            </p>
+            <p>
+              <strong>أنظمة الدفع:</strong> يدعم Pi نوعين أساسيين من المدفوعات: U2A (المستخدم إلى التطبيق) للخدمات والمدفوعات، و A2U (التطبيق إلى المستخدم) للمكافآت والسحوبات. أطلقنا مؤخراً مكتبة Pi الجديدة التي تتيح دمج مدفوعات Pi في أي تطبيق خلال أقل من 10 دقائق — مما يُخفّض الحاجز التقني بشكل كبير ويدفع عجلة تطوير المزيد من التطبيقات التجارية.
+            </p>
+          </SubSection>
 
-            {/* Score Comparison Chart */}
-            <ScoreComparisonChart
-              backend={report.scores.backend}
-              frontend={report.scores.frontend}
-              piNetwork={report.scores.piNetwork}
-              overall={report.scores.overall}
-            />
+          <SubSection id="ch1-categories" title="1.2 تصنيفات التطبيقات في الإكوسيستم">
+            <p>
+              إكوسيستم Pi يتطور بسرعة ويتضمن عدة فئات من التطبيقات التي تخدم أغراضاً متنوعة. فهم هذه الفئات أمر حاسم لأي مطور يريد بناء تطبيق يُكمّل المنظومة ولا يُكرّر ما موجود بالفعل.
+            </p>
 
-            {/* Category Treemap — full width */}
-            <CategoryTreemapChart
-              data={(report.categoryBreakdown ?? []).map((c) => ({
-                name: c.category,
-                size: c.total,
-                critical: c.critical,
-                high: c.high,
-              }))}
-            />
-
-            {/* Category breakdown + File heatmap */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              <Card className="rounded-2xl border border-border/50 hover:border-border/80 transition-colors duration-300">
-                <CardHeader className="pb-3">
-                  <PiSectionHeader icon={<BarChart3 className="h-4 w-4" />}>توزيع المشاكل حسب الفئة</PiSectionHeader>
-                </CardHeader>
-                <CardContent className="pt-0">
-                  <ScrollArea className="w-full" style={{ maxHeight: 400 }}>
-                    <HorizontalBarChart data={categoryBarData} />
-                  </ScrollArea>
-                </CardContent>
-              </Card>
-              <Card className="rounded-2xl border border-border/50 hover:border-border/80 transition-colors duration-300">
-                <CardHeader className="pb-3">
-                  <PiSectionHeader icon={<FileCode2 className="h-4 w-4" />}>خريطة الملفات الأكثر مشاكل</PiSectionHeader>
-                </CardHeader>
-                <CardContent className="pt-0">
-                  <ScrollArea className="w-full" style={{ maxHeight: 400 }}>
-                    <HorizontalBarChart data={fileHeatData} />
-                  </ScrollArea>
-                </CardContent>
-              </Card>
-            </div>
-
-            <Separator className="my-2" />
-
-            {/* Security Zones — full width */}
-            <SecurityZones
-              report={report}
-              securityOpen={securityOpen}
-              onToggleZone={toggleZone}
-              onOpenIssue={(issue) => openSheet(issue, "CRITICAL")}
-            />
-
-            {/* Recommendations + Architecture */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              <Card className="rounded-2xl border border-border/50 hover:border-border/80 transition-colors duration-300">
-                <CardHeader className="pb-3">
-                  <PiSectionHeader icon={<Target className="h-4 w-4" />}>التوصيات حسب الأولوية</PiSectionHeader>
-                </CardHeader>
-                <CardContent className="pt-0">
-                  <ScrollArea className="w-full" style={{ maxHeight: 500 }}>
-                    <div className="space-y-2">
-                      {report.recommendations.map((rec) => (
-                        <div key={rec.priority} className="flex items-start gap-3 p-3 rounded-xl bg-muted-foreground/5 border border-border/50 hover:border-border transition-colors">
-                          <div className="flex-shrink-0 w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center">
-                            <span className="text-xs font-bold text-primary">{rec.priority}</span>
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-xs font-semibold leading-relaxed">{rec.title}</p>
-                            <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                              <Badge variant="outline" className="text-[9px]">
-                                {rec.effort === "Small" ? "جهد صغير" : rec.effort === "Medium" ? "جهد متوسط" : "جهد كبير"}
-                              </Badge>
-                              <Badge variant="outline" className={`text-[9px] ${rec.impact === "Critical" ? "text-red-500 border-red-500/30" : rec.impact === "High" ? "text-orange-500 border-orange-500/30" : "text-amber-500 border-amber-500/30"}`}>
-                                {rec.impact === "Critical" ? "تأثير حرج" : rec.impact === "High" ? "تأثير مرتفع" : "تأثير متوسط"}
-                              </Badge>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </ScrollArea>
-                </CardContent>
-              </Card>
-              <Card className="rounded-2xl border border-border/50 hover:border-border/80 transition-colors duration-300">
-                <CardHeader className="pb-3">
-                  <PiSectionHeader icon={<Activity className="h-4 w-4" />}>مشاكل البنية المعمارية</PiSectionHeader>
-                </CardHeader>
-                <CardContent className="pt-2 space-y-3">
-                  {report.architectureProblems.map((prob, i) => (
-                    <div key={i} className="flex items-start gap-3 p-4 rounded-xl bg-muted-foreground/5 border border-border/50">
-                      <div className="w-7 h-7 rounded-full bg-orange-100 dark:bg-orange-900/40 flex items-center justify-center flex-shrink-0 mt-0.5">
-                        <span className="text-xs font-bold text-orange-600 dark:text-orange-400">{i + 1}</span>
+            <div className="grid md:grid-cols-2 gap-4 my-4">
+              {[
+                { icon: ShoppingCart, title: "التجارة والأسواق", desc: "تطبيقات تمكّن شراء وبيع السلع الحقيقية بـ Pi. مثل PiPay كبوابة دفع، وتطبيقات التجارة الإلكترونية الإقليمية مثل PI Bren في إندونيسيا." },
+                { icon: CreditCard, title: "المدفوعات والتمويل", desc: "بوابات الدفع والمحافظ الرقمية المتكاملة مع Pi. تتيح للمستخدمين إجراء معاملات سلسة باستخدام Pi كوسيط للدفع." },
+                { icon: Users, title: "الشبكات الاجتماعية", desc: "منصات التواصل الاجتماعي المبنية على Pi مثل SocialChain. تُستفيد من هوية Pi الموحّدة لتوفير تجارب اجتماعية آمنة." },
+                { icon: Layers, title: "الألعاب والترفيه", desc: "ألعاب CiDi Games ومنصات الترفيه التي تُتيح للمستخدمين كسب Pi وإنفاقه في بيئات لعب ممتعة." },
+                { icon: Code2, title: "الأدوات والتطبيقات الذكية", desc: "Pi App Studio — المنصة المدعومة بالذكاء الاصطناعي التي أطلقناها في Pi2Day 2025 لمساعدة المطورين على بناء تطبيقات Pi بسرعة." },
+                { icon: FileText, title: "الأدوات المساندة والخدمات", desc: "أدوات الإنتاجية والخدمات المتنوعة التي تعزز فائدة Pi في الحياة اليومية. هنا يقع تطبيق الفواتير والضمان." },
+              ].map((item) => (
+                <Card key={item.title} className="border-gray-200">
+                  <CardContent className="p-4">
+                    <div className="flex items-start gap-3">
+                      <div className="p-2 bg-purple-100 rounded-lg mt-0.5">
+                        <item.icon className="w-4 h-4 text-purple-700" />
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <h4 className="text-sm font-semibold mb-1">{prob.title}</h4>
-                        <p className="text-xs text-muted-foreground leading-relaxed">{prob.description}</p>
+                      <div>
+                        <h4 className="font-bold text-sm text-gray-900">{item.title}</h4>
+                        <p className="text-xs text-gray-600 mt-1 leading-relaxed">{item.desc}</p>
                       </div>
                     </div>
-                  ))}
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Code Quality + Tech Stack */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              <Card className="rounded-2xl border border-border/50 hover:border-border/80 transition-colors duration-300">
-                <CardHeader className="pb-3">
-                  <PiSectionHeader icon={<Code2 className="h-4 w-4" />}>جودة الكود</PiSectionHeader>
-                </CardHeader>
-                <CardContent className="pt-0 space-y-4">
-                  <div>
-                    <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-3 flex items-center gap-1.5">
-                      <FolderOpen className="h-3.5 w-3.5" />أكبر الملفات
-                    </h4>
-                    <div className="space-y-2">
-                      {report.codeQuality.largestFiles.slice(0, 5).map((f) => (
-                        <div key={f.file} className="flex items-center justify-between text-xs p-2.5 rounded-lg bg-muted-foreground/5">
-                          <code className="font-mono text-muted-foreground truncate max-w-[60%]" dir="ltr">{f.file}</code>
-                          <div className="flex items-center gap-3 text-muted-foreground/70 flex-shrink-0">
-                            <span>{f.lines} سطر</span>
-                            <span>{(f.size / 1024).toFixed(1)}KB</span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                  <Separator />
-                  <div>
-                    <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-3 flex items-center gap-1.5">
-                      <FileWarning className="h-3.5 w-3.5" />ملاحظات TODO/FIXME
-                    </h4>
-                    <div className="space-y-2">
-                      {report.codeQuality.todoFixme.map((t, i) => (
-                        <div key={i} className="flex items-start gap-2 text-xs p-2.5 rounded-lg bg-amber-50/50 dark:bg-amber-950/20 border border-amber-200/50 dark:border-amber-900/40">
-                          <code className="font-mono text-amber-600 dark:text-amber-400 flex-shrink-0">{t.file}</code>
-                          <span className="text-muted-foreground truncate">{t.text}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-              <Card className="rounded-2xl border border-border/50 hover:border-border/80 transition-colors duration-300">
-                <CardHeader className="pb-3">
-                  <PiSectionHeader icon={<Cpu className="h-4 w-4" />}>التقنيات المستخدمة</PiSectionHeader>
-                </CardHeader>
-                <CardContent className="pt-2">
-                  <div className="flex flex-wrap gap-2">
-                    {report.meta.techStack.map((tech) => (
-                      <Badge key={tech} variant="secondary" className="text-xs px-3 py-1 font-medium">{tech}</Badge>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-
-            <Separator className="my-2" />
-
-            {/* Gamification — full width */}
-            <GamificationPanel />
-          </TabsContent>
-
-          {/* ──── CRITICAL TAB ──────────────────────────────────────── */}
-          <TabsContent value="critical" className="space-y-6">
-            <div className="flex flex-col sm:flex-row gap-3">
-              <div className="relative flex-1">
-                <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/60" />
-                <Input
-                  placeholder="بحث في المشاكل الحرجة..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pr-9 h-10 text-sm"
-                  aria-label="بحث في المشاكل"
-                />
-              </div>
-              <select
-                value={filterSource}
-                onChange={(e) => setFilterSource(e.target.value)}
-                className="h-10 text-sm rounded-md border border-input bg-background px-3 py-2 text-foreground focus:outline-none focus:ring-2 focus:ring-ring min-w-[140px]"
-                aria-label="تصفية حسب المصدر"
-              >
-                <option value="all">جميع المصادر</option>
-                <option value="Backend">الخادم</option>
-                <option value="Frontend">الواجهة</option>
-                <option value="Pi Network">شبكة بي</option>
-              </select>
-            </div>
-            <p className="text-xs text-muted-foreground">{filteredCritical.length} من {report.criticalFindings.length} مشكلة حرجة</p>
-            <div className="space-y-4">
-              {filteredCritical.map((issue, i) => (
-                <CriticalIssueCard
-                  key={issue.id}
-                  issue={issue}
-                  index={i}
-                  onSelect={(iss) => openSheet(iss, "CRITICAL")}
-                  dbIssue={dbIssueMap.get(issue.id)}
-                  onStatusChange={handleStatusChange}
-                  onAiAnalysis={handleAiAnalysis}
-                />
+                  </CardContent>
+                </Card>
               ))}
             </div>
-          </TabsContent>
+          </SubSection>
 
-          {/* ──── HIGH TAB ──────────────────────────────────────────── */}
-          <TabsContent value="high" className="space-y-6">
-            <div className="flex flex-col sm:flex-row gap-3">
-              <div className="relative flex-1">
-                <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/60" />
-                <Input
-                  placeholder="بحث في المشاكل المرتفعة..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pr-9 h-10 text-sm"
-                  aria-label="بحث في المشاكل"
-                />
-              </div>
-              <select
-                value={filterSource}
-                onChange={(e) => setFilterSource(e.target.value)}
-                className="h-10 text-sm rounded-md border border-input bg-background px-3 py-2 text-foreground focus:outline-none focus:ring-2 focus:ring-ring min-w-[140px]"
-                aria-label="تصفية حسب المصدر"
-              >
-                <option value="all">جميع المصادر</option>
-                <option value="Backend">الخادم</option>
-                <option value="Frontend">الواجهة</option>
-                <option value="Pi Network">شبكة بي</option>
-              </select>
-            </div>
-            <p className="text-xs text-muted-foreground">{filteredHigh.length} من {report.highIssues.length} مشكلة مرتفعة</p>
-            <Card className="rounded-2xl border border-border/50 hover:border-border/80 transition-colors duration-300">
-              <CardContent className="p-2">
-                {filteredHigh.map((issue) => (
-                  <IssueRow
-                    key={issue.id}
-                    issue={{ ...issue, severity: "HIGH" }}
-                    onClick={() => {
-                      const fakeIssue: Issue = { id: issue.id, source: issue.source, file: issue.file, line: issue.line || 0, category: issue.category, title: issue.title, description: "", recommendation: "" };
-                      openSheet(fakeIssue, "HIGH", true);
-                    }}
-                    dbIssue={dbIssueMap.get(issue.id)}
-                    onStatusChange={handleStatusChange}
-                    onAiAnalysis={handleAiAnalysis}
-                  />
-                ))}
-              </CardContent>
-            </Card>
-          </TabsContent>
+          <SubSection id="ch1-staking" title="1.3 نظام Staking في دليل الإكوسيستم">
+            <p>
+              في يوم Pi2Day 2025 (28 يونيو)، أطلقنا ميزة Ecosystem Directory Staking — وهي آلية لامركزية تتيح للمستخدمين والشركات رهن (Stake) عملات Pi مباشرة على سلسلة الميننت لتعزيز تصنيف تطبيق معين داخل الإكوسيستم. هذه الميزة تمثل نقلة نوعية في كيفية اكتشاف التطبيقات ودعمها.
+            </p>
+            <p>
+              الفلسفة وراء هذا النظام بسيطة: بدلاً من أن تقرر جهة مركزية أي التطبيقات تظهر أولاً، يقرر المجتمع من خلال رهنه Pi الذي يثق به. كلما زاد عدد المستخدمين الذين يرهنون Pi على تطبيق معين، ارتفع تصنيفه في الدليل، مما يزيد من ظهوره للمستخدمين الجدد. هذا يخلق حلقة تغذية راجعة إيجابية — التطبيقات الجيدة تجذب المزيد من الرهان، مما يجذب المزيد من المستخدمين.
+            </p>
+            <p>
+              قبل Pi2Day 2026، قمنا بتحديث واجهة Staking بشكل كامل لتوفير تجربة مستخدم محسّنة وبصرية أفضل. هذا يُظهر التزامنا المستمر بتحسين البنية التحتية للإكوسيستم بناءً على ردود فعل المجتمع.
+            </p>
+          </SubSection>
+        </Section>
 
-          {/* ──── MEDIUM TAB ────────────────────────────────────────── */}
-          <TabsContent value="medium" className="space-y-6">
-            <div className="flex flex-col sm:flex-row gap-3">
-              <div className="relative flex-1">
-                <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/60" />
-                <Input
-                  placeholder="بحث في المشاكل المتوسطة..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pr-9 h-10 text-sm"
-                  aria-label="بحث في المشاكل"
-                />
-              </div>
-              <select
-                value={filterSource}
-                onChange={(e) => setFilterSource(e.target.value)}
-                className="h-10 text-sm rounded-md border border-input bg-background px-3 py-2 text-foreground focus:outline-none focus:ring-2 focus:ring-ring min-w-[140px]"
-                aria-label="تصفية حسب المصدر"
-              >
-                <option value="all">جميع المصادر</option>
-                <option value="Backend">الخادم</option>
-                <option value="Frontend">الواجهة</option>
-              </select>
-            </div>
-            <p className="text-xs text-muted-foreground">{filteredMedium.length} من {report.mediumIssues.length} مشكلة متوسطة</p>
-            <Card className="rounded-2xl border border-border/50 hover:border-border/80 transition-colors duration-300">
-              <CardContent className="p-2">
-                {filteredMedium.map((issue) => (
-                  <IssueRow
-                    key={issue.id}
-                    issue={{ ...issue, severity: "MEDIUM" }}
-                    onClick={() => {
-                      const fakeIssue: Issue = { id: issue.id, source: issue.source, file: issue.file, line: issue.line || 0, category: issue.category, title: issue.title, description: "", recommendation: "" };
-                      openSheet(fakeIssue, "MEDIUM", true);
-                    }}
-                    dbIssue={dbIssueMap.get(issue.id)}
-                    onStatusChange={handleStatusChange}
-                    onAiAnalysis={handleAiAnalysis}
-                  />
-                ))}
-              </CardContent>
-            </Card>
-          </TabsContent>
+        <Separator className="my-8" />
 
-          {/* ──── FIXES TAB ─────────────────────────────────────────── */}
-          <TabsContent value="fixes" className="space-y-6">
-            {/* Progress + Timeline */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              <FixProgressCard issues={dbIssues.length > 0 ? dbIssues : []} />
-              <FixTimeline />
-            </div>
+        {/* ══════════════════════════════════════════════════
+            الفصل الثاني: أهمية تطبيقات الفواتير والحماية
+        ══════════════════════════════════════════════════ */}
+        <Section id="ch2" title="الفصل الثاني: أهمية تطبيقات الفواتير والحماية في الإكوسيستم" icon={Shield} badge="جوهري">
 
-            {/* Filters */}
-            <div className="flex flex-col sm:flex-row gap-3">
-              <div className="relative flex-1">
-                <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/60" />
-                <Input
-                  placeholder="بحث في جميع المشاكل..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pr-9 h-10 text-sm"
-                  aria-label="بحث في المشاكل"
-                />
-              </div>
-              <select
-                value={filterStatus}
-                onChange={(e) => setFilterStatus(e.target.value)}
-                className="h-10 text-sm rounded-md border border-input bg-background px-3 py-2 text-foreground focus:outline-none focus:ring-2 focus:ring-ring min-w-[140px]"
-                aria-label="تصفية حسب الحالة"
-              >
-                <option value="ALL">جميع الحالات</option>
-                <option value="open">مفتوح</option>
-                <option value="in_progress">قيد التنفيذ</option>
-                <option value="fixed">تم الإصلاح</option>
-                <option value="wont_fix">لن يُصلح</option>
-                <option value="accepted_risk">مخاطر مقبولة</option>
-              </select>
-              <select
-                value={filterSource}
-                onChange={(e) => setFilterSource(e.target.value)}
-                className="h-10 text-sm rounded-md border border-input bg-background px-3 py-2 text-foreground focus:outline-none focus:ring-2 focus:ring-ring min-w-[140px]"
-                aria-label="تصفية حسب المصدر"
-              >
-                <option value="all">جميع المصادر</option>
-                <option value="Backend">الخادم</option>
-                <option value="Frontend">الواجهة</option>
-                <option value="Pi Network">شبكة بي</option>
-              </select>
-            </div>
+          <p>
+            هذا الفصل هو جوهر هذه الدراسة. سأتحدث هنا بلغة المبدع والباحث في آن واحد — لماذا يحتاج إكوسيستم Pi بشكل عاجل وماسي إلى تطبيق متخصص في إنشاء الفواتير المهنية وتوفير حماية المعاملات التجارية عبر آلية الضمان (Escrow). هذا ليس رأياً شخصياً — بل هو استنتاج مبني على سنوات من البحث في الأنظمة الاقتصادية الموزعة وفهم عميق لما يحتاجه المجتمع لاعتماد Pi كعملة للتجارة الحقيقية.
+          </p>
 
-            <p className="text-xs text-muted-foreground">{fixesFilteredIssues.length} مشكلة</p>
+          <SubSection id="ch2-gap" title="2.1 الفجوة الحرجة في الإكوسيستم الحالي">
+            <p>
+              لو تأملت التطبيقات المنشورة حالياً في إكوسيستم Pi، ستلاحظ نمطاً واضحاً: أغلبها يركز على الدفع المباشر من نظير إلى نظير (P2P) — أي أن المشتري يمسح رمز QR ويرسل Pi مباشرة للبائع. هذا نموذج جيد للمعاملات الصغيرة والثقة العالية (مثل شراء قهوة من مقهى تعرفه شخصياً)، لكنه يعاني من قصور جوهري عندما يتعلق الأمر بالتجارة الإلكترونية الحقيقية.
+            </p>
+            <p>
+              <strong>لا يوجد نظام فواتير مهني:</strong> التجار يحتاجون إلى إنشاء فواتير منظمة تحتوي على تفاصيل المنتج والكمية والسعر والضريبة وتاريخ الطلب ورقم الطلب. هذه الفواتير ضرورية لأغراض المحاسبة والضرائب وتتبع المخزون وحل النزاعات. حالياً، لا يوجد أي تطبيق في إكوسيستم Pi يوفر هذه الوظيفة بشكل احترافي.
+            </p>
+            <p>
+              <strong>لا توجد آلية ضمان (Escrow):</strong> عندما يرسل مشتري 1000 Pi لتاجر لا يعرفه للحصول على منتج، فإنه يخاطر بفقدان أمواله تماماً إذا لم يُرسل التاجر المنتج. هذا الخطر يحد بشدة من حجم المعاملات — فالناس مستعدة لإرسال 5 Pi أو 10 Pi كتجربة، لكنها تتردد في إرسال مبالغ كبيرة بدون حماية. غياب آلية الضمان هو أكبر عائق أمام التجارة الإلكترونية الحقيقية في Pi.
+            </p>
+            <p>
+              <strong>لا يوجد تتبع للطلبات:</strong> بعد إتمام الدفع، لا توجد طريقة منظمة لتتبع حالة الطلب — هل تم شحنه؟ هل وصل؟ هل يطابق المواصفات؟ هذا يخلق بيئة غير شفافة لا تطمئن لا المشتري ولا البائع.
+            </p>
+          </SubSection>
 
-            {/* Issues List */}
-            {issuesLoading ? (
-              <div className="flex items-center justify-center py-12">
-                <div className="text-center space-y-3">
-                  <div className="w-10 h-10 rounded-full border-2 border-muted-foreground/20 border-t-primary animate-spin mx-auto" />
-                  <p className="text-sm text-muted-foreground">جاري تحميل بيانات الإصلاحات...</p>
-                </div>
-              </div>
-            ) : (
-              <Card className="rounded-2xl border border-border/50 hover:border-border/80 transition-colors duration-300">
-                <CardContent className="p-2">
-                  {fixesFilteredIssues.map((dbIssue) => {
-                    const fakeIssue: Issue = {
-                      id: dbIssue.issueId,
-                      source: dbIssue.source,
-                      file: dbIssue.file,
-                      line: dbIssue.line,
-                      category: dbIssue.category,
-                      title: dbIssue.title,
-                      description: dbIssue.description,
-                      recommendation: dbIssue.recommendation,
-                    };
-                    return (
-                      <IssueRow
-                        key={dbIssue.issueId}
-                        issue={{ ...fakeIssue, severity: dbIssue.severity }}
-                        onClick={() => openSheet(fakeIssue, dbIssue.severity, !dbIssue.description)}
-                        dbIssue={dbIssue}
-                        onStatusChange={handleStatusChange}
-                        onAiAnalysis={handleAiAnalysis}
-                      />
-                    );
-                  })}
-                  {fixesFilteredIssues.length === 0 && (
-                    <div className="flex items-center justify-center py-8">
-                      <p className="text-sm text-muted-foreground">لا توجد نتائج مطابقة</p>
+          <SubSection id="ch2-critical" title="2.2 لماذا يعد تطبيق الفواتير والضمان حاسماً؟">
+            <p>
+              تطبيق الفواتير والضمان (Invoice & Escrow) ليس مجرد تطبيق &quot;جميل أن يوجد&quot; — بل هو <strong>حجر الزاوية</strong> الذي سيرتقي بإكوسيستم Pi من مرحلة التجربة إلى مرحلة التجارة الحقيقية. دعني أوضح بالتفصيل:
+            </p>
+
+            <div className="grid gap-3 my-4">
+              {[
+                { icon: FileCheck, title: "نظام إنشاء فواتير احترافي", desc: "يُتيح للتاجر إنشاء فاتورة منظمة تحتوي على: تفاصيل المنتج/الخدمة، الكمية، سعر الوحدة، الإجمالي، معلومات التاجر والعميل، رقم الطلب الفريد، التاريخ، والشروط والأحكام. هذه الفواتير قابلة للطباعة والتنزيل وتتبع حالتها." },
+                { icon: Lock, title: "آلية الضمان (Escrow) لحماية الطرفين", desc: "عند تأكيد الطلب، تُحجز عملات Pi في عقد ذكي (Smart Contract) أو حساب ضمان مؤقت. لا يستلم التاجر الأموال إلا بعد تأكيد المشتري بوصول البضاعة أو انتهاء فترة النزاع. هذا يحمي المشتري من الاحتيال ويحمي التاجر من ردود الدفع الكاذبة." },
+                { icon: Scale, title: "توازن العلاقة التجارية", desc: "بدون ضمان، العلاقة التجارية تكون منحازة: إما أن يخاطر المشتري بدفع مقدمًا، أو يخاطر التاجر بإرسال البضاعة قبل الدفع. آلية الضمان تُنشئ توازناً عادلاً يحمي الطرفين ويشجع على إجراء معاملات أكبر حجماً." },
+                { icon: Truck, title: "تتبع الطلبات والتوصيل", desc: "كل طلب له دورة حياة واضحة: تم الإنشاء ← قيد الانتظار ← تم الدفع والضمان ← قيد الشحن ← تم التوصيل ← تم الإفراج عن الأموال. كل مرحلة مسجلة ويمكن تتبعها." },
+                { icon: BarChart3, title: "لوحة تحكم التاجر", desc: "يحصل التاجر على لوحة تحكم شاملة: إدارة الطلبات، تتبع الإيرادات، إدارة المنتجات، إحصائيات المبيعات، وإدارة العملاء. هذا يحوّل التاجر من مجرد شخص يستقبل الدفع إلى رجل أعمال محترف." },
+              ].map((item) => (
+                <Card key={item.title} className="border-gray-200 hover:border-purple-300 transition">
+                  <CardContent className="p-4">
+                    <div className="flex items-start gap-3">
+                      <div className="p-2 bg-purple-100 rounded-lg mt-0.5 shrink-0">
+                        <item.icon className="w-4 h-4 text-purple-700" />
+                      </div>
+                      <div>
+                        <h4 className="font-bold text-sm text-gray-900">{item.title}</h4>
+                        <p className="text-xs text-gray-600 mt-1 leading-relaxed">{item.desc}</p>
+                      </div>
                     </div>
-                  )}
-                </CardContent>
-              </Card>
-            )}
-          </TabsContent>
-
-          {/* ──── PI NETWORK TAB ────────────────────────────────────── */}
-          <TabsContent value="pi-network" className="space-y-6">
-
-            {/* Pi Wallet Card */}
-            <PiWalletCard />
-
-            {/* Pi Ecosystem Stats */}
-            <PiEcosystemStats />
-
-            {/* Pi Compliance Checker */}
-            <PiComplianceChecker />
-
-            {/* Subscription Plans */}
-            <div className="space-y-4">
-              <PiSectionHeader icon={<svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2L3 7v5c0 5.25 3.83 10.16 9 11.25C17.17 22.16 21 17.25 21 12V7l-9-5z"/><path d="M12 8v4"/><path d="M12 16h.01"/></svg>}>خطط الاشتراك</PiSectionHeader>
-              {piUser && (
-                <div className="flex items-center gap-2">
-                  <Badge className="pi-gradient text-white border-0 text-[10px] font-bold px-2.5 py-0.5">
-                    خطة حالية: مجاني
-                  </Badge>
-                </div>
-              )}
-              <SubscriptionCards currentTier={currentTier} />
+                  </CardContent>
+                </Card>
+              ))}
             </div>
+          </SubSection>
 
-            {/* Global Leaderboard */}
-            <GlobalLeaderboard />
+          <SubSection id="ch2-impact" title="2.3 التأثير المتوقع على الإكوسيستم">
+            <p>
+              عندما يتوفر تطبيق فواتير وضمان حقيقي في إكوسيستم Pi، فإن التأثير سيكون تحولياً على عدة مستويات. أولاً وقبل كل شيء، <strong>سيُتيح إجراء معاملات بحجم أكبر بكثير</strong>. عندما يعرف المشتري أن أمواله محمية بآلية ضمان، سيكون مستعداً لشراء منتجات بـ 100 أو 500 أو حتى 1000 Pi — مقارنة بالمعاملات الصغيرة الحالية التي لا تتعدى بضعة Pi.
+            </p>
+            <p>
+              ثانياً، <strong>سيجذب تجاراً حقيقيين ومحترفين</strong> إلى المنصة. التاجر الذي يملك متجراً حقيقياً يحتاج إلى أدوات احترافية — فواتير، تتبع طلبات، إدارة مخزون، ولوحة تحكم. بدون هذه الأدوات، لن ينضم التجار المحترفون بغض النظر عن مدى شعبيتهم بـ Pi. مع هذه الأدوات، ستتحول Pi من منصة للمدفوعات الصغيرة إلى نظام تجاري كامل.
+            </p>
+            <p>
+              ثالثاً، <strong>سيُنشئ سلاسل توريد وتجارة ثانوية</strong>. عندما يتمكن التاجر &quot;أ&quot; من شراء بضائع من المورد &quot;ب&quot; بأمان عبر الضمان، ثم بيعها للمستهلك &quot;ج&quot; بنفس الآلية، فإننا نشئ سلسلة تجارية حقيقية. هذا هو ما يُحوّل العملة من مجرد وسيلة تبادل إلى محرك للاقتصاد الحقيقي.
+            </p>
+            <p>
+              رابعاً، <strong>سيُعزز ثقة المستخدمين في Pi كعملة تجارية</strong>. كل معاملة تتم بنجاح عبر آلية الضمان — حيث يُسلّم المنتج ويستلم التاجر أمواله — تُرسل رسالة قوية للمجتمع: Pi ليست للتعدين فقط، Pi يمكن أن تكون عملة حقيقية للتجارة. هذا التغيير في الإدراك أهم من أي تطور تقني.
+            </p>
+          </SubSection>
 
-            {/* Live Pi Network Monitoring Dashboard */}
-            <PiNetworkMonitor />
-          </TabsContent>
-        </Tabs>
+          <SubSection id="ch2-compare" title="2.4 مقارنة مع التطبيقات المنشورة الحالية">
+            <p>
+              حالياً، يوجد عدة تطبيقات في إكوسيستم Pi تلامس مجال التجارة والمدفوعات، لكن لا يوجد أي تطبيق يُقدّم الحزمة المتكاملة التي نتحدث عنها. لنلقِ نظرة على أبرزها:
+            </p>
+            <div className="overflow-x-auto my-4">
+              <table className="w-full text-sm border-collapse">
+                <thead>
+                  <tr className="bg-purple-50">
+                    <th className="border border-purple-200 p-3 text-right font-bold text-purple-900">الميزة</th>
+                    <th className="border border-purple-200 p-3 text-center font-bold text-purple-900">PiPay</th>
+                    <th className="border border-purple-200 p-3 text-center font-bold text-purple-900">PI Bren</th>
+                    <th className="border border-purple-200 p-3 text-center font-bold text-purple-900">تطبيق الفواتير والضمان</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {[
+                    ["بوابة دفع Pi", "نعم", "جزئي", "نعم"],
+                    ["إنشاء فواتير مهنية", "لا", "لا", "نعم"],
+                    ["آلية ضمان (Escrow)", "لا", "لا", "نعم"],
+                    ["تتبع حالة الطلب", "لا", "جزئي", "نعم"],
+                    ["حل النزاعات", "لا", "لا", "نعم"],
+                    ["لوحة تحكم التاجر", "لا", "لا", "نعم"],
+                    ["حماية المشتري والبائع", "لا", "لا", "نعم"],
+                    ["متعدد التاجر", "لا", "نعم (إقليمي)", "نعم (عالمي)"],
+                  ].map((row, i) => (
+                    <tr key={i} className={i % 2 === 0 ? "bg-white" : "bg-gray-50"}>
+                      <td className="border border-gray-200 p-2.5 text-right font-medium">{row[0]}</td>
+                      <td className="border border-gray-200 p-2.5 text-center">{row[1]}</td>
+                      <td className="border border-gray-200 p-2.5 text-center">{row[2]}</td>
+                      <td className="border border-gray-200 p-2.5 text-center font-bold text-emerald-600">{row[3]}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p>
+              كما يتضح من الجدول أعلاه، لا يوجد تطبيق حالي يُقدّم مجموعة الأدوات المتكاملة لتجارة إلكترونية حقيقية. هذا يخلق فرصة ذهبية لأول تطبيق يملأ هذه الفجوة — فرصة المبادر الأول (First-Mover Advantage) في فئة حيوية ستصبح عموداً فقرياً للتجارة في إكوسيستم Pi.
+            </p>
+          </SubSection>
+        </Section>
+
+        <Separator className="my-8" />
+
+        {/* ══════════════════════════════════════════════════
+            الفصل الثالث: التوافق مع المبادئ التوجيهية الرسمية
+        ══════════════════════════════════════════════════ */}
+        <Section id="ch3" title="الفصل الثالث: التوافق الكامل مع المبادئ التوجيهية الرسمية لـ Pi" icon={ShieldCheck} badge="إلزامي">
+          <p>
+            هذا الفصل هو الأهم من الناحية العملية. أي تطبيق يُبنى على Pi يجب أن يتوافق تماماً مع المبادئ التوجيهية والشروط والأوامر الصادرة عن الفريق الرسمي. عدم الالتزام يعني عدم القبول في قائمة الميننت — بل قد يعني الإزالة من الإكوسيستم بالكامل. دعني أوضح كل متطلب بالتفصيل.
+          </p>
+
+          <SubSection id="ch3-requirements" title="3.1 متطلبات القائمة في الميننت (Mainnet Listing Requirements)">
+            <p>
+              وثيقة متطلبات القائمة في الميننت المنشورة على الموقع الرسمي لل مطورين Pi (pi-apps.github.io) تُحدد بوضوح المعايير التي يجب أن يستوفيها أي تطبيق ليظهر في واجهة الإكوسيستم في متصفح Pi. هذه الواجهة هي النافذة الرئيسية التي يكتشف من خلالها أكثر من 60 مليون مستخدم التطبيقات المتاحة. عدم الظهور فيها يعني عملياً عدم الوجود.
+            </p>
+
+            <div className="space-y-3 my-4">
+              {[
+                {
+                  title: "1. تطبيق كامل الوظائف مع واجهة مستخدم احترافية",
+                  desc: "التطبيق يجب أن يكون عاملاً بالكامل مع جميع العناصر التفاعلية تعمل بشكل صحيح. الواجهة يجب أن تكون نظيفة وسهلة الاستخدام ومصممة باحترافية. واجهة المستخدم المصقولة تُعزز ثقة المستخدم ومشاركته. لا يُقبل تطبيق نصف مكتمل أو واجهة بدائية.",
+                },
+                {
+                  title: "2. إكمال التحقق من الهوية (KYC) للمطور",
+                  desc: "يجب على المطورين إكمال عملية التحقق من الهوية (KYC) للتحقق من هويتهم قبل تقديم طلب القائمة. هذا الإجراء يحمي إكوسيستم Pi من خلال محاولة منع الجهات الفاعلة الخبيثة. بينما لا يمكن لـ KYC منع تماماً المطور من التصرف بسوء نية، إلا أنه يقلل من هذا الخطر ويوفر نقطة مرجعية لهويته في حالة النزاعات.",
+                },
+                {
+                  title: "3. تجنب انتهاك العلامات التجارية",
+                  desc: "PI NETWORK وشعار Pi هما علامتان تجاريتان لشبكة Pi Network ولا يمكن استخدامهما بأي شكل بدون موافقة كتابية صريحة منا. هذا يعني أن التطبيق يجب ألا يستخدم اسم Pi أو شعارها بشكل يوحي بالانتماء الرسمي أو الدعم من الفريق الأساسي.",
+                },
+                {
+                  title: "4. استخدام مصادقة Pi فقط (Pi-Only Authentication)",
+                  desc: "هذا متطلب حاسم لا يُسمح بالتنازل عنه. التطبيق يجب أن يستخدم فقط مصادقة Pi SDK للمستخدمين. لا يُسمح باستخدام Google Auth أو Facebook Auth أو أي نظام مصادقة خارجي. السبب بسيط: هوية Pi هي الهوية الموحّدة للمستخدم في الإكوسيستم، واستخدام أنظمة خارجية يُضعف هذا التوحيد ويخرق مبدأ البقاء داخل بيئة Pi.",
+                },
+                {
+                  title: "5. معاملات Pi فقط (Pi-Only Transactions)",
+                  desc: "جميع المعاملات داخل التطبيق يجب أن تتم بعملة Pi فقط. لا يُسمح بقبول عملات مشفرة أخرى أو عملات ورقية. هذا يضمن أن التطبيق يُعزز قيمة Pi واستخدامها، ولا يُنشئ منافسة مع العملة الأساسية للشبكة.",
+                },
+                {
+                  title: "6. عدم إعادة التوجيه إلى مواقع خارجية",
+                  desc: "التطبيق يجب أن يعمل بالكامل داخل Pi Browser. لا يُسمح بإعادة توجيه المستخدمين إلى مواقع خارجية. الإكوسيستم يُعطي الأولوية للتطبيقات التي تساهم بشكل هادف في نمو الشبكة وفائدتها، وليس التطبيقات التي تعمل كممرات (funnels) لمنصات خارجية.",
+                },
+                {
+                  title: "7. الحد الأدنى من جمع البيانات",
+                  desc: "يجب على التطبيق جمع الحد الأدنى الضروري فقط من بيانات المستخدمين. لا حاجة لجمع بيانات شخصية غير ضرورية للوظيفة الأساسية. هذا يتوافق مع مبادئ الخصوصية التي نؤمن بها ويحمي مجتمعنا من مخاطر تسريب البيانات.",
+                },
+              ].map((item) => (
+                <Card key={item.title} className="border-gray-200">
+                  <CardContent className="p-4">
+                    <h4 className="font-bold text-sm text-purple-900 mb-1">{item.title}</h4>
+                    <p className="text-xs text-gray-600 leading-relaxed">{item.desc}</p>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </SubSection>
+
+          <SubSection id="ch3-warnings" title="3.2 تحذيرات الفريق الرسمي (Safety Notice)">
+            <p>
+              في 21 فبراير 2025، يوم إطلاق Open Network، أصدرنا إشعار أمان رسمي يُحذّر المستخدمين من المخاطر المحتملة. هذا الإشعار يعكس قلقنا الدائم عن سلامة مجتمعنا. من أبرز ما ورد فيه:
+            </p>
+
+            <CalloutBox type="warning" title="تحذير رسمي — Safety Notice 02-21-2025">
+              <ul className="space-y-1.5 list-disc list-inside">
+                <li>يجب على المستخدمين البقاء يقظين تجاه الجهات الفاعلة السيئة والاحتيال والأنشطة غير القانونية</li>
+                <li>استخدموا فقط محفظة Pi الأصلية داخل متصفح Pi</li>
+                <li>سياسة &quot;شخص واحد = حساب Pi واحد&quot; — لا يُسمح بحسابات متعددة</li>
+                <li>شبكة Pi لا تضمن قيمة Pi</li>
+                <li>لم يتم إجراء أي طرح أولي للعملات (ICO) لـ Pi</li>
+                <li>لا ترسلوا Pi إلى عناوين غير معروفة</li>
+                <li>لن تطلب Pi Network أبداً منك مفاتيحك الخاصة أو عبارة المرور</li>
+              </ul>
+            </CalloutBox>
+
+            <p>
+              بالنسبة لتطبيق الفواتير والضمان، هذه التحذيرات تعني بوضوح: آلية الضمان يجب أن تكون شفافة تماماً — يجب أن يعرف المستخدم بالضبط أين تذهب عملاته، ولماذا، ومتى ستُحرر. لا يُسمح بأي غموض أو إخفاء فيما يخص أموال المستخدم. الشفافية الكاملة هي الأساس.
+            </p>
+          </SubSection>
+
+          <SubSection id="ch3-terms" title="3.3 شروط المطورين وسياسة الامتثال">
+            <p>
+              شروط المطورين الخاصة بـ Pi تضع قواعد صارمة لحماية المجتمع والشبكة. أبرز النقاط التي تؤثر على بناء تطبيق الفواتير والضمان:
+            </p>
+            <p>
+              <strong>حماية البيانات:</strong> المطورون يجب أن يحتفظوا بإجراءات حماية إدارية ومادية وتقنية تُلبّي أو تتجاوز معايير الصناعة لحماية البيانات. لتطبيق يتعامل مع بيانات المعاملات التجارية ومعلومات التجار والعملاء، هذا يعني: تشفير البيانات أثناء النقل والتخزين، وسياسات وصول صارمة، ونسخ احتياطي منتظم، وخطة استجابة للحوادث.
+            </p>
+            <p>
+              <strong>الشفافية والأصالة:</strong> في مايو 2025، أصدرنا توجيهاً واضحاً لجميع المطورين نؤكد فيه على أهمية الشفافية والأصالة والامتثال الأخلاقي. التطبيقات يجب أن تكون شفافة فيما تقدمه للمستخدم — لا تضليل، لا وعود كاذبة، لا إخفاء للمخاطر. بالنسبة لتطبيق الفواتير والضمان، هذا يعني: أوضح للمستخدم كيف تعمل آلية الضمان، ما هي المخاطر، وما هي حقوقه.
+            </p>
+            <p>
+              <strong>الامتثال التنظيمي:</strong> نعمل بشكل مستمر على الامتثال للتنظيمات العالمية المختلفة. أصدرنا ورقة بيضاء حول MiCA (Markets in Crypto-Assets) الخاصة بالاتحاد الأوروبي، مما يُظهر التزامنا بالشفافية التنظيمية. أي تطبيق في إكوسيستم Pi يجب أن يأخذ هذا الالتزام بعين الاعتبار.
+            </p>
+          </SubSection>
+
+          <SubSection id="ch3-rules" title="3.4 قواعد Pi App Platform والبيئة التقنية">
+            <p>
+              Pi App Platform تحدد القواعد التقنية التي يجب أن يعمل ضمنها أي تطبيق Pi. هذه ليست مجرد توصيات — بل قيود بيئية يجب الالتزام بها:
+            </p>
+            <p>
+              <strong>قيد النطاق الواحد:</strong> جميع التطبيقات تعمل داخل Pi Browser ضمن نطاق domain واحد. هذا يعني أن التطبيق لا يمكنه فتح نافذة جديدة تذهب إلى نطاق آخر. هذا القيد هو أمان وليس عائقاً — فهو يضمن بقاء المستخدم في بيئة آمنة ومحكومة.
+            </p>
+            <p>
+              <strong>Pi SDK للدفع:</strong> يجب استخدام Pi SDK الرسمي لجميع عمليات المصادقة والدفع. مكتبة Pi الجديدة التي أطلقناها تُبسّط هذا بشكل كبير — يمكن دمج الدفع في أقل من 10 دقائق. لكن هذا لا يعني أن التكامل السطحي كافٍ — يجب فهم آلية عمل الدفع بعمق لضمان التعامل الصحيح مع جميع حالات الخطأ والاسترداد.
+            </p>
+            <p>
+              <strong>التمييز بين Testnet و Mainnet:</strong> هذا تمييز حاسم. Testnet يستخدم Pi Testnet (بدون قيمة حقيقية) لأغراض التطوير والاختبار. Mainnet يستخدم Pi الحقيقية (على سلسلة الميننت) للمعاملات الفعلية. يجب على المطورين اختبار تطبيقاتهم بالكامل على Testnet قبل التقديم للقائمة في Mainnet. التبديل بين البيئتين يتم عبر إعدادات SDK المحددة.
+            </p>
+            <p>
+              <strong>Access Token:</strong> آلية Access Token توفر طبقة أمان إضافية لاتصال التطبيق بخوادم Pi. يجب التعامل مع هذه الرموز بعناية فائقة — تخزينها بأمان، تجديدها عند انتهاء الصلاحية، وعدم كشفها أبداً في الكود من جهة العميل (client-side).
+            </p>
+          </SubSection>
+        </Section>
+
+        <Separator className="my-8" />
+
+        {/* ══════════════════════════════════════════════════
+            الفصل الرابع: الربط مع تطبيقات الميننت
+        ══════════════════════════════════════════════════ */}
+        <Section id="ch4" title="الفصل الرابع: الربط الصحيح مع التطبيقات المنشورة في الميننت" icon={ArrowLeftRight} badge="التكامل">
+          <p>
+            قوة أي إكوسيستم لا تُقاس بعدد التطبيقات الفردية، بل بمدى تكاملها وتفاعلها. إكوسيستم Pi يتطور بسرعة، والعديد من التطبيقات قد انتقلت من Testnet إلى Mainnet. فهم كيفية الربط الصحيح مع هذه التطبيقات هو مفتاح بناء تطبيق يُكمّل المنظومة ولا يعمل بمعزل عنها.
+          </p>
+
+          <SubSection id="ch4-migration" title="4.1 التطبيقات التي انتقلت من Testnet إلى Mainnet">
+            <p>
+              في أوائل عام 2025، استعددنا لإطلاق Open Network بجعل تطبيقات Mainnet Pi متاحة من خلال واجهة الإكوسيستم في Pi Browser. في 20 فبراير 2025، مع إطلاق Open Network، أصبح بإمكان المستخدمين التعامل مع Pi الحقيقية في التطبيقات المدرجة — شراء سلع وخدمات حقيقية بعملات Pi حقيقية.
+            </p>
+            <p>
+              من المهم فهم أن قائمة التطبيقات في واجهة الإكوسيستم لا تتضمن جميع التطبيقات — فالاختيار محدود بناءً على معايير الإكوسيستم. كما أن التطبيقات المدرجة على Testnet Ecosystem UI (التي أُطلقت حوالي Pi Day) تختلف عن تلك المدرجة على Mainnet Ecosystem Interface.
+            </p>
+            <p>
+              الإشارة إلى Pi2Day (28 يونيو) وهي ذكرى إطلاق Pi، تحمل أهمية خاصة كل عام. في Pi2Day 2025، أطلقنا Pi App Studio (منصة ذكاء اصطناعي لبناء التطبيقات) وأعلنا عن مبادرة الذكاء الاصطناعي لتطوير الجيل التالي من التطبيقات. في Pi2Day 2026، كان التركيز على تحسين نظام Staking وتوسيع الإكوسيستم.
+            </p>
+          </SubSection>
+
+          <SubSection id="ch4-integration" title="4.2 آليات التكامل الممكنة مع التطبيقات الأخرى">
+            <p>
+              لتطبيق الفواتير والضمان، هناك عدة آليات تكامل يمكن الاستفادة منها:
+            </p>
+            <p>
+              <strong>مصادقة Pi المشتركة:</strong> بما أن جميع تطبيقات Mainnet تستخدم Pi SDK للمصادقة، فإن هوية المستخدم موحدة عبر الإكوسيستم. هذا يعني أن المستخدم الذي يتعامل مع تطبيق التجارة يمكنه الانتقال إلى تطبيق الفواتير بنفس الهوية دون الحاجة للتسجيل مجدداً. هذا يُبسّط تجربة المستخدم بشكل كبير.
+            </p>
+            <p>
+              <strong>Payment API:</strong> يمكن للتطبيقات الأخرى إرسال مدفوعات إلى تطبيق الفواتير والضمان عبر Pi Payment API. مثلاً، عندما يتم الاتفاق على عملية شراء في تطبيق سوق، يمكن إنشاء فاتورة في تطبيق الفواتير تلقائياً وتحويل الأموال إلى حساب الضمان.
+            </p>
+            <p>
+              <strong>PiNet للتواصل:</strong> نظام PiNet يتيح التواصل بين المستخدمين عبر التطبيقات. بالنسبة لتطبيق الفواتير، يمكن استخدام PiNet لإرسال إشعارات للعميل عند تغيير حالة الطلب — &quot;تم شحن طلبك&quot; أو &quot;فاتورتك جاهزة للدفع&quot;.
+            </p>
+          </SubSection>
+
+          <SubSection id="ch4-model" title="4.3 نموذج تكامل الفواتير مع التطبيقات الأخرى">
+            <p>
+              تخيّل هذا السيناريو المتكامل الذي يُظهر القوة الحقيقية لربط تطبيق الفواتير والضمان مع بقية الإكوسيستم:
+            </p>
+            <p>
+              <strong>سيناريو 1 — التكامل مع تطبيقات السوق:</strong> عميل يتصفح منتجات في تطبيق سوق (مثل PI Bren أو أي سوق Pi آخر). يختار منتجاً وينقر على &quot;شراء&quot;. بدلاً من دفع مباشر، يُنشئ النظام تلقائياً فاتورة في تطبيق الفواتير والضمان. يحتفظ الضمان بالأموال حتى يؤكد العميل وصول المنتج. هذا يضيف طبقة حماية كاملة لعملية الشراء.
+            </p>
+            <p>
+              <strong>سيناريو 2 — التكامل مع تطبيقات الخدمات:</strong> مستخدم يطلب خدمة تصميم من مصمم في تطبيق خدمات. يتم إنشاء فاتورة بالتفاصيل المتفق عليها. الأموال تُحجز في الضمان. بعد تسليم العمل وقبول العميل، تُحرر الأموال للمصمم. إذا كان هناك نزاع، توجد آلية فض منازعات مبنية في النظام.
+            </p>
+            <p>
+              <strong>سيناريو 3 — التجارة بين التجار:</strong> تاجر جملة يبيع بضائع لتاجر تجزئة عبر تطبيق الفواتير. الفاتورة تحتوي على تفاصيل الشحن والكميات والأسعار. الضمان يحمي الطرفين. هذا يُنشئ سلسلة توريد حقيقية تعمل بعملة Pi.
+            </p>
+          </SubSection>
+
+          <SubSection id="ch4-protocol" title="4.4 بروتوكول v25 والتحديثات المستقبلية">
+            <p>
+              شبكة Pi تتطور باستمرار. بروتوكول v25 جلب تحسينات تقنية مهمة، كما أطلقنا أول قدرة لعقود الاشتراك الذكية (Subscription Smart Contract) على Testnet. هذه القدرة تفتح الباب أمام نماذج اشتراك شهرية مدفوعة بـ Pi — مما يُوسّع نماذج الأعمال الممكنة بشكل كبير.
+            </p>
+            <p>
+              في Consensus 2025 (وبعدها في Consensus 2026 في ميامي)، تحدثت شخصياً عن رؤيتي تحت عنوان &quot;AI + Blockchain Infra to Unleash Mainstream Adoption&quot; — كيف يمكن للذكاء الاصطناعي والبنية التحتية للبلوكتشين معاً أن تُطلق مرحلة جديدة من التبني الواسع. تطبيق الفواتير والضمان يُمثل هذا التكامل بين التقنية والفائدة الحقيقية — فهو يستخدم البنية التحتية للبلوكتشين (ضمان ذكي، مدفوعات على السلسلة) لتقديم فائدة حقيقية للمستخدم العادي.
+            </p>
+            <p>
+              مبادرة الذكاء الاصطناعي التي أطلقناها في Pi2Day 2025 تُظهر أننا ننظر إلى المستقبل بشمولية. التطبيقات التي تدمج بين الذكاء الاصطناعي والبلوكتشين ستكون في مقدمة الإكوسيستم — وتطبيق الفواتير يمكنه مثلاً استخدام الذكاء الاصطناعي لاكتشاف المعاملات المشبوهة أو اقتراح أسعار عادلة أو أتمتة حل النزاعات البسيطة.
+            </p>
+          </SubSection>
+        </Section>
+
+        <Separator className="my-8" />
+
+        {/* ══════════════════════════════════════════════════
+            الفصل الخامس: الرؤية المستقبلية والتوصيات
+        ══════════════════════════════════════════════════ */}
+        <Section id="ch5" title="الفصل الخامس: الرؤية المستقبلية والتوصيات" icon={Target} badge="المستقبل">
+          <p>
+            في هذا الفصل الأخير، أشارك رؤيتي للمرحلة القادمة من إكوسيستم Pi وأقدم توصيات محددة لبناء تطبيق فواتير وضمان ناجح. هذه ليست مجرد أفكار نظرية — بل هي خارطة طريق مبنية على فهم عميق لتقنية Pi واحتياجات المجتمع والاتجاهات العالمية في التجارة الإلكترونية.
+          </p>
+
+          <SubSection id="ch5-vision" title="5.1 رؤيتي للمرحلة القادمة">
+            <p>
+              عندما أسّست Pi Network في عام 2018، كانت الرؤية واضحة في ذهني: بناء العملة المشفرة الأكثر انتشاراً واستخداماً في العالم — ليس من خلال المضاربة وآلات التعدين المكلفة، بل من خلال إشراك البشر أنفسهم. اليوم، بعد أكثر من 60 مليون عضو، أرى أن الرؤية تتحقق خطوة بخطوة.
+            </p>
+            <p>
+              لكن الرؤية لم تكتمل بعد. العملة بدون فائدة حقيقية تبقى مجرد أرقام على شاشة. الفائدة الحقيقية تأتي عندما يمكن لأي شخص في العالم — سواء كان في نيويورك أو نيجيريا أو إندونيسيا — استخدام Pi لشراء الطعام، أو دفع إيجار المنزل، أو شراء بضائع لتجارته الصغيرة. هذا هو المستقبل الذي نعمل من أجله.
+            </p>
+            <p>
+              التجارة الإلكترونية هي المحرك الأكبر للاقتصاد الرقمي العالمي. لتصبح Pi عملة حقيقية في هذا السياق، نحتاج بنية تحتية تجارية احترافية — وهذا هو بالضبط ما يوفره تطبيق الفواتير والضمان. ليس كأداة واحدة من بين عشرات الأدوات، بل كعمود فقري تتكيف معه بقية التطبيقات.
+            </p>
+          </SubSection>
+
+          <SubSection id="ch5-recommendations" title="5.2 توصيات محددة لتطوير تطبيق الفواتير والضمان">
+            <p>
+              بناءً على كل ما سبق، هذه هي التوصيات الحاسمة التي يجب أن يلتزم بها أي مطور يبني تطبيق فواتير وضمان على Pi:
+            </p>
+
+            <div className="space-y-3 my-4">
+              {[
+                { num: "01", title: "تكامل Pi SDK للمصادقة", desc: "لا بديل عن Pi SDK. المصادقة يجب أن تتم حصرياً عبر Pi Authentication API. لا تستخدم Google أو Facebook أو أي نظام خارجي. هذا شرط لا يُتنازل عنه للقائمة في الميننت." },
+                { num: "02", title: "استخدام Pi Payment API لجميع المعاملات", desc: "جميع المدفوعات — بما في ذلك حجز الأموال في الضمان وإطلاقها — يجب أن تتم عبر Pi Payment API الرسمي. استخدام أي آلية دفع أخرى سيؤدي لرفض التطبيق." },
+                { num: "03", title: "العمل بالكامل داخل Pi Browser", desc: "لا توجد روابط خارجية، لا نوافذ منبثقة إلى مواقع أخرى، لا عمليات إعادة توجيه. التطبيق يعمل بالكامل ضمن بيئة Pi Browser." },
+                { num: "04", title: "إكمال KYC للمطور قبل التقديم", desc: "بدون إكمال التحقق من هوية المطور، لا يمكن قبول التطبيق في قائمة الميننت. أنجز هذه الخطوة أولاً." },
+                { num: "05", title: "تنفيذ آلية الضمان بشفافية كاملة", desc: "يجب أن تكون آلية الضمان واضحة وشفافة: أين تذهب الأموال؟ لماذا؟ متى تُحرر؟ ما هي شروط الإفراج عنها؟ ما هي آلية حل النزاعات؟ لا غموض." },
+                { num: "06", title: "واجهة مستخدم احترافية وكاملة", desc: "التطبيق يجب أن يبدو احترافياً وأن يكون كامل الوظائف. واجهة التاجر يجب أن تكون غنية بالميزات، وواجهة العميل يجب أن تكون بسيطة وسهلة." },
+                { num: "07", title: "الحد الأدنى من جمع البيانات", desc: "اجمع فقط البيانات الضرورية لعمل التطبيق. لا بيانات غير ضرورية، لا تتبع مخفي، لا مشاركة بيانات مع أطراف ثالثة." },
+                { num: "08", title: "عدم استخدام العلامات التجارية لـ Pi", desc: "لا تستخدم اسم Pi أو شعارها بشكل يوحي بالدعم الرسمي. التطبيق هو تطبيق مستقل في الإكوسيستم." },
+              ].map((item) => (
+                <Card key={item.num} className="border-gray-200 hover:border-purple-300 transition">
+                  <CardContent className="p-4">
+                    <div className="flex items-start gap-3">
+                      <span className="text-2xl font-black text-purple-200">{item.num}</span>
+                      <div>
+                        <h4 className="font-bold text-sm text-gray-900">{item.title}</h4>
+                        <p className="text-xs text-gray-600 mt-1 leading-relaxed">{item.desc}</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </SubSection>
+
+          <SubSection id="ch5-roadmap" title="5.3 خارطة الطريق المقترحة">
+            <p>
+              بناء تطبيق ناجح في إكوسيستم Pi يتطلب نهجاً مرحلياً مدروساً. كل مرحلة تبني على سابقتها:
+            </p>
+
+            <div className="my-6 space-y-4">
+              {[
+                {
+                  phase: "المرحلة الأولى",
+                  title: "البناء الأساسي على Testnet",
+                  items: ["بناء نظام إنشاء الفواتير الأساسي", "تنفيذ آلية الضمان (Escrow) على Testnet Pi", "واجهة مستخدم احترافية للتاجر والعميل", "اختبار شامل لجميع سيناريوهات المعاملات"],
+                  color: "bg-blue-50 border-blue-200",
+                },
+                {
+                  phase: "المرحلة الثانية",
+                  title: "تكامل Pi SDK",
+                  items: ["دمج Pi Authentication للمصادقة", "ربط Pi Payment API للمعاملات", "اختبار على بيئة Testnet مع مستخدمين حقيقيين", "إصلاح الأخطاء وتحسين الأداء"],
+                  color: "bg-amber-50 border-amber-200",
+                },
+                {
+                  phase: "المرحلة الثالثة",
+                  title: "التقديم للقائمة في الميننت",
+                  items: ["إكمال KYC للمطور", "التبديل من Testnet إلى Mainnet Pi", "تقديم طلب القائمة في Ecosystem Interface", "ضمان استيفاء جميع متطلبات القائمة"],
+                  color: "bg-emerald-50 border-emerald-200",
+                },
+                {
+                  phase: "المرحلة الرابعة",
+                  title: "التكامل مع الإكوسيستم",
+                  items: ["بناء واجهات برمجة (APIs) للتكامل مع تطبيقات أخرى", "التكامل مع PiNet للإشعارات", "استكشاف فرص التكامل مع تطبيقات السوق", "جمع ردود الفعل وتحسين مستمر"],
+                  color: "bg-purple-50 border-purple-200",
+                },
+                {
+                  phase: "المرحلة الخامسة",
+                  title: "الميزات المتقدمة",
+                  items: ["دعم التجار المتعددين", "تحليلات وإحصائيات متقدمة", "دعم نماذج الاشتراك (بعد توفر Smart Contracts)", "تكامل مع الذكاء الاصطناعي لاكتشاف الاحتيال"],
+                  color: "bg-rose-50 border-rose-200",
+                },
+              ].map((phase) => (
+                <Card key={phase.phase} className={`border ${phase.color}`}>
+                  <CardContent className="p-4">
+                    <Badge variant="outline" className="mb-2">{phase.phase}</Badge>
+                    <h4 className="font-bold text-sm mb-2">{phase.title}</h4>
+                    <ul className="space-y-1">
+                      {phase.items.map((item) => (
+                        <li key={item} className="text-xs text-gray-600 flex items-start gap-2">
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 mt-0.5 shrink-0" />
+                          {item}
+                        </li>
+                      ))}
+                    </ul>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </SubSection>
+        </Section>
+
+        <Separator className="my-8" />
+
+        {/* ══════════════════════════════════════════════════
+            الخاتمة
+        ══════════════════════════════════════════════════ */}
+        <section id="conclusion" className="scroll-mt-24 mb-16">
+          <div className="flex items-center gap-3 mb-6 border-r-4 border-purple-600 pr-4">
+            <div className="p-2 bg-purple-100 rounded-lg">
+              <Heart className="w-6 h-6 text-purple-700" />
+            </div>
+            <h2 className="text-2xl md:text-3xl font-bold text-gray-900">الخاتمة</h2>
+          </div>
+
+          <div className="space-y-4 text-gray-700 leading-[1.9] text-[15px] md:text-base">
+            <p>
+              في 20 فبراير 2025، حققنا ما اعتقد كثيرون أنه مستحيل — أطلقنا Open Network وفتحنا شبكة Pi للعالم. أكثر من 60 مليون شخص حول العالم يمتلكون الآن Pi يمكنهم استخدامها في معاملات حقيقية. لكن الإطلاق كان البداية، لا النهاية.
+            </p>
+            <p>
+              الإكوسيستم يحتاج اليوم — بشكل عاجل وحاسم — إلى بنية تحتية تجارية حقيقية. تطبيق إنشاء الفواتير مع آلية الضمان ليس تطبيقاً عادياً من بين عشرات التطبيقات — بل هو <strong>العمود الفقري</strong> الذي سيرتقي بإكوسيستم Pi من منصة للمدفوعات البسيطة إلى نظام تجاري شامل يخدم الملايين.
+            </p>
+            <p>
+              هذا التطبيق يتوافق تماماً مع كل مبادئنا ومتطلباتنا: يستخدم Pi SDK للمصادقة والدفع، يعمل داخل Pi Browser، يحترم سياسة البيانات، ولا يستخدم علاماتنا التجارية. أكثر من ذلك — يُحقق رؤيتنا الأصلية: توفير فائدة حقيقية للناس من خلال تقنية البلوكتشين.
+            </p>
+            <p>
+              الفرصة الآن مفتوحة. الإكوسيستم في مرحلة نموه الأسرع، والمستخدمون يبحثون عن أدوات تجارية حقيقية. أول تطبيق يملأ فجوة الفواتير والضمان سيحظى بميزة المبادر الأول — وسيصبح جزءاً لا يتجزأ من الاقتصاد الرقمي الذي نبنيه معاً.
+            </p>
+
+            <CalloutBox type="success" title="رسالة ختامية من الدكتور نيكولاس كوكاليس">
+              <p className="leading-relaxed">
+                &quot;Pi لم تُبنَ لتمكّن قلة من تحقيق أرباح سريعة. Pi بُنيت لتُمكّن المليارات من المشاركة في الاقتصاد الرقمي العالمي. كل تطبيق يحل مشكلة حقيقية للمجتمع — مثل تطبيق الفواتير والضمان الذي يحمي التجار والعملاء — هو لبنة أساسية في هذا البناء العظيم. الفرصة متاحة لكل من يريد المساهمة. المستقبل يُبنى الآن.&quot;
+              </p>
+            </CalloutBox>
+
+            <div className="mt-8 text-center">
+              <p className="text-xs text-gray-400">
+                دراسة بحثية — جميع المعلومات مستندة إلى المصادر الرسمية لشبكة Pi Network
+              </p>
+              <p className="text-xs text-gray-400 mt-1">
+                minepi.com — pi-apps.github.io — 2025
+              </p>
+            </div>
+          </div>
+        </section>
       </main>
 
-      {/* ═══════════════════════════════════════════════════════════════
-          ISSUE DETAIL SHEET
-         ═══════════════════════════════════════════════════════════════ */}
-      <IssueDetailSheet
-        issue={selectedIssue}
-        open={sheetOpen}
-        onOpenChange={setSheetOpen}
-        repoUrl={report.meta.repository}
-        severity={selectedSeverity}
-        isBrief={selectedIsBrief}
-      />
+      {/* ─── FOOTER ────────────────────────────────────── */}
+      <footer className="bg-gray-50 border-t py-8 mt-auto">
+        <div className="max-w-4xl mx-auto px-6 text-center text-xs text-gray-400">
+          <p>دراسة معمقة: إكوسيستم شبكة Pi والرؤية المستقبلية للتجارة الإلكترونية</p>
+          <p className="mt-1">2025 — جميع المعلومات مستندة إلى المصادر الرسمية</p>
+        </div>
+      </footer>
 
-      {/* ═══════════════════════════════════════════════════════════════
-          AI ANALYSIS DIALOG
-         ═══════════════════════════════════════════════════════════════ */}
-      <AiAnalysisDialog
-        issue={aiDialogIssue}
-        open={aiDialogOpen}
-        onOpenChange={setAiDialogOpen}
-      />
-
-      {/* ═══════════════════════════════════════════════════════════════
-          COMMAND PALETTE (Cmd+K)
-         ═══════════════════════════════════════════════════════════════ */}
-      <CommandPalette />
-
-      {/* ═══════════════════════════════════════════════════════════════
-          QUICK ACTIONS FAB
-         ═══════════════════════════════════════════════════════════════ */}
-      <QuickActions
-        onQuickAiAnalysis={(issue) => {
-          setAiDialogIssue(issue);
-          setAiDialogOpen(true);
-        }}
-        onRefresh={() => {
-          queryClient.invalidateQueries({ queryKey: ["issues"] });
-          queryClient.invalidateQueries({ queryKey: ["timeline"] });
-          toast.success("تم تحديث البيانات");
-        }}
-      />
-
-      {/* ═══════════════════════════════════════════════════════════════
-          AI ADVISOR CHAT
-         ═══════════════════════════════════════════════════════════════ */}
-      <AiAdvisorChat />
-
-      {/* ═══════════════════════════════════════════════════════════════
-          FOOTER
-         ═══════════════════════════════════════════════════════════════ */}
-      <AppFooter />
+      {/* ─── PRINT STYLES ─────────────────────────────── */}
+      <style jsx global>{`
+        @media print {
+          .no-print { display: none !important; }
+          body { font-size: 11pt; }
+          section { page-break-inside: avoid; }
+          header { page-break-after: avoid; }
+        }
+      `}</style>
     </div>
-    </PiAuthGate>
+  );
+}
+
+function Quote({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor">
+      <path d="M4.583 17.321C3.553 16.227 3 15 3 13.011c0-3.5 2.457-6.637 6.03-8.188l.893 1.378c-3.335 1.804-3.987 4.145-4.247 5.621.537-.278 1.24-.375 1.929-.311 1.804.167 3.226 1.648 3.226 3.489a3.5 3.5 0 01-3.5 3.5c-1.073 0-2.099-.49-2.748-1.179zm10 0C13.553 16.227 13 15 13 13.011c0-3.5 2.457-6.637 6.03-8.188l.893 1.378c-3.335 1.804-3.987 4.145-4.247 5.621.537-.278 1.24-.375 1.929-.311 1.804.167 3.226 1.648 3.226 3.489a3.5 3.5 0 01-3.5 3.5c-1.073 0-2.099-.49-2.748-1.179z" />
+    </svg>
   );
 }
