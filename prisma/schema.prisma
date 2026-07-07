@@ -4,41 +4,67 @@ generator client {
 
 datasource db {
   provider = "sqlite"
-  url      = "file:../db/audit.db"
+  url      = "file:../db/ledgererp.db"
 }
 
-model AuditIssue {
+model Store {
+  id          String   @id @default(cuid())
+  piUid       String   @unique
+  name        String
+  description String   @default("")
+  avatar      String   @default("")
+  isVerified  Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  products  Product[]
+  invoices  Invoice[]
+}
+
+model Product {
+  id          String   @id @default(cuid())
+  storeId     String
+  name        String
+  description String   @default("")
+  price       Float    // price in Pi
+  image       String   @default("")
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  store Store @relation(fields: [storeId], references: [id])
+  items InvoiceItem[]
+}
+
+model Invoice {
   id            String   @id @default(cuid())
-  issueId       String   @unique
-  severity      String
-  source        String
-  file          String
-  line          Int      @default(0)
-  category      String
-  title         String
-  description   String
-  recommendation String
-  status        String   @default("open")
-  priority      Int      @default(0)
-  effort        String   @default("")
-  impact        String   @default("")
-  assignee      String   @default("")
+  invoiceNumber String   @unique
+  storeId       String
+  customerPiUid String
+  customerName  String
+  subtotal      Float
+  escrowFee     Float    @default(0)
+  total         Float
+  status        String   @default("pending") // pending, paid_escrow, shipped, delivered, completed, disputed, cancelled
   notes         String   @default("")
-  fixedAt       DateTime?
+  paymentTxId   String   @default("")  // Pi blockchain tx ID for escrow deposit
+  releaseTxId   String   @default("")  // Pi blockchain tx ID for escrow release
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  logs AuditLog[]
+  store  Store          @relation(fields: [storeId], references: [id])
+  items  InvoiceItem[]
 }
 
-model AuditLog {
-  id        String   @id @default(cuid())
-  action    String
-  issueId   String
-  oldStatus String?
-  newStatus String?
-  details   String   @default("")
-  createdAt DateTime @default(now())
+model InvoiceItem {
+  id          String  @id @default(cuid())
+  invoiceId   String
+  productId   String?
+  productName String
+  quantity    Int
+  unitPrice   Float
+  totalPrice  Float
 
-  issue AuditIssue @relation(fields: [issueId], references: [issueId])
+  invoice Invoice     @relation(fields: [invoiceId], references: [id])
+  product Product?    @relation(fields: [productId], references: [id])
 }
