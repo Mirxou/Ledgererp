@@ -1,0 +1,28 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "8/10: Clear, high-impact visual hierarchy (red alert, key metrics) effectively communicates urgency, but lacks deeper drill-down or trend data for comprehensive analysis.",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1783166708,
+  "id": "20260704200507dfd133ac29d042e0",
+  "model": "glm-4.6v",
+  "object": "chat.completion",
+  "request_id": "20260704200507dfd133ac29d042e0",
+  "usage": {
+    "completion_tokens": 37,
+    "completion_tokens_details": {
+      "reasoning_tokens": 0
+    },
+    "prompt_tokens": 997,
+    "prompt_tokens_details": {
+      "cached_tokens": 4
+    },
+    "total_tokens": 1034
+  }
+}

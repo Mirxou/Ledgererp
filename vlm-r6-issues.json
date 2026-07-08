@@ -1,0 +1,28 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "Rating: 6/10  \nImprovements:  \n1. Add severity distribution (e.g., critical/high/medium/low) to clarify risk hierarchy.  \n2. Include issue age (e.g., \"open for X days\") to highlight urgency.",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1783165878,
+  "id": "20260704195111bf2f70f601784e2c",
+  "model": "glm-4.6v",
+  "object": "chat.completion",
+  "request_id": "20260704195111bf2f70f601784e2c",
+  "usage": {
+    "completion_tokens": 55,
+    "completion_tokens_details": {
+      "reasoning_tokens": 0
+    },
+    "prompt_tokens": 997,
+    "prompt_tokens_details": {
+      "cached_tokens": 4
+    },
+    "total_tokens": 1052
+  }
+}

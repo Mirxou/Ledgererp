@@ -1,0 +1,16 @@
+{
+  "_metadata": {
+    "networks": {
+      "pi": {
+        "sdk_version": "2.0",
+        "app_uid": "ledgererp-audit",
+        "version": "1.0.0"
+      }
+    },
+    "app_info": {
+      "app_name": "Ledgererp Security Audit",
+      "app_description": "Security audit dashboard",
+      "developer": "Mirxou"
+    }
+  }
+}

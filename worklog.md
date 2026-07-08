@@ -166,3 +166,24 @@ Stage Summary:
 - Pi SDK integrated for authentication and payments (U2A for escrow, A2U for release)
 - Complies with Pi guidelines: Pi-only auth, Pi-only transactions, works in Pi Browser
 - Database schema supports the complete invoice lifecycle
+
+---
+Task ID: 12
+Agent: Main Session — Fix Lint Errors
+Task: Fix all ESLint errors and warnings in the project
+
+Work Log:
+- Fixed `react-hooks/set-state-in-effect` error in src/app/page.tsx line 145
+  - Replaced `useState(myStore)` + `useEffect` with `useMemo` derived state (`storeFromApi`) + `useState(createdStore)` for mutation results
+  - Changed `useEffect` import to `useMemo` since useEffect no longer used in page.tsx
+- Fixed unused `eslint-disable-next-line @typescript-eslint/no-explicit-any` in src/components/charts/FixProgressGauge.tsx line 70
+  - Removed the comment as the rule was not triggering on the `any` type
+- Verified: `bun run lint` → 0 errors, 0 warnings
+- Verified: Dev server compiles page, returns HTTP 200
+- Verified: Agent browser shows page renders correctly (Ledgererp heading + Pi login button)
+- Verified: Zero console errors in browser
+
+Stage Summary:
+- All lint errors and warnings resolved
+- Page compiles and renders correctly
+- No runtime or console errors

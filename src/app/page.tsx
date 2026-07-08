@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { usePi } from "@/lib/pi-context";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -130,7 +130,7 @@ export default function LedgererpApp() {
   const { piUser, piBalance } = usePi();
   const qc = useQueryClient();
   const [activeTab, setActiveTab] = useState("dashboard");
-  const [myStore, setMyStore] = useState<Store | null>(null);
+  const [createdStore, setCreatedStore] = useState<Store | null>(null);
   const [showStudy, setShowStudy] = useState(false);
 
   /* Fetch or create store for current user */
@@ -139,13 +139,14 @@ export default function LedgererpApp() {
     queryFn: () => fetch("/api/stores").then(r => r.json()),
   });
 
-  useEffect(() => {
+  const storeFromApi = useMemo(() => {
     if (stores && piUser) {
-      const found = (stores as Store[]).find((s: Store) => s.piUid === piUser.uid);
-      if (found) setMyStore(found);
-      else setMyStore(null);
+      return (stores as Store[]).find((s: Store) => s.piUid === piUser.uid) ?? null;
     }
+    return null;
   }, [stores, piUser]);
+
+  const myStore = createdStore || storeFromApi;
 
   /* Invoice queries */
   const merchantInvoices = useQuery({
@@ -171,7 +172,7 @@ export default function LedgererpApp() {
   const createStore = useMutation({
     mutationFn: (data: { piUid: string; name: string; description: string }) =>
       fetch("/api/stores", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }).then(r => r.json()),
-    onSuccess: (data) => { setMyStore(data); qc.invalidateQueries({ queryKey: ["stores"] }); },
+    onSuccess: (data) => { setCreatedStore(data); qc.invalidateQueries({ queryKey: ["stores"] }); },
   });
 
   /* Create invoice mutation */
