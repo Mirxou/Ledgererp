@@ -18,19 +18,8 @@ export const viewport: Viewport = {
 
 export const metadata: Metadata = {
   title: "Ledgererp",
-  description:
-    "منصة الفواتير والضمان لتجارة Pi Network الآمنة",
-  keywords: [
-    "Pi Network",
-    "Ledgererp",
-    "فواتير",
-    "ضمان",
-    "Escrow",
-    "Commerce",
-    "Mainnet",
-    "تاجر",
-    "فاتورة",
-  ],
+  description: "منصة الفواتير والضمان لتجارة Pi Network الآمنة",
+  keywords: ["Ledgererp", "فواتير", "ضمان", "Escrow", "Commerce", "Pi Network", "تاجر", "فاتورة"],
   authors: [{ name: "Ledgererp" }],
   openGraph: {
     title: "Ledgererp",
@@ -44,16 +33,12 @@ export const metadata: Metadata = {
     title: "Ledgererp",
     description: "منصة الفواتير والضمان لتجارة Pi Network الآمنة",
   },
-  formatDetection: {
-    telephone: false,
-  },
+  formatDetection: { telephone: false },
 };
 
 export default function RootLayout({
   children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
+}: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="ar" dir="rtl" suppressHydrationWarning>
       <head>
@@ -66,15 +51,8 @@ export default function RootLayout({
           strategy="beforeInteractive"
         />
       </head>
-      <body
-        className="font-[Cairo,system-ui,-apple-system,sans-serif] antialiased bg-background text-foreground"
-      >
-        <ThemeProvider
-          attribute="class"
-          defaultTheme="dark"
-          enableSystem
-          disableTransitionOnChange
-        >
+      <body className="font-[Cairo,system-ui,-apple-system,sans-serif] antialiased bg-background text-foreground">
+        <ThemeProvider attribute="class" defaultTheme="dark" enableSystem disableTransitionOnChange>
           <QueryProvider>
             {children}
           </QueryProvider>

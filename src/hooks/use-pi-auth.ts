@@ -9,13 +9,15 @@ import {
 
 /* ─── Return type ─────────────────────────────────────────── */
 export interface UsePiAuthReturn {
-  /** `true` once `window.Pi` is detected. */
+  /** `true` once we know whether the Pi SDK is available or not. */
   sdkReady: boolean;
+  /** `true` when the user is NOT in Pi Browser (detection complete). */
+  notPiBrowser: boolean;
   /** `true` after a successful Pi authentication + backend verification. */
   connected: boolean;
   /** The authenticated Pi user (null until connected). */
   user: PiUser | null;
-  /** `true` while authentication or verification is in flight. */
+  /** `true` while detection, authentication or verification is in flight. */
   loading: boolean;
   /** Human-readable error message, or null. */
   error: string | null;
@@ -25,54 +27,51 @@ export interface UsePiAuthReturn {
 
 /* ─── Hook ────────────────────────────────────────────────── */
 
-/**
- * React hook that manages Pi Network authentication.
- *
- * • On mount it starts polling for `window.Pi` (the SDK loads asynchronously).
- * • Once the SDK is ready it automatically authenticates the user.
- * • After receiving the `accessToken` from Pi, it sends the token to
- *   `/api/auth/verify` so the backend can validate it against
- *   `https://api.minepi.com/v2/me`.
- */
 export function usePiAuth(): UsePiAuthReturn {
   const [sdkReady, setSdkReady] = useState(false);
+  const [notPiBrowser, setNotPiBrowser] = useState(false);
   const [connected, setConnected] = useState(false);
   const [user, setUser] = useState<PiUser | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true); // Start true — we're detecting
   const [error, setError] = useState<string | null>(null);
 
-  /** Prevent duplicate auth calls. */
   const authAttempted = useRef(false);
+  const mountedRef = useRef(true);
 
-  /* ── Step 1: poll for SDK readiness ──────────────────────── */
+  /* ── Step 1: detect Pi SDK ─────────────────────────────── */
   useEffect(() => {
-    if (sdkReady) return; // already detected
-
-    // If already available (synchronous load)
+    // If already available synchronously (Pi Browser, script loaded)
     if (isPiBrowser()) {
       setSdkReady(true);
+      setLoading(false);
       return;
     }
 
-    // The script tag uses `beforeInteractive` but we still poll briefly
-    // in case the environment loads it asynchronously.
+    // Poll for async-loaded SDK (shouldn't happen in Pi Browser, but safety net)
+    let attempts = 0;
+    const MAX_ATTEMPTS = 15; // 15 × 500ms = 7.5 seconds
+
     const id = setInterval(() => {
+      attempts++;
       if (isPiBrowser()) {
         clearInterval(id);
-        setSdkReady(true);
+        if (mountedRef.current) {
+          setSdkReady(true);
+          setLoading(false);
+        }
+      } else if (attempts >= MAX_ATTEMPTS) {
+        clearInterval(id);
+        if (mountedRef.current) {
+          setNotPiBrowser(true);
+          setLoading(false);
+        }
       }
-    }, 300);
-
-    // Stop polling after 10 s — the user is probably not in Pi Browser.
-    const timeout = setTimeout(() => {
-      clearInterval(id);
-    }, 10_000);
+    }, 500);
 
     return () => {
       clearInterval(id);
-      clearTimeout(timeout);
     };
-  }, [sdkReady]);
+  }, []);
 
   /* ── Step 2: authenticate when SDK is ready ─────────────── */
   const doAuth = useCallback(async () => {
@@ -84,9 +83,11 @@ export function usePiAuth(): UsePiAuthReturn {
 
     try {
       const authedUser = await authenticatePi();
+      if (!mountedRef.current) return;
+
       setUser(authedUser);
 
-      // Send the accessToken to our backend for server-side verification.
+      // Send accessToken to backend for server-side verification
       const res = await fetch("/api/auth/verify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -103,29 +104,35 @@ export function usePiAuth(): UsePiAuthReturn {
 
       setConnected(true);
     } catch (err) {
+      if (!mountedRef.current) return;
       const message =
         err instanceof Error ? err.message : "Authentication failed";
       setError(message);
-      // Allow retrying on next manual login click
-      authAttempted.current = false;
+      authAttempted.current = false; // Allow retry
     } finally {
-      setLoading(false);
+      if (mountedRef.current) {
+        setLoading(false);
+      }
     }
   }, []);
 
-  // Auto-authenticate as soon as the SDK becomes ready.
+  // Auto-authenticate as soon as the SDK becomes ready
   useEffect(() => {
-    if (sdkReady) {
+    if (sdkReady && !connected) {
       doAuth();
     }
-  }, [sdkReady, doAuth]);
+  }, [sdkReady, connected, doAuth]);
 
-  /* ── Manual login (for a button) ───────────────────────── */
+  // Cleanup
+  useEffect(() => {
+    return () => { mountedRef.current = false; };
+  }, []);
+
+  /* ── Manual login (retry) ───────────────────────────────── */
   const login = useCallback(async () => {
-    // Reset state so the user can retry.
     authAttempted.current = false;
     await doAuth();
   }, [doAuth]);
 
-  return { sdkReady, connected, user, loading, error, login };
+  return { sdkReady, notPiBrowser, connected, user, loading, error, login };
 }

@@ -6,10 +6,10 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { createPiPayment, type PiPaymentData, type PiPaymentCallbacks } from "@/lib/pi-sdk";
 import {
   ShoppingCart, FileText, Plus, Package, Store, Truck,
-  CheckCircle2, Clock, XCircle, AlertTriangle, Send, CreditCard,
+  CheckCircle2, Clock, XCircle, AlertTriangle, CreditCard,
   Receipt, BarChart3, Loader2, Shield, ArrowRightLeft,
   ChevronDown, ChevronUp, Wallet,
-  FileCheck, Ban, CircleDot, ChevronLeft,
+  FileCheck, Ban, CircleDot,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -38,16 +38,16 @@ interface InvoiceData {
   store?: { name: string };
 }
 
-const ESCROW_FEE_RATE = 0.02; // 2% escrow fee
+const ESCROW_FEE_RATE = 0.02;
 
 const STATUS_MAP: Record<string, { label: string; color: string; icon: React.ElementType }> = {
-  pending:      { label: "في الانتظار",     color: "bg-yellow-500/15 text-yellow-600 border-yellow-500/30",       icon: Clock },
-  paid_escrow:  { label: "في الضمان",       color: "bg-blue-500/15 text-blue-600 border-blue-500/30",            icon: Shield },
-  shipped:      { label: "تم الشحن",        color: "bg-indigo-500/15 text-indigo-600 border-indigo-500/30",      icon: Truck },
-  delivered:    { label: "تم التسليم",      color: "bg-teal-500/15 text-teal-600 border-teal-500/30",            icon: CheckCircle2 },
-  completed:    { label: "مكتمل",           color: "bg-emerald-500/15 text-emerald-600 border-emerald-500/30",  icon: FileCheck },
-  disputed:     { label: "نزاع",            color: "bg-red-500/15 text-red-600 border-red-500/30",              icon: AlertTriangle },
-  cancelled:    { label: "ملغى",            color: "bg-zinc-500/15 text-zinc-500 border-zinc-500/30",           icon: Ban },
+  pending:      { label: "في الانتظار",   color: "bg-yellow-500/15 text-yellow-600 border-yellow-500/30",       icon: Clock },
+  paid_escrow:  { label: "في الضمان",     color: "bg-blue-500/15 text-blue-600 border-blue-500/30",            icon: Shield },
+  shipped:      { label: "تم الشحن",      color: "bg-indigo-500/15 text-indigo-600 border-indigo-500/30",      icon: Truck },
+  delivered:    { label: "تم التسليم",    color: "bg-teal-500/15 text-teal-600 border-teal-500/30",            icon: CheckCircle2 },
+  completed:    { label: "مكتمل",         color: "bg-emerald-500/15 text-emerald-600 border-emerald-500/30",  icon: FileCheck },
+  disputed:     { label: "نزاع",          color: "bg-red-500/15 text-red-600 border-red-500/30",              icon: AlertTriangle },
+  cancelled:    { label: "ملغى",          color: "bg-zinc-500/15 text-zinc-500 border-zinc-500/30",           icon: Ban },
 };
 
 function StatusBadge({ status }: { status: string }) {
@@ -57,6 +57,25 @@ function StatusBadge({ status }: { status: string }) {
     <Badge variant="outline" className={`${s.color} gap-1.5 font-medium`}>
       <Icon className="h-3.5 w-3.5" />{s.label}
     </Badge>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Loading Spinner
+   ═══════════════════════════════════════════════════════════════ */
+function FullPageLoader({ message }: { message: string }) {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-background">
+      <div className="text-center space-y-4">
+        <div className="mx-auto w-16 h-16 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-lg shadow-emerald-500/20">
+          <Shield className="w-8 h-8 text-white animate-pulse" />
+        </div>
+        <div className="space-y-2">
+          <Loader2 className="h-6 w-6 animate-spin text-emerald-500 mx-auto" />
+          <p className="text-sm text-muted-foreground">{message}</p>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -111,72 +130,87 @@ function PiBrowserRequired() {
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   Main Application
+   Login Screen
+   ═══════════════════════════════════════════════════════════════ */
+function LoginScreen({ onLogin, loading, error }: { onLogin: () => void; loading: boolean; error: string | null }) {
+  return (
+    <div className="min-h-screen flex items-center justify-center p-4 bg-background">
+      <Card className="max-w-sm w-full border-0 shadow-xl">
+        <CardContent className="pt-8 pb-6 text-center space-y-5">
+          <div className="mx-auto w-16 h-16 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center">
+            <Shield className="w-8 h-8 text-white" />
+          </div>
+          <div>
+            <h1 className="text-xl font-bold">Ledgererp</h1>
+            <p className="text-xs text-muted-foreground mt-1">تسجيل الدخول للمتابعة</p>
+          </div>
+          {error && (
+            <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-3 text-right">
+              <p className="text-xs text-red-600 dark:text-red-400">{error}</p>
+            </div>
+          )}
+          <Button
+            onClick={onLogin}
+            disabled={loading}
+            className="w-full bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white h-11 text-sm font-medium"
+          >
+            {loading ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Wallet className="h-4 w-4 ml-2" />
+            )}
+            {loading ? "جارٍ الاتصال..." : "تسجيل الدخول عبر Pi"}
+          </Button>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Main Application Entry
    ═══════════════════════════════════════════════════════════════ */
 export default function LedgererpApp() {
-  const { sdkReady, connected, user, loading: authLoading, error: authError, login } = usePiAuth();
-  const qc = useQueryClient();
-  const [activeTab, setActiveTab] = useState("dashboard");
+  const { sdkReady, notPiBrowser, connected, user, loading, error, login } = usePiAuth();
 
-  /* ── Not in Pi Browser ─────────────────────────────── */
-  if (!sdkReady && !authLoading) return <PiBrowserRequired />;
-
-  /* ── Loading ───────────────────────────────────────── */
-  if (authLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="text-center space-y-4">
-          <Loader2 className="h-8 w-8 animate-spin text-emerald-500 mx-auto" />
-          <p className="text-sm text-muted-foreground">جارٍ الاتصال بـ Pi Network...</p>
-        </div>
-      </div>
-    );
+  /* ── Initial detection phase ──────────────────────────── */
+  if (loading && !sdkReady && !notPiBrowser) {
+    return <FullPageLoader message="جارٍ تهيئة التطبيق..." />;
   }
 
-  /* ── Auth Error / Not connected ────────────────────── */
+  /* ── Not in Pi Browser ────────────────────────────────── */
+  if (notPiBrowser) {
+    return <PiBrowserRequired />;
+  }
+
+  /* ── Authenticating ───────────────────────────────────── */
+  if (loading) {
+    return <FullPageLoader message="جارٍ الاتصال بـ Pi Network..." />;
+  }
+
+  /* ── Auth Error — show login button ───────────────────── */
   if (!connected || !user) {
-    return (
-      <div className="min-h-screen flex items-center justify-center p-4 bg-background">
-        <Card className="max-w-sm w-full border-0 shadow-xl">
-          <CardContent className="pt-8 pb-6 text-center space-y-5">
-            <div className="mx-auto w-16 h-16 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center">
-              <Shield className="w-8 h-8 text-white" />
-            </div>
-            <div>
-              <h1 className="text-xl font-bold">Ledgererp</h1>
-              <p className="text-xs text-muted-foreground mt-1">تسجيل الدخول للمتابعة</p>
-            </div>
-            {authError && (
-              <p className="text-xs text-destructive bg-destructive/10 rounded-lg px-3 py-2">{authError}</p>
-            )}
-            <Button onClick={login} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white">
-              <Wallet className="h-4 w-4 ml-2" />
-              تسجيل الدخول عبر Pi
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-    );
+    return <LoginScreen onLogin={login} loading={loading} error={error} />;
   }
 
-  /* ── Authenticated — Main App ──────────────────────── */
-  return <AuthenticatedApp user={user} activeTab={activeTab} setActiveTab={setActiveTab} />;
+  /* ── Authenticated — Main App ─────────────────────────── */
+  return <AuthenticatedApp user={user} />;
 }
 
 /* ═══════════════════════════════════════════════════════════════
    Authenticated Shell
    ═══════════════════════════════════════════════════════════════ */
 function AuthenticatedApp({
-  user, activeTab, setActiveTab,
+  user,
 }: {
   user: { uid: string; username: string; accessToken: string };
-  activeTab: string; setActiveTab: (t: string) => void;
 }) {
   const qc = useQueryClient();
+  const [activeTab, setActiveTab] = useState("dashboard");
 
   /* Store */
   const [createdStore, setCreatedStore] = useState<StoreData | null>(null);
-  const { data: stores } = useQuery({
+  const { data: stores, isLoading: storesLoading } = useQuery({
     queryKey: ["stores"],
     queryFn: () => fetch("/api/stores").then(r => r.json()),
   });
@@ -187,12 +221,12 @@ function AuthenticatedApp({
   const myStore = createdStore || storeFromApi;
 
   /* Invoices */
-  const merchantInvoices = useQuery({
+  const { data: merchantInvoices } = useQuery({
     queryKey: ["invoices", "merchant", myStore?.id],
     queryFn: () => fetch(`/api/invoices?storeId=${myStore!.id}`).then(r => r.json()),
     enabled: !!myStore?.id,
   });
-  const customerInvoices = useQuery({
+  const { data: customerInvoices } = useQuery({
     queryKey: ["invoices", "customer", user.uid],
     queryFn: () => fetch(`/api/invoices?customerPiUid=${user.uid}`).then(r => r.json()),
   });
@@ -219,8 +253,8 @@ function AuthenticatedApp({
 
   /* Stats */
   const stats = useMemo(() => {
-    const mi = (merchantInvoices.data || []) as InvoiceData[];
-    const ci = (customerInvoices.data || []) as InvoiceData[];
+    const mi = (merchantInvoices || []) as InvoiceData[];
+    const ci = (customerInvoices || []) as InvoiceData[];
     const escrowed = mi.filter(i => i.status === "paid_escrow" || i.status === "shipped" || i.status === "delivered");
     return {
       totalInvoices: mi.length,
@@ -229,7 +263,7 @@ function AuthenticatedApp({
       completedPi: mi.filter(i => i.status === "completed").reduce((s, i) => s + i.total, 0),
       myOrders: ci.length,
     };
-  }, [merchantInvoices.data, customerInvoices.data, products]);
+  }, [merchantInvoices, customerInvoices, products]);
 
   /* ── Pay with Pi (U2A escrow deposit) ──────────────── */
   const payWithPi = useCallback((invoice: InvoiceData) => {
@@ -288,24 +322,28 @@ function AuthenticatedApp({
 
       {/* Main */}
       <main className="flex-1 max-w-5xl mx-auto w-full px-4 py-6 space-y-6">
-        {!myStore ? (
+        {storesLoading && !myStore ? (
+          <div className="flex justify-center py-20">
+            <Loader2 className="h-6 w-6 animate-spin text-emerald-500" />
+          </div>
+        ) : !myStore ? (
           <StoreSetup onCreate={(name, desc) => createStore.mutate({ piUid: user.uid, name, description: desc })} loading={createStore.isPending} />
         ) : (
           <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
             <TabsList className="grid grid-cols-4 w-full h-auto p-1 bg-muted/50">
-              <TabsTrigger value="dashboard" className="text-xs py-2 data-[state=active]:bg-emerald-600 data-[state=active]:text-white"><BarChart3 className="h-3.5 w-3.5 ml-1.5" />لوحة التحكم</TabsTrigger>
-              <TabsTrigger value="products" className="text-xs py-2 data-[state=active]:bg-emerald-600 data-[state=active]:text-white"><Package className="h-3.5 w-3.5 ml-1.5" />المنتجات</TabsTrigger>
-              <TabsTrigger value="invoices" className="text-xs py-2 data-[state=active]:bg-emerald-600 data-[state=active]:text-white"><FileText className="h-3.5 w-3.5 ml-1.5" />الفواتير</TabsTrigger>
-              <TabsTrigger value="orders" className="text-xs py-2 data-[state=active]:bg-emerald-600 data-[state=active]:text-white"><ShoppingCart className="h-3.5 w-3.5 ml-1.5" />الطلبات</TabsTrigger>
+              <TabsTrigger value="dashboard" className="text-xs py-2.5 data-[state=active]:bg-emerald-600 data-[state=active]:text-white"><BarChart3 className="h-3.5 w-3.5 ml-1.5" />لوحة التحكم</TabsTrigger>
+              <TabsTrigger value="products" className="text-xs py-2.5 data-[state=active]:bg-emerald-600 data-[state=active]:text-white"><Package className="h-3.5 w-3.5 ml-1.5" />المنتجات</TabsTrigger>
+              <TabsTrigger value="invoices" className="text-xs py-2.5 data-[state=active]:bg-emerald-600 data-[state=active]:text-white"><FileText className="h-3.5 w-3.5 ml-1.5" />الفواتير</TabsTrigger>
+              <TabsTrigger value="orders" className="text-xs py-2.5 data-[state=active]:bg-emerald-600 data-[state=active]:text-white"><ShoppingCart className="h-3.5 w-3.5 ml-1.5" />الطلبات</TabsTrigger>
             </TabsList>
 
             <TabsContent value="dashboard"><DashboardView stats={stats} store={myStore} /></TabsContent>
-            <TabsContent value="products"><ProductsView products={products || []} storeId={myStore.id} /></TabsContent>
-            <TabsContent value="invoices"><InvoicesView store={myStore} products={products || []} /></TabsContent>
+            <TabsContent value="products"><ProductsView products={(products || []) as ProductData[]} storeId={myStore.id} /></TabsContent>
+            <TabsContent value="invoices"><InvoicesView store={myStore} products={(products || []) as ProductData[]} /></TabsContent>
             <TabsContent value="orders">
               <OrdersView
-                merchantInvoices={merchantInvoices.data || []}
-                customerInvoices={customerInvoices.data || []}
+                merchantInvoices={(merchantInvoices || []) as InvoiceData[]}
+                customerInvoices={(customerInvoices || []) as InvoiceData[]}
                 storeId={myStore.id}
                 customerUid={user.uid}
                 onStatusChange={updateInvoiceStatus.mutate}
@@ -352,7 +390,11 @@ function StoreSetup({ onCreate, loading }: { onCreate: (name: string, desc: stri
           <Label className="text-xs">وصف المتجر</Label>
           <Textarea value={desc} onChange={e => setDesc(e.target.value)} placeholder="وصف مختصر لمتجرك..." className="text-sm min-h-[80px]" />
         </div>
-        <Button onClick={() => onCreate(name, desc)} disabled={!name.trim() || loading} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white text-sm">
+        <Button
+          onClick={() => { if (name.trim()) onCreate(name.trim(), desc.trim()); }}
+          disabled={!name.trim() || loading}
+          className="w-full bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white text-sm h-10"
+        >
           {loading ? <Loader2 className="h-4 w-4 animate-spin ml-2" /> : <Plus className="h-4 w-4 ml-2" />}
           إنشاء المتجر
         </Button>
@@ -408,20 +450,20 @@ function DashboardView({ stats, store }: { stats: Record<string, number>; store:
           </CardTitle>
         </CardHeader>
         <CardContent className="pb-4">
-          <div className="flex items-center justify-between text-xs gap-2 overflow-x-auto pb-1">
+          <div className="flex items-center justify-between text-xs gap-1 overflow-x-auto pb-1">
             {[
               { label: "إنشاء فاتورة", icon: FileText, color: "text-slate-500 bg-slate-100 dark:bg-slate-800" },
               { label: "دفع الضمان", icon: CreditCard, color: "text-blue-500 bg-blue-50 dark:bg-blue-950/50" },
               { label: "شحن البضاعة", icon: Truck, color: "text-indigo-500 bg-indigo-50 dark:bg-indigo-950/50" },
               { label: "تأكيد التسليم", icon: CheckCircle2, color: "text-teal-500 bg-teal-50 dark:bg-teal-950/50" },
               { label: "إطلاق Pi", icon: Wallet, color: "text-emerald-500 bg-emerald-50 dark:bg-emerald-950/50" },
-            ].map((step, i) => (
-              <div key={step.label} className="flex items-center gap-2 shrink-0">
+            ].map((step, i, arr) => (
+              <div key={step.label} className="flex items-center gap-1.5 shrink-0">
                 <div className={`w-8 h-8 rounded-lg ${step.color} flex items-center justify-center`}>
                   <step.icon className="h-4 w-4" />
                 </div>
                 <span className="text-muted-foreground whitespace-nowrap hidden sm:block">{step.label}</span>
-                {i < 4 && <ChevronLeft className="h-4 w-4 text-muted-foreground/40 shrink-0 sm:block hidden" />}
+                {i < arr.length - 1 && <ChevronDown className="h-3 w-3 text-muted-foreground/30 shrink-0 sm:block hidden" />}
               </div>
             ))}
           </div>
@@ -438,12 +480,31 @@ function ProductsView({ products, storeId }: { products: ProductData[]; storeId:
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ name: "", description: "", price: "" });
+  const [saving, setSaving] = useState(false);
 
-  const addProduct = useMutation({
-    mutationFn: (data: { storeId: string; name: string; description: string; price: number }) =>
-      fetch("/api/products", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }).then(r => r.json()),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["products"] }); setOpen(false); setForm({ name: "", description: "", price: "" }); },
-  });
+  const handleAdd = async () => {
+    if (!form.name.trim() || !form.price) return;
+    setSaving(true);
+    try {
+      const res = await fetch("/api/products", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          storeId,
+          name: form.name.trim(),
+          description: form.description.trim(),
+          price: parseFloat(form.price) || 0,
+        }),
+      });
+      if (res.ok) {
+        qc.invalidateQueries({ queryKey: ["products"] });
+        setOpen(false);
+        setForm({ name: "", description: "", price: "" });
+      }
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <div className="space-y-4">
@@ -463,11 +524,11 @@ function ProductsView({ products, storeId }: { products: ProductData[]; storeId:
             <div className="space-y-3">
               <div className="space-y-1.5"><Label className="text-xs">الاسم</Label><Input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="اسم المنتج" className="text-sm" /></div>
               <div className="space-y-1.5"><Label className="text-xs">الوصف</Label><Textarea value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} placeholder="وصف مختصر" className="text-sm" /></div>
-              <div className="space-y-1.5"><Label className="text-xs">السعر (Pi)</Label><Input type="number" step="0.01" value={form.price} onChange={e => setForm({ ...form, price: e.target.value })} placeholder="0.00" className="text-sm" /></div>
+              <div className="space-y-1.5"><Label className="text-xs">السعر (Pi)</Label><Input type="number" step="0.01" inputMode="decimal" value={form.price} onChange={e => setForm({ ...form, price: e.target.value })} placeholder="0.00" className="text-sm" dir="ltr" /></div>
             </div>
             <DialogFooter>
-              <Button onClick={() => addProduct.mutate({ storeId, name: form.name, description: form.description, price: parseFloat(form.price) || 0 })} disabled={!form.name.trim() || !form.price} size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs">
-                {addProduct.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin ml-1.5" /> : <Plus className="h-3.5 w-3.5 ml-1.5" />}
+              <Button onClick={handleAdd} disabled={!form.name.trim() || !form.price || saving} size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs">
+                {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin ml-1.5" /> : <Plus className="h-3.5 w-3.5 ml-1.5" />}
                 إضافة
               </Button>
             </DialogFooter>
@@ -520,38 +581,48 @@ function InvoicesView({ store, products }: { store: StoreData; products: Product
   const [customerName, setCustomerName] = useState("");
   const [customerUid, setCustomerUid] = useState("");
   const [notes, setNotes] = useState("");
+  const [saving, setSaving] = useState(false);
   const [items, setItems] = useState<{ productName: string; quantity: number; unitPrice: number }[]>([
     { productName: "", quantity: 1, unitPrice: 0 },
   ]);
 
-  const addItem = () => setItems([...items, { productName: "", quantity: 1, unitPrice: 0 }]);
-  const removeItem = (idx: number) => setItems(items.filter((_, i) => i !== idx));
+  const addItem = () => setItems(prev => [...prev, { productName: "", quantity: 1, unitPrice: 0 }]);
+  const removeItem = (idx: number) => setItems(prev => prev.filter((_, i) => i !== idx));
   const updateItem = (idx: number, field: string, value: string | number) => {
-    const updated = [...items];
-    (updated[idx] as Record<string, unknown>)[field] = value;
-    setItems(updated);
+    setItems(prev => {
+      const updated = [...prev];
+      (updated[idx] as Record<string, unknown>)[field] = value;
+      return updated;
+    });
   };
 
   const subtotal = items.reduce((s, i) => s + i.unitPrice * i.quantity, 0);
   const escrowFee = subtotal * ESCROW_FEE_RATE;
   const total = subtotal + escrowFee;
 
-  const createInvoice = useMutation({
-    mutationFn: () =>
-      fetch("/api/invoices", {
+  const handleCreate = async () => {
+    if (!customerUid.trim() || items.some(i => !i.productName || i.unitPrice <= 0)) return;
+    setSaving(true);
+    try {
+      const res = await fetch("/api/invoices", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          storeId: store.id, customerPiUid: customerUid, customerName, items, notes, escrowFee,
+          storeId: store.id, customerPiUid: customerUid.trim(), customerName: customerName.trim(), items, notes, escrowFee,
         }),
-      }).then(r => r.json()),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["invoices"] });
-      setOpen(false);
-      setCustomerName(""); setCustomerUid(""); setNotes("");
-      setItems([{ productName: "", quantity: 1, unitPrice: 0 }]);
-    },
-  });
+      });
+      if (res.ok) {
+        qc.invalidateQueries({ queryKey: ["invoices"] });
+        setOpen(false);
+        setCustomerName(""); setCustomerUid(""); setNotes("");
+        setItems([{ productName: "", quantity: 1, unitPrice: 0 }]);
+      }
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const canCreate = customerUid.trim() !== "" && items.some(i => i.productName && i.unitPrice > 0);
 
   return (
     <div className="space-y-4">
@@ -576,7 +647,7 @@ function InvoicesView({ store, products }: { store: StoreData; products: Product
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-xs">معرّف المشتري (UID)</Label>
-                  <Input value={customerUid} onChange={e => setCustomerUid(e.target.value)} placeholder="uid من Pi" className="text-sm" dir="ltr" />
+                  <Input value={customerUid} onChange={e => setCustomerUid(e.target.value)} placeholder="uid من Pi" className="text-sm" dir="ltr" inputMode="text" autoCapitalize="off" autoCorrect="off" />
                 </div>
               </div>
 
@@ -601,9 +672,9 @@ function InvoicesView({ store, products }: { store: StoreData; products: Product
                           <select
                             value={item.productName}
                             onChange={e => {
-                              const p = products.find(pr => pr.name === e.target.value);
                               updateItem(idx, "productName", e.target.value);
-                              if (p) { updateItem(idx, "unitPrice", p.price); }
+                              const p = products.find(pr => pr.name === e.target.value);
+                              if (p) updateItem(idx, "unitPrice", p.price);
                             }}
                             className="w-full h-8 rounded-md border border-input bg-background px-2 text-xs"
                           >
@@ -614,11 +685,11 @@ function InvoicesView({ store, products }: { store: StoreData; products: Product
                       </div>
                       <div className="space-y-1">
                         {idx === 0 && <span className="text-[10px] text-muted-foreground">الكمية</span>}
-                        <Input type="number" min="1" value={item.quantity} onChange={e => updateItem(idx, "quantity", parseInt(e.target.value) || 1)} className="text-xs h-8 text-center" />
+                        <Input type="number" min="1" inputMode="numeric" value={item.quantity} onChange={e => updateItem(idx, "quantity", parseInt(e.target.value) || 1)} className="text-xs h-8 text-center" />
                       </div>
                       <div className="space-y-1">
                         {idx === 0 && <span className="text-[10px] text-muted-foreground">السعر (π)</span>}
-                        <Input type="number" step="0.01" value={item.unitPrice} onChange={e => updateItem(idx, "unitPrice", parseFloat(e.target.value) || 0)} className="text-xs h-8" dir="ltr" />
+                        <Input type="number" step="0.01" inputMode="decimal" value={item.unitPrice} onChange={e => updateItem(idx, "unitPrice", parseFloat(e.target.value) || 0)} className="text-xs h-8" dir="ltr" />
                       </div>
                       <Button variant="ghost" size="sm" onClick={() => removeItem(idx)} className="h-8 w-8 p-0 text-destructive" disabled={items.length <= 1}>
                         <XCircle className="h-3.5 w-3.5" />
@@ -642,8 +713,8 @@ function InvoicesView({ store, products }: { store: StoreData; products: Product
               </div>
             </div>
             <DialogFooter>
-              <Button onClick={() => createInvoice.mutate()} disabled={!customerUid.trim() || items.some(i => !i.productName || i.unitPrice <= 0) || createInvoice.isPending} size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs">
-                {createInvoice.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin ml-1.5" /> : <Receipt className="h-3.5 w-3.5 ml-1.5" />}
+              <Button onClick={handleCreate} disabled={!canCreate || saving} size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs">
+                {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin ml-1.5" /> : <Receipt className="h-3.5 w-3.5 ml-1.5" />}
                 إنشاء الفاتورة
               </Button>
             </DialogFooter>
@@ -699,7 +770,7 @@ function OrdersView({
           </CardContent>
         </Card>
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-3 max-h-[70vh] overflow-y-auto">
           {invoices.map(inv => (
             <OrderCard key={inv.id} invoice={inv} view={view} onStatusChange={onStatusChange} onPay={onPay} />
           ))}
@@ -733,7 +804,7 @@ function OrderCard({
             <div className="min-w-0">
               <p className="font-semibold text-sm truncate">{invoice.invoiceNumber}</p>
               <p className="text-[11px] text-muted-foreground">
-                {view === "merchant" ? invoice.customerName || invoice.customerPiUid : invoice.store?.name}
+                {view === "merchant" ? (invoice.customerName || invoice.customerPiUid) : (invoice.store?.name || "—")}
                 {" · "}
                 {new Date(invoice.createdAt).toLocaleDateString("ar-DZ")}
               </p>
@@ -762,12 +833,12 @@ function OrderCard({
             </Button>
           )}
           {canShip && (
-            <Button size="sm" variant="outline" onClick={() => onStatusChange({ id: invoice.id, status: "shipped" })} className="h-8 text-xs border-blue-500/30 text-blue-600 hover:bg-blue-50">
+            <Button size="sm" variant="outline" onClick={() => onStatusChange({ id: invoice.id, status: "shipped" })} className="h-8 text-xs border-blue-500/30 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/30">
               <Truck className="h-3 w-3 ml-1.5" />شحن
             </Button>
           )}
           {canConfirmDelivery && (
-            <Button size="sm" variant="outline" onClick={() => onStatusChange({ id: invoice.id, status: "delivered" })} className="h-8 text-xs border-teal-500/30 text-teal-600 hover:bg-teal-50">
+            <Button size="sm" variant="outline" onClick={() => onStatusChange({ id: invoice.id, status: "delivered" })} className="h-8 text-xs border-teal-500/30 text-teal-600 hover:bg-teal-50 dark:hover:bg-teal-950/30">
               <CheckCircle2 className="h-3 w-3 ml-1.5" />تأكيد التسليم
             </Button>
           )}
@@ -795,8 +866,8 @@ function OrderCard({
               </div>
             )}
             {invoice.paymentTxId && (
-              <div className="text-[10px] text-muted-foreground font-mono bg-muted/50 rounded-lg p-2 mt-1" dir="ltr">
-                TX: {invoice.paymentTxId.slice(0, 16)}...
+              <div className="text-[10px] text-muted-foreground font-mono bg-muted/50 rounded-lg p-2 mt-1 break-all" dir="ltr">
+                TX: {invoice.paymentTxId}
               </div>
             )}
           </div>
