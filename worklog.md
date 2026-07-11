@@ -360,3 +360,21 @@ Stage Summary:
 - Pi SDK integrated correctly per official documentation patterns
 - Payment flow: U2A (escrow deposit) + A2U (escrow release)
 - Clean architecture: 5 API routes, 1 hook, 1 SDK wrapper, 1 main page
+
+---
+Task ID: 13
+Agent: Main Session — Fix Vercel Build Failure
+Task: Fix TypeScript errors causing Vercel deployment to fail
+
+Work Log:
+- Vercel build failed with: `Type error: Property 'txid' does not exist on type '{}'` at pi_payment/[action]/route.ts:284
+- Fixed by casting `payment.transaction` to `Record<string, unknown> | undefined` before accessing `.txid`
+- Found additional TS error: `Property 'totalPrice' does not exist on item type` at page.tsx:533
+- Fixed by removing unused `totalPrice` assignment (subtotal is calculated directly on next line)
+- Verified: `npx tsc --noEmit` → 0 errors
+- Verified: `bun run lint` → 0 errors, 1 warning (font warning only)
+- Force pushed to GitHub: commit c60511e → main (forced update)
+
+Stage Summary:
+- Two TypeScript errors fixed that were blocking Vercel production build
+- Vercel will auto-redeploy with the fix
