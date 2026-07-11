@@ -1,22 +1,9 @@
 import type { Metadata, Viewport } from "next";
 import Script from "next/script";
-import { Cairo } from "next/font/google";
-import { Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
 import { ThemeProvider } from "@/components/theme-provider";
 import { QueryProvider } from "@/components/QueryProvider";
-
-const cairo = Cairo({
-  variable: "--font-cairo",
-  subsets: ["arabic", "latin"],
-  display: "swap",
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
 
 export const viewport: Viewport = {
   width: "device-width",
@@ -70,15 +57,17 @@ export default function RootLayout({
   return (
     <html lang="ar" dir="rtl" suppressHydrationWarning>
       <head>
-        {/* Pi Network SDK — loaded before interactive so window.Pi is
-            available when client components hydrate. */}
+        <link
+          href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800&display=swap"
+          rel="stylesheet"
+        />
         <Script
           src="https://sdk.minepi.com/pi-sdk.js"
           strategy="beforeInteractive"
         />
       </head>
       <body
-        className={`${cairo.variable} ${geistMono.variable} font-[family-name:var(--font-cairo),var(--font-geist-mono),system-ui,sans-serif] antialiased bg-background text-foreground`}
+        className="font-[Cairo,system-ui,-apple-system,sans-serif] antialiased bg-background text-foreground"
       >
         <ThemeProvider
           attribute="class"
