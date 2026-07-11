@@ -1,13 +1,15 @@
 "use client";
 
 import { useState, useMemo, useCallback } from "react";
-import { usePi } from "@/lib/pi-context";
+import { usePiAuth } from "@/hooks/use-pi-auth";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { createPiPayment, type PiPaymentData, type PiPaymentCallbacks } from "@/lib/pi-sdk";
 import {
-  ShoppingCart, FileText, Plus, Package, Store, Eye, RefreshCw,
-  ShieldCheck, Truck, CheckCircle2, Clock, XCircle, AlertTriangle,
-  Send, ArrowLeft, CreditCard, Receipt, User, BarChart3,
-  ChevronDown, Loader2, Trash2, ExternalLink, Layers,
+  ShoppingCart, FileText, Plus, Package, Store, Truck,
+  CheckCircle2, Clock, XCircle, AlertTriangle, Send, CreditCard,
+  Receipt, BarChart3, Loader2, Shield, ArrowRightLeft,
+  ChevronDown, ChevronUp, Wallet,
+  FileCheck, Ban, CircleDot, ChevronLeft,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -17,545 +19,489 @@ import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import StudyContent from "@/components/StudyContent";
 
-/* ─── Types ────────────────────────────────────────────── */
-interface Product {
-  id: string; storeId: string; name: string; description: string;
-  price: number; image: string; isActive: boolean; createdAt: string;
-}
-
-interface InvoiceItem {
-  id?: string; productId?: string; productName: string;
-  quantity: number; unitPrice: number; totalPrice: number;
-}
-
-interface Invoice {
+/* ═══════════════════════════════════════════════════════════════
+   Types
+   ═══════════════════════════════════════════════════════════════ */
+interface StoreData { id: string; piUid: string; name: string; description: string; _count?: { products: number; invoices: number } }
+interface ProductData { id: string; storeId: string; name: string; description: string; price: number; image: string; isActive: boolean; createdAt: string }
+interface InvoiceItemData { id?: string; productId?: string; productName: string; quantity: number; unitPrice: number; totalPrice: number }
+interface InvoiceData {
   id: string; invoiceNumber: string; storeId: string;
   customerPiUid: string; customerName: string;
   subtotal: number; escrowFee: number; total: number;
-  status: string; notes: string; paymentTxId: string;
-  releaseTxId: string; createdAt: string; updatedAt: string;
-  items: InvoiceItem[]; store?: { name: string };
+  status: string; notes: string; paymentTxId: string; releaseTxId: string;
+  createdAt: string; items: InvoiceItemData[];
+  store?: { name: string };
 }
 
-interface Store {
-  id: string; piUid: string; name: string; description: string;
-  isVerified: boolean; _count?: { products: number; invoices: number };
-}
+const ESCROW_FEE_RATE = 0.02; // 2% escrow fee
 
-/* ─── Status Helpers ───────────────────────────────────── */
 const STATUS_MAP: Record<string, { label: string; color: string; icon: React.ElementType }> = {
-  pending:         { label: "في الانتظار",   color: "bg-gray-100 text-gray-700",       icon: Clock },
-  paid_escrow:     { label: "محفوظ في الضمان", color: "bg-blue-100 text-blue-700",   icon: ShieldCheck },
-  shipped:         { label: "تم الشحن",     color: "bg-amber-100 text-amber-700",     icon: Truck },
-  delivered:       { label: "تم التوصيل",   color: "bg-emerald-100 text-emerald-700", icon: CheckCircle2 },
-  completed:       { label: "مكتمل",       color: "bg-green-100 text-green-700",     icon: CheckCircle2 },
-  disputed:        { label: "نزاع",        color: "bg-red-100 text-red-700",         icon: AlertTriangle },
-  cancelled:       { label: "ملغي",        color: "bg-gray-100 text-gray-500",       icon: XCircle },
+  pending:      { label: "في الانتظار",     color: "bg-yellow-500/15 text-yellow-600 border-yellow-500/30",       icon: Clock },
+  paid_escrow:  { label: "في الضمان",       color: "bg-blue-500/15 text-blue-600 border-blue-500/30",            icon: Shield },
+  shipped:      { label: "تم الشحن",        color: "bg-indigo-500/15 text-indigo-600 border-indigo-500/30",      icon: Truck },
+  delivered:    { label: "تم التسليم",      color: "bg-teal-500/15 text-teal-600 border-teal-500/30",            icon: CheckCircle2 },
+  completed:    { label: "مكتمل",           color: "bg-emerald-500/15 text-emerald-600 border-emerald-500/30",  icon: FileCheck },
+  disputed:     { label: "نزاع",            color: "bg-red-500/15 text-red-600 border-red-500/30",              icon: AlertTriangle },
+  cancelled:    { label: "ملغى",            color: "bg-zinc-500/15 text-zinc-500 border-zinc-500/30",           icon: Ban },
 };
 
 function StatusBadge({ status }: { status: string }) {
   const s = STATUS_MAP[status] || STATUS_MAP.pending;
   const Icon = s.icon;
-  return <Badge className={`${s.color} gap-1 border-0 text-xs font-medium`}><Icon className="w-3 h-3" />{s.label}</Badge>;
-}
-
-/* ─── Pi Auth Gate ─────────────────────────────────────── */
-function PiAuthGate({ children }: { children: React.ReactNode }) {
-  const { isSDKReady, piUser, piAuth, piBalance } = usePi();
-
-  if (!isSDKReady) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-purple-50 to-white p-4">
-        <Card className="w-full max-w-md text-center p-8">
-          <div className="mx-auto w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mb-4">
-            <Loader2 className="w-8 h-8 text-purple-600 animate-spin" />
-          </div>
-          <h2 className="text-xl font-bold mb-2">جاري تحميل بيئة Pi</h2>
-          <p className="text-sm text-gray-500">يرجى فتح هذا التطبيق داخل متصفح Pi Browser</p>
-        </Card>
-      </div>
-    );
-  }
-
-  if (!piUser) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-purple-50 to-white p-4">
-        <Card className="w-full max-w-md text-center p-8">
-          <div className="mx-auto w-20 h-20 bg-purple-100 rounded-full flex items-center justify-center mb-6">
-            <ShieldCheck className="w-10 h-10 text-purple-600" />
-          </div>
-          <h1 className="text-2xl font-black mb-2">Ledgererp</h1>
-          <p className="text-sm text-gray-500 mb-1">نظام الفواتير والضمان على شبكة Pi</p>
-          <Badge className="bg-purple-100 text-purple-700 border-0 text-xs mb-6">محمي بآلية Escrow</Badge>
-          <Button onClick={piAuth} className="w-full bg-purple-700 hover:bg-purple-800 text-white" size="lg">
-            <User className="w-4 h-4 ml-2" />
-            تسجيل الدخول عبر Pi
-          </Button>
-          <p className="text-xs text-gray-400 mt-4">
-            باستخدامك لهذا التطبيق، فإنك توافق على شروط الخدمة
-          </p>
-        </Card>
-      </div>
-    );
-  }
-
-  return <>{children}</>;
-}
-
-/* ─── Stat Card ────────────────────────────────────────── */
-function StatCard({ icon: Icon, label, value, sub }: { icon: React.ElementType; label: string; value: string | number; sub?: string }) {
   return (
-    <Card className="hover:shadow-md transition">
-      <CardContent className="p-4 flex items-center gap-4">
-        <div className="p-2.5 bg-purple-100 rounded-xl"><Icon className="w-5 h-5 text-purple-700" /></div>
-        <div>
-          <p className="text-xs text-gray-500">{label}</p>
-          <p className="text-xl font-bold">{value}</p>
-          {sub && <p className="text-xs text-gray-400">{sub}</p>}
-        </div>
-      </CardContent>
-    </Card>
+    <Badge variant="outline" className={`${s.color} gap-1.5 font-medium`}>
+      <Icon className="h-3.5 w-3.5" />{s.label}
+    </Badge>
   );
 }
 
-/* ═══════════════════════════════════════════════════════════
-    MAIN APP COMPONENT
-═══════════════════════════════════════════════════════════ */
+/* ═══════════════════════════════════════════════════════════════
+   Not-Pi-Browser Landing Page
+   ═══════════════════════════════════════════════════════════════ */
+function PiBrowserRequired() {
+  return (
+    <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-slate-50 via-white to-emerald-50/30 dark:from-zinc-950 dark:via-zinc-900 dark:to-emerald-950/20">
+      <Card className="max-w-lg w-full border-0 shadow-2xl shadow-emerald-500/5 bg-white/80 dark:bg-zinc-900/80 backdrop-blur-xl">
+        <CardContent className="pt-10 pb-8 text-center space-y-6">
+          <div className="mx-auto w-20 h-20 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-lg shadow-emerald-500/25">
+            <Shield className="w-10 h-10 text-white" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight bg-gradient-to-l from-emerald-600 to-teal-600 bg-clip-text text-transparent">
+              Ledgererp
+            </h1>
+            <p className="text-sm text-muted-foreground mt-1">منصة الفواتير والضمان الآمن</p>
+          </div>
+          <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4 text-right space-y-2">
+            <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400 font-medium text-sm">
+              <AlertTriangle className="h-4 w-4 shrink-0" />
+              <span>هذا التطبيق يعمل داخل متصفح Pi فقط</span>
+            </div>
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              يُرجى فتح هذا التطبيق من خلال متصفح Pi Network للحصول على تجربة كاملة تشمل المصادقة والدفع بالـ Pi.
+            </p>
+          </div>
+          <div className="space-y-3 text-sm text-muted-foreground">
+            <div className="flex items-center gap-3 justify-end">
+              <span>إدارة الفواتير الذكية</span>
+              <FileText className="h-4 w-4 text-emerald-500" />
+            </div>
+            <div className="flex items-center gap-3 justify-end">
+              <span>ضمان آمن للمعاملات</span>
+              <Shield className="h-4 w-4 text-emerald-500" />
+            </div>
+            <div className="flex items-center gap-3 justify-end">
+              <span>دفع بالـ Pi مع حماية البائع والمشتري</span>
+              <Wallet className="h-4 w-4 text-emerald-500" />
+            </div>
+          </div>
+          <Separator />
+          <p className="text-xs text-muted-foreground">
+            Ledgererp — تطبيق معتمد ضمن إيكوسيستم Pi Network
+          </p>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Main Application
+   ═══════════════════════════════════════════════════════════════ */
 export default function LedgererpApp() {
-  const { piUser, piBalance } = usePi();
+  const { sdkReady, connected, user, loading: authLoading, error: authError, login } = usePiAuth();
   const qc = useQueryClient();
   const [activeTab, setActiveTab] = useState("dashboard");
-  const [createdStore, setCreatedStore] = useState<Store | null>(null);
-  const [showStudy, setShowStudy] = useState(false);
 
-  /* Fetch or create store for current user */
+  /* ── Not in Pi Browser ─────────────────────────────── */
+  if (!sdkReady && !authLoading) return <PiBrowserRequired />;
+
+  /* ── Loading ───────────────────────────────────────── */
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="text-center space-y-4">
+          <Loader2 className="h-8 w-8 animate-spin text-emerald-500 mx-auto" />
+          <p className="text-sm text-muted-foreground">جارٍ الاتصال بـ Pi Network...</p>
+        </div>
+      </div>
+    );
+  }
+
+  /* ── Auth Error / Not connected ────────────────────── */
+  if (!connected || !user) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4 bg-background">
+        <Card className="max-w-sm w-full border-0 shadow-xl">
+          <CardContent className="pt-8 pb-6 text-center space-y-5">
+            <div className="mx-auto w-16 h-16 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center">
+              <Shield className="w-8 h-8 text-white" />
+            </div>
+            <div>
+              <h1 className="text-xl font-bold">Ledgererp</h1>
+              <p className="text-xs text-muted-foreground mt-1">تسجيل الدخول للمتابعة</p>
+            </div>
+            {authError && (
+              <p className="text-xs text-destructive bg-destructive/10 rounded-lg px-3 py-2">{authError}</p>
+            )}
+            <Button onClick={login} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white">
+              <Wallet className="h-4 w-4 ml-2" />
+              تسجيل الدخول عبر Pi
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  /* ── Authenticated — Main App ──────────────────────── */
+  return <AuthenticatedApp user={user} activeTab={activeTab} setActiveTab={setActiveTab} />;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Authenticated Shell
+   ═══════════════════════════════════════════════════════════════ */
+function AuthenticatedApp({
+  user, activeTab, setActiveTab,
+}: {
+  user: { uid: string; username: string; accessToken: string };
+  activeTab: string; setActiveTab: (t: string) => void;
+}) {
+  const qc = useQueryClient();
+
+  /* Store */
+  const [createdStore, setCreatedStore] = useState<StoreData | null>(null);
   const { data: stores } = useQuery({
     queryKey: ["stores"],
     queryFn: () => fetch("/api/stores").then(r => r.json()),
   });
-
   const storeFromApi = useMemo(() => {
-    if (stores && piUser) {
-      return (stores as Store[]).find((s: Store) => s.piUid === piUser.uid) ?? null;
-    }
+    if (stores && user) return (stores as StoreData[]).find(s => s.piUid === user.uid) ?? null;
     return null;
-  }, [stores, piUser]);
-
+  }, [stores, user]);
   const myStore = createdStore || storeFromApi;
 
-  /* Invoice queries */
+  /* Invoices */
   const merchantInvoices = useQuery({
     queryKey: ["invoices", "merchant", myStore?.id],
     queryFn: () => fetch(`/api/invoices?storeId=${myStore!.id}`).then(r => r.json()),
     enabled: !!myStore?.id,
   });
-
   const customerInvoices = useQuery({
-    queryKey: ["invoices", "customer", piUser?.uid],
-    queryFn: () => fetch(`/api/invoices?customerPiUid=${piUser!.uid}`).then(r => r.json()),
-    enabled: !!piUser?.uid,
+    queryKey: ["invoices", "customer", user.uid],
+    queryFn: () => fetch(`/api/invoices?customerPiUid=${user.uid}`).then(r => r.json()),
   });
 
-  /* Products query */
+  /* Products */
   const { data: products } = useQuery({
     queryKey: ["products", myStore?.id],
     queryFn: () => fetch(`/api/products?storeId=${myStore!.id}`).then(r => r.json()),
     enabled: !!myStore?.id,
   });
 
-  /* Create store mutation */
+  /* Mutations */
   const createStore = useMutation({
     mutationFn: (data: { piUid: string; name: string; description: string }) =>
       fetch("/api/stores", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }).then(r => r.json()),
     onSuccess: (data) => { setCreatedStore(data); qc.invalidateQueries({ queryKey: ["stores"] }); },
   });
 
-  /* Create invoice mutation */
-  const createInvoice = useMutation({
-    mutationFn: (data: Record<string, unknown>) =>
-      fetch("/api/invoices", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }).then(r => r.json()),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["invoices"] }); setActiveTab("orders"); },
-  });
-
-  /* Update invoice mutation */
-  const updateInvoice = useMutation({
-    mutationFn: (data: Record<string, unknown>) =>
+  const updateInvoiceStatus = useMutation({
+    mutationFn: (data: { id: string; status: string; paymentTxId?: string; releaseTxId?: string }) =>
       fetch("/api/invoices", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }).then(r => r.json()),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["invoices"] }),
-  });
-
-  /* Create product mutation */
-  const createProduct = useMutation({
-    mutationFn: (data: Record<string, unknown>) =>
-      fetch("/api/products", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }).then(r => r.json()),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["products"] }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["invoices"] }); },
   });
 
   /* Stats */
-  const allMerchantInvoices = (merchantInvoices.data as Invoice[]) || [];
-  const allCustomerInvoices = (customerInvoices.data as Invoice[]) || [];
-  const escrowedPi = allMerchantInvoices
-    .filter((i: Invoice) => i.status === "paid_escrow")
-    .reduce((sum: number, i: Invoice) => sum + i.total, 0);
-  const completedPi = allMerchantInvoices
-    .filter((i: Invoice) => i.status === "completed")
-    .reduce((sum: number, i: Invoice) => sum + i.total, 0);
-  const activeProducts = (products as Product[] || []).filter((p: Product) => p.isActive).length;
+  const stats = useMemo(() => {
+    const mi = (merchantInvoices.data || []) as InvoiceData[];
+    const ci = (customerInvoices.data || []) as InvoiceData[];
+    const escrowed = mi.filter(i => i.status === "paid_escrow" || i.status === "shipped" || i.status === "delivered");
+    return {
+      totalInvoices: mi.length,
+      totalProducts: (products || []).length,
+      escrowedPi: escrowed.reduce((s, i) => s + i.total, 0),
+      completedPi: mi.filter(i => i.status === "completed").reduce((s, i) => s + i.total, 0),
+      myOrders: ci.length,
+    };
+  }, [merchantInvoices.data, customerInvoices.data, products]);
 
-  /* Pi Payment (escrow) */
-  const handlePayEscrow = useCallback((invoice: Invoice) => {
-    if (typeof window !== "undefined" && (window as unknown as { Pi?: { createPayment: (p: unknown, cb: unknown) => void } }).Pi) {
-      const piSdk = (window as unknown as { Pi: { createPayment: (p: unknown, cb: unknown) => void } }).Pi;
-      piSdk.createPayment(
-        {
-          amount: invoice.total,
-          memo: `فاتورة ${invoice.invoiceNumber} — ضمان`,
-          metadata: { invoiceId: invoice.id, type: "escrow" },
-        },
-        {
-          onReadyForServerApproval: () => {},
-          onCanceled: () => {},
-          onFailed: () => {},
-          onCompleted: (payment: { transaction_id: string }) => {
-            updateInvoice.mutate({
-              id: invoice.id,
-              status: "paid_escrow",
-              paymentTxId: payment.transaction_id,
-            });
-          },
-        },
-      );
-    }
-  }, [updateInvoice]);
+  /* ── Pay with Pi (U2A escrow deposit) ──────────────── */
+  const payWithPi = useCallback((invoice: InvoiceData) => {
+    const paymentData: PiPaymentData = {
+      amount: invoice.total,
+      memo: `فاتورة ${invoice.invoiceNumber} — ${invoice.store?.name || "Ledgererp"}`,
+      metadata: { invoiceId: invoice.id, invoiceNumber: invoice.invoiceNumber },
+    };
 
-  /* Release escrow */
-  const handleReleaseEscrow = useCallback((invoice: Invoice) => {
-    if (typeof window !== "undefined" && (window as unknown as { Pi?: { createPayment: (p: unknown, cb: unknown) => void } }).Pi) {
-      const piSdk = (window as unknown as { Pi: { createPayment: (p: unknown, cb: unknown) => void } }).Pi;
-      piSdk.createPayment(
-        {
-          amount: invoice.total,
-          memo: `إطلاق ضمان — فاتورة ${invoice.invoiceNumber}`,
-          metadata: { invoiceId: invoice.id, type: "escrow_release", toUid: invoice.storeId },
-        },
-        {
-          onReadyForServerApproval: () => {},
-          onCanceled: () => {},
-          onFailed: () => {},
-          onCompleted: (payment: { transaction_id: string }) => {
-            updateInvoice.mutate({
-              id: invoice.id,
-              status: "completed",
-              releaseTxId: payment.transaction_id,
-            });
-          },
-        },
-      );
-    }
-  }, [updateInvoice]);
+    const callbacks: PiPaymentCallbacks = {
+      onReadyForServerApproval: (paymentId) => {
+        fetch("/api/pi_payment/approve", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ paymentId, invoiceId: invoice.id }),
+        });
+      },
+      onReadyForServerCompletion: (paymentId, txid) => {
+        fetch("/api/pi_payment/complete", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ paymentId, txid, invoiceId: invoice.id }),
+        });
+      },
+      onCancel: () => {
+        qc.invalidateQueries({ queryKey: ["invoices"] });
+      },
+      onError: () => {
+        qc.invalidateQueries({ queryKey: ["invoices"] });
+      },
+    };
 
+    createPiPayment(paymentData, callbacks);
+  }, [qc]);
+
+  /* ── Render ────────────────────────────────────────── */
   return (
-    <PiAuthGate>
-      {showStudy ? (
-        <StudyPage onBack={() => setShowStudy(false)} />
-      ) : (
-        <div dir="rtl" className="min-h-screen bg-gray-50 flex flex-col">
-          {/* ─── HEADER ──────────────────────────── */}
-          <header className="bg-white border-b sticky top-0 z-40">
-            <div className="max-w-6xl mx-auto px-4 h-14 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 bg-purple-700 rounded-lg flex items-center justify-center">
-                  <Receipt className="w-4 h-4 text-white" />
-                </div>
-                <div>
-                  <h1 className="text-sm font-bold leading-tight">Ledgererp</h1>
-                  <p className="text-[10px] text-gray-400">فواتير وضمان — Pi</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-3">
-                {piBalance !== null && (
-                  <Badge variant="outline" className="text-xs gap-1">
-                    <CreditCard className="w-3 h-3" />
-                    {piBalance.toFixed(2)} Pi
-                  </Badge>
-                )}
-                <div className="flex items-center gap-2">
-                  <div className="w-7 h-7 rounded-full bg-purple-100 flex items-center justify-center text-xs font-bold text-purple-700">
-                    {piUser?.username?.[0]?.toUpperCase() || "?"}
-                  </div>
-                  <span className="text-xs font-medium hidden sm:block">{piUser?.username}</span>
-                </div>
-              </div>
+    <div className="min-h-screen flex flex-col bg-background">
+      {/* Header */}
+      <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+        <div className="max-w-5xl mx-auto px-4 h-14 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center">
+              <Shield className="h-4 w-4 text-white" />
             </div>
-          </header>
-
-          {/* ─── MAIN CONTENT ───────────────────── */}
-          <main className="flex-1 max-w-6xl mx-auto w-full px-4 py-6">
-            {/* Store setup banner */}
-            {!myStore && (
-              <SetupStoreBanner
-                username={piUser?.username || ""}
-                onCreate={(name, desc) => createStore.mutate({ piUid: piUser!.uid, name, description: desc })}
-                loading={createStore.isPending}
-              />
-            )}
-
-            {/* Stats row */}
-            {myStore && (
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-                <StatCard icon={FileText} label="إجمالي الفواتير" value={allMerchantInvoices.length} />
-                <StatCard icon={ShieldCheck} label="Pi في الضمان" value={escrowedPi.toFixed(2)} sub="في انتظار التوصيل" />
-                <StatCard icon={CheckCircle2} label="Pi مكتملة" value={completedPi.toFixed(2)} sub="تم التسليم والإفراج" />
-                <StatCard icon={Package} label="منتجات نشطة" value={activeProducts} />
-              </div>
-            )}
-
-            {/* Tabs */}
-            <Tabs value={activeTab} onValueChange={setActiveTab}>
-              <TabsList className="w-full mb-6 bg-white border">
-                <TabsTrigger value="dashboard" className="flex-1 gap-1.5 text-xs">
-                  <BarChart3 className="w-3.5 h-3.5" /> لوحة التحكم
-                </TabsTrigger>
-                <TabsTrigger value="products" className="flex-1 gap-1.5 text-xs">
-                  <Package className="w-3.5 h-3.5" /> المنتجات
-                </TabsTrigger>
-                <TabsTrigger value="create" className="flex-1 gap-1.5 text-xs">
-                  <Plus className="w-3.5 h-3.5" /> فاتورة جديدة
-                </TabsTrigger>
-                <TabsTrigger value="orders" className="flex-1 gap-1.5 text-xs">
-                  <ShoppingCart className="w-3.5 h-3.5" /> الطلبات
-                </TabsTrigger>
-                <TabsTrigger value="my-orders" className="flex-1 gap-1.5 text-xs">
-                  <Eye className="w-3.5 h-3.5" /> مشترياتي
-                </TabsTrigger>
-              </TabsList>
-
-              <TabsContent value="dashboard">
-                <DashboardView
-                  store={myStore}
-                  invoices={allMerchantInvoices}
-                  products={products as Product[] || []}
-                />
-              </TabsContent>
-
-              <TabsContent value="products">
-                <ProductsView
-                  storeId={myStore?.id || ""}
-                  products={products as Product[] || []}
-                  onAdd={(data) => createProduct.mutate({ ...data, storeId: myStore?.id })}
-                />
-              </TabsContent>
-
-              <TabsContent value="create">
-                <CreateInvoiceView
-                  storeId={myStore?.id || ""}
-                  storeName={myStore?.name || ""}
-                  products={products as Product[] || []}
-                  onCreate={createInvoice.mutate}
-                  loading={createInvoice.isPending}
-                />
-              </TabsContent>
-
-              <TabsContent value="orders">
-                <OrdersView
-                  invoices={allMerchantInvoices}
-                  onUpdateStatus={(id, status) => updateInvoice.mutate({ id, status })}
-                  onReleaseEscrow={handleReleaseEscrow}
-                />
-              </TabsContent>
-
-              <TabsContent value="my-orders">
-                <MyOrdersView
-                  invoices={allCustomerInvoices}
-                  onPayEscrow={handlePayEscrow}
-                  onConfirmDelivery={(id) => updateInvoice.mutate({ id, status: "delivered" })}
-                  onDispute={(id) => updateInvoice.mutate({ id, status: "disputed" })}
-                />
-              </TabsContent>
-            </Tabs>
-          </main>
-
-          {/* ─── FOOTER ─────────────────────────── */}
-          <footer className="bg-white border-t mt-auto py-4">
-            <div className="max-w-6xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-gray-400">
-              <p>Ledgererp — نظام الفواتير والضمان على شبكة Pi</p>
-              <Button variant="link" className="text-xs text-purple-600 p-0 h-auto" onClick={() => setShowStudy(true)}>
-                قراءة دراسة الإكوسيستم <ExternalLink className="w-3 h-3 mr-1" />
-              </Button>
-            </div>
-          </footer>
+            <h1 className="font-bold text-lg tracking-tight">Ledgererp</h1>
+          </div>
+          <div className="flex items-center gap-2">
+            <Badge variant="outline" className="text-xs gap-1.5 bg-emerald-500/10 text-emerald-600 border-emerald-500/20">
+              <CircleDot className="h-3 w-3" />
+              {user.username}
+            </Badge>
+          </div>
         </div>
-      )}
-    </PiAuthGate>
+      </header>
+
+      {/* Main */}
+      <main className="flex-1 max-w-5xl mx-auto w-full px-4 py-6 space-y-6">
+        {!myStore ? (
+          <StoreSetup onCreate={(name, desc) => createStore.mutate({ piUid: user.uid, name, description: desc })} loading={createStore.isPending} />
+        ) : (
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+            <TabsList className="grid grid-cols-4 w-full h-auto p-1 bg-muted/50">
+              <TabsTrigger value="dashboard" className="text-xs py-2 data-[state=active]:bg-emerald-600 data-[state=active]:text-white"><BarChart3 className="h-3.5 w-3.5 ml-1.5" />لوحة التحكم</TabsTrigger>
+              <TabsTrigger value="products" className="text-xs py-2 data-[state=active]:bg-emerald-600 data-[state=active]:text-white"><Package className="h-3.5 w-3.5 ml-1.5" />المنتجات</TabsTrigger>
+              <TabsTrigger value="invoices" className="text-xs py-2 data-[state=active]:bg-emerald-600 data-[state=active]:text-white"><FileText className="h-3.5 w-3.5 ml-1.5" />الفواتير</TabsTrigger>
+              <TabsTrigger value="orders" className="text-xs py-2 data-[state=active]:bg-emerald-600 data-[state=active]:text-white"><ShoppingCart className="h-3.5 w-3.5 ml-1.5" />الطلبات</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="dashboard"><DashboardView stats={stats} store={myStore} /></TabsContent>
+            <TabsContent value="products"><ProductsView products={products || []} storeId={myStore.id} /></TabsContent>
+            <TabsContent value="invoices"><InvoicesView store={myStore} products={products || []} /></TabsContent>
+            <TabsContent value="orders">
+              <OrdersView
+                merchantInvoices={merchantInvoices.data || []}
+                customerInvoices={customerInvoices.data || []}
+                storeId={myStore.id}
+                customerUid={user.uid}
+                onStatusChange={updateInvoiceStatus.mutate}
+                onPay={payWithPi}
+              />
+            </TabsContent>
+          </Tabs>
+        )}
+      </main>
+
+      {/* Footer */}
+      <footer className="border-t mt-auto py-4 bg-muted/30">
+        <div className="max-w-5xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-muted-foreground">
+          <span>Ledgererp — منصة الفواتير والضمان الآمن</span>
+          <span>يعمل داخل متصفح Pi Network</span>
+        </div>
+      </footer>
+    </div>
   );
 }
 
-/* ─── Setup Store Banner ──────────────────────────────── */
-function SetupStoreBanner({ username, onCreate, loading }: { username: string; onCreate: (name: string, desc: string) => void; loading: boolean }) {
+/* ═══════════════════════════════════════════════════════════════
+   Store Setup
+   ═══════════════════════════════════════════════════════════════ */
+function StoreSetup({ onCreate, loading }: { onCreate: (name: string, desc: string) => void; loading: boolean }) {
   const [name, setName] = useState("");
   const [desc, setDesc] = useState("");
+
   return (
-    <Card className="mb-6 border-purple-200 bg-purple-50/50">
-      <CardContent className="p-6 text-center">
-        <Store className="w-10 h-10 text-purple-600 mx-auto mb-3" />
-        <h3 className="font-bold mb-1">أنشئ متجرك أولاً</h3>
-        <p className="text-sm text-gray-500 mb-4">قم بإعداد متجرك لبدء إنشاء الفواتير وإدارة منتجاتك</p>
-        <div className="max-w-sm mx-auto space-y-3">
-          <Input placeholder="اسم المتجر" value={name} onChange={e => setName(e.target.value)} />
-          <Input placeholder="وصف مختصر (اختياري)" value={desc} onChange={e => setDesc(e.target.value)} />
-          <Button
-            className="w-full bg-purple-700 hover:bg-purple-800 text-white"
-            disabled={!name || loading}
-            onClick={() => onCreate(name, desc)}
-          >
-            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Store className="w-4 h-4 ml-2" />}
-            إنشاء المتجر
-          </Button>
+    <Card className="max-w-md mx-auto border-0 shadow-lg">
+      <CardHeader className="text-center pb-2">
+        <div className="mx-auto w-14 h-14 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center mb-3">
+          <Store className="w-7 h-7 text-white" />
         </div>
+        <CardTitle className="text-lg">إعداد متجرك</CardTitle>
+        <CardDescription className="text-xs">أنشئ متجرك لبدء إصدار الفواتير واستقبال المدفوعات</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="space-y-2">
+          <Label className="text-xs">اسم المتجر</Label>
+          <Input value={name} onChange={e => setName(e.target.value)} placeholder="مثال: متجر الإلكترونيات" className="text-sm" />
+        </div>
+        <div className="space-y-2">
+          <Label className="text-xs">وصف المتجر</Label>
+          <Textarea value={desc} onChange={e => setDesc(e.target.value)} placeholder="وصف مختصر لمتجرك..." className="text-sm min-h-[80px]" />
+        </div>
+        <Button onClick={() => onCreate(name, desc)} disabled={!name.trim() || loading} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white text-sm">
+          {loading ? <Loader2 className="h-4 w-4 animate-spin ml-2" /> : <Plus className="h-4 w-4 ml-2" />}
+          إنشاء المتجر
+        </Button>
       </CardContent>
     </Card>
   );
 }
 
-/* ─── Dashboard View ──────────────────────────────────── */
-function DashboardView({ store, invoices, products }: { store: Store | null; invoices: Invoice[]; products: Product[] }) {
-  const recent = invoices.slice(0, 5);
-  const statusCounts = invoices.reduce((acc: Record<string, number>, i: Invoice) => {
-    acc[i.status] = (acc[i.status] || 0) + 1;
-    return acc;
-  }, {});
+/* ═══════════════════════════════════════════════════════════════
+   Dashboard
+   ═══════════════════════════════════════════════════════════════ */
+function DashboardView({ stats, store }: { stats: Record<string, number>; store: StoreData }) {
+  const cards = [
+    { label: "إجمالي الفواتير", value: stats.totalInvoices, icon: FileText, color: "text-blue-500", bg: "bg-blue-500/10" },
+    { label: "المنتجات", value: stats.totalProducts, icon: Package, color: "text-violet-500", bg: "bg-violet-500/10" },
+    { label: "Pi في الضمان", value: stats.escrowedPi.toFixed(2), icon: Shield, color: "text-amber-500", bg: "bg-amber-500/10" },
+    { label: "Pi مكتمل", value: stats.completedPi.toFixed(2), icon: CheckCircle2, color: "text-emerald-500", bg: "bg-emerald-500/10" },
+  ];
 
   return (
-    <div className="space-y-6">
-      <Card>
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="font-bold text-lg">{store.name}</h2>
+          <p className="text-xs text-muted-foreground">{store.description || "متجرك على Ledgererp"}</p>
+        </div>
+        <Badge variant="outline" className="text-xs bg-emerald-500/10 text-emerald-600 border-emerald-500/20">
+          <Store className="h-3 w-3 ml-1" />متجر نشط
+        </Badge>
+      </div>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {cards.map(c => (
+          <Card key={c.label} className="border-0 shadow-sm">
+            <CardContent className="p-4 flex items-center gap-3">
+              <div className={`w-10 h-10 rounded-xl ${c.bg} flex items-center justify-center shrink-0`}>
+                <c.icon className={`h-5 w-5 ${c.color}`} />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs text-muted-foreground truncate">{c.label}</p>
+                <p className="font-bold text-lg leading-tight">{c.value}</p>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      {/* Escrow Flow Visual */}
+      <Card className="border-0 shadow-sm overflow-hidden">
         <CardHeader className="pb-3">
-          <CardTitle className="text-base">نظرة عامة — {store?.name}</CardTitle>
-          <CardDescription>ملخص نشاط متجرك على شبكة Pi</CardDescription>
+          <CardTitle className="text-sm font-bold flex items-center gap-2">
+            <ArrowRightLeft className="h-4 w-4 text-emerald-500" />
+            مسار الضمان (Escrow)
+          </CardTitle>
         </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            {Object.entries(STATUS_MAP).map(([key, val]) => (
-              <div key={key} className="text-center p-3 rounded-lg bg-gray-50">
-                <p className="text-2xl font-bold">{statusCounts[key] || 0}</p>
-                <StatusBadge status={key} />
+        <CardContent className="pb-4">
+          <div className="flex items-center justify-between text-xs gap-2 overflow-x-auto pb-1">
+            {[
+              { label: "إنشاء فاتورة", icon: FileText, color: "text-slate-500 bg-slate-100 dark:bg-slate-800" },
+              { label: "دفع الضمان", icon: CreditCard, color: "text-blue-500 bg-blue-50 dark:bg-blue-950/50" },
+              { label: "شحن البضاعة", icon: Truck, color: "text-indigo-500 bg-indigo-50 dark:bg-indigo-950/50" },
+              { label: "تأكيد التسليم", icon: CheckCircle2, color: "text-teal-500 bg-teal-50 dark:bg-teal-950/50" },
+              { label: "إطلاق Pi", icon: Wallet, color: "text-emerald-500 bg-emerald-50 dark:bg-emerald-950/50" },
+            ].map((step, i) => (
+              <div key={step.label} className="flex items-center gap-2 shrink-0">
+                <div className={`w-8 h-8 rounded-lg ${step.color} flex items-center justify-center`}>
+                  <step.icon className="h-4 w-4" />
+                </div>
+                <span className="text-muted-foreground whitespace-nowrap hidden sm:block">{step.label}</span>
+                {i < 4 && <ChevronLeft className="h-4 w-4 text-muted-foreground/40 shrink-0 sm:block hidden" />}
               </div>
             ))}
           </div>
         </CardContent>
       </Card>
-
-      <div className="grid md:grid-cols-2 gap-6">
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm">آخر الفواتير</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {recent.length === 0 ? (
-              <p className="text-sm text-gray-400 text-center py-8">لا توجد فواتير بعد</p>
-            ) : (
-              <div className="space-y-2">
-                {recent.map((inv: Invoice) => (
-                  <div key={inv.id} className="flex items-center justify-between py-2 border-b last:border-0">
-                    <div>
-                      <p className="text-xs font-mono">{inv.invoiceNumber}</p>
-                      <p className="text-xs text-gray-500">{inv.customerName}</p>
-                    </div>
-                    <div className="text-left">
-                      <p className="text-sm font-bold">{inv.total.toFixed(2)} Pi</p>
-                      <StatusBadge status={inv.status} />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm">المنتجات ({products.length})</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {products.length === 0 ? (
-              <p className="text-sm text-gray-400 text-center py-8">لا توجد منتجات بعد</p>
-            ) : (
-              <div className="space-y-2">
-                {products.slice(0, 5).map((p: Product) => (
-                  <div key={p.id} className="flex items-center justify-between py-2 border-b last:border-0">
-                    <div>
-                      <p className="text-sm font-medium">{p.name}</p>
-                      <p className="text-xs text-gray-500">{p.description || "بدون وصف"}</p>
-                    </div>
-                    <p className="text-sm font-bold text-purple-700">{p.price} Pi</p>
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
     </div>
   );
 }
 
-/* ─── Products View ────────────────────────────────────── */
-function ProductsView({ storeId, products, onAdd }: { storeId: string; products: Product[]; onAdd: (data: Record<string, unknown>) => void }) {
+/* ═══════════════════════════════════════════════════════════════
+   Products
+   ═══════════════════════════════════════════════════════════════ */
+function ProductsView({ products, storeId }: { products: ProductData[]; storeId: string }) {
+  const qc = useQueryClient();
   const [open, setOpen] = useState(false);
-  const [name, setName] = useState("");
-  const [desc, setDesc] = useState("");
-  const [price, setPrice] = useState("");
+  const [form, setForm] = useState({ name: "", description: "", price: "" });
 
-  const handleAdd = () => {
-    if (!name || !price) return;
-    onAdd({ name, description: desc, price: Number(price) });
-    setName(""); setDesc(""); setPrice(""); setOpen(false);
-  };
+  const addProduct = useMutation({
+    mutationFn: (data: { storeId: string; name: string; description: string; price: number }) =>
+      fetch("/api/products", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }).then(r => r.json()),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["products"] }); setOpen(false); setForm({ name: "", description: "", price: "" }); },
+  });
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-bold">المنتجات ({products.length})</h2>
+        <h2 className="font-bold text-base">المنتجات</h2>
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
-            <Button className="bg-purple-700 hover:bg-purple-800 text-white text-xs"><Plus className="w-3.5 h-3.5 ml-1" /> إضافة منتج</Button>
+            <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs">
+              <Plus className="h-3.5 w-3.5 ml-1.5" />إضافة منتج
+            </Button>
           </DialogTrigger>
-          <DialogContent dir="rtl">
-            <DialogHeader><DialogTitle>إضافة منتج جديد</DialogTitle></DialogHeader>
-            <div className="space-y-3 py-2">
-              <div><Label>اسم المنتج *</Label><Input value={name} onChange={e => setName(e.target.value)} placeholder="مثال: هاتف ذكي" className="mt-1" /></div>
-              <div><Label>الوصف</Label><Textarea value={desc} onChange={e => setDesc(e.target.value)} placeholder="وصف مختصر للمنتج" className="mt-1" /></div>
-              <div><Label>السعر (Pi) *</Label><Input type="number" step="0.01" value={price} onChange={e => setPrice(e.target.value)} placeholder="0.00" className="mt-1" /></div>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle className="text-sm">منتج جديد</DialogTitle>
+              <DialogDescription className="text-xs">أضف منتجاً لمتجرك</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-3">
+              <div className="space-y-1.5"><Label className="text-xs">الاسم</Label><Input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="اسم المنتج" className="text-sm" /></div>
+              <div className="space-y-1.5"><Label className="text-xs">الوصف</Label><Textarea value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} placeholder="وصف مختصر" className="text-sm" /></div>
+              <div className="space-y-1.5"><Label className="text-xs">السعر (Pi)</Label><Input type="number" step="0.01" value={form.price} onChange={e => setForm({ ...form, price: e.target.value })} placeholder="0.00" className="text-sm" /></div>
             </div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => setOpen(false)}>إلغاء</Button>
-              <Button onClick={handleAdd} disabled={!name || !price} className="bg-purple-700 hover:bg-purple-800 text-white">إضافة</Button>
+              <Button onClick={() => addProduct.mutate({ storeId, name: form.name, description: form.description, price: parseFloat(form.price) || 0 })} disabled={!form.name.trim() || !form.price} size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs">
+                {addProduct.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin ml-1.5" /> : <Plus className="h-3.5 w-3.5 ml-1.5" />}
+                إضافة
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
       </div>
 
       {products.length === 0 ? (
-        <Card className="py-12 text-center">
-          <Package className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-          <p className="text-sm text-gray-400">لم تُضف منتجات بعد. أضف أول منتج للبدء.</p>
+        <Card className="border-dashed">
+          <CardContent className="py-12 text-center text-muted-foreground">
+            <Package className="h-10 w-10 mx-auto mb-3 opacity-30" />
+            <p className="text-sm">لا توجد منتجات بعد</p>
+            <p className="text-xs mt-1">أضف منتجاتك لبدء إنشاء الفواتير</p>
+          </CardContent>
         </Card>
       ) : (
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {products.map((p: Product) => (
-            <Card key={p.id} className="hover:shadow-md transition">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {products.map(p => (
+            <Card key={p.id} className="border-0 shadow-sm hover:shadow-md transition-shadow">
               <CardContent className="p-4">
-                <div className="flex items-start justify-between mb-2">
-                  <div className="p-2 bg-purple-50 rounded-lg"><Package className="w-4 h-4 text-purple-600" /></div>
-                  {!p.isActive && <Badge variant="secondary" className="text-xs">غير نشط</Badge>}
+                <div className="flex items-start justify-between">
+                  <div className="min-w-0">
+                    <h3 className="font-semibold text-sm truncate">{p.name}</h3>
+                    <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{p.description || "بدون وصف"}</p>
+                  </div>
+                  <Badge className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20 text-xs shrink-0 mr-2">
+                    {p.price} π
+                  </Badge>
                 </div>
-                <h3 className="font-bold text-sm mb-1">{p.name}</h3>
-                <p className="text-xs text-gray-500 mb-3 line-clamp-2">{p.description || "بدون وصف"}</p>
-                <p className="text-lg font-black text-purple-700">{p.price} <span className="text-xs font-normal">Pi</span></p>
+                {p.isActive && (
+                  <div className="mt-3 flex items-center gap-1.5 text-xs text-emerald-600">
+                    <CheckCircle2 className="h-3 w-3" /><span>نشط</span>
+                  </div>
+                )}
               </CardContent>
             </Card>
           ))}
@@ -565,202 +511,200 @@ function ProductsView({ storeId, products, onAdd }: { storeId: string; products:
   );
 }
 
-/* ─── Create Invoice View ─────────────────────────────── */
-function CreateInvoiceView({ storeId, storeName, products, onCreate, loading }: {
-  storeId: string; storeName: string; products: Product[];
-  onCreate: (data: Record<string, unknown>) => void; loading: boolean;
-}) {
+/* ═══════════════════════════════════════════════════════════════
+   Create Invoice
+   ═══════════════════════════════════════════════════════════════ */
+function InvoicesView({ store, products }: { store: StoreData; products: ProductData[] }) {
+  const qc = useQueryClient();
+  const [open, setOpen] = useState(false);
   const [customerName, setCustomerName] = useState("");
-  const [customerPiUid, setCustomerPiUid] = useState("");
-  const [items, setItems] = useState<InvoiceItem[]>([{ productName: "", quantity: 1, unitPrice: 0, totalPrice: 0 }]);
+  const [customerUid, setCustomerUid] = useState("");
   const [notes, setNotes] = useState("");
+  const [items, setItems] = useState<{ productName: string; quantity: number; unitPrice: number }[]>([
+    { productName: "", quantity: 1, unitPrice: 0 },
+  ]);
 
-  const addItem = () => setItems([...items, { productName: "", quantity: 1, unitPrice: 0, totalPrice: 0 }]);
-  const removeItem = (index: number) => setItems(items.filter((_, i) => i !== index));
-  const updateItem = (index: number, field: string, value: string | number) => {
+  const addItem = () => setItems([...items, { productName: "", quantity: 1, unitPrice: 0 }]);
+  const removeItem = (idx: number) => setItems(items.filter((_, i) => i !== idx));
+  const updateItem = (idx: number, field: string, value: string | number) => {
     const updated = [...items];
-    (updated[index] as Record<string, unknown>)[field] = value;
-    if (field === "quantity" || field === "unitPrice") {
-      updated[index].totalPrice = updated[index].quantity * updated[index].unitPrice;
+    (updated[idx] as Record<string, unknown>)[field] = value;
+    if (field === "unitPrice" || field === "quantity") {
+      updated[idx].totalPrice = updated[idx].unitPrice * updated[idx].quantity;
     }
     setItems(updated);
   };
 
-  const selectProduct = (index: number, productId: string) => {
-    const product = products.find(p => p.id === productId);
-    if (product) {
-      const updated = [...items];
-      updated[index] = { productId: product.id, productName: product.name, quantity: 1, unitPrice: product.price, totalPrice: product.price };
-      setItems(updated);
-    }
-  };
-
-  const subtotal = items.reduce((s, i) => s + i.totalPrice, 0);
-  const escrowFee = subtotal * 0.01; // 1% escrow fee
+  const subtotal = items.reduce((s, i) => s + i.unitPrice * i.quantity, 0);
+  const escrowFee = subtotal * ESCROW_FEE_RATE;
   const total = subtotal + escrowFee;
 
-  const handleSubmit = () => {
-    if (!customerPiUid || items.length === 0 || items.some(i => !i.productName || i.unitPrice <= 0)) return;
-    onCreate({
-      storeId, customerPiUid, customerName, items, notes,
-      escrowFee: escrowFee.toFixed(6),
-    });
-  };
+  const createInvoice = useMutation({
+    mutationFn: () =>
+      fetch("/api/invoices", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          storeId: store.id, customerPiUid: customerUid, customerName, items, notes, escrowFee,
+        }),
+      }).then(r => r.json()),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["invoices"] });
+      setOpen(false);
+      setCustomerName(""); setCustomerUid(""); setNotes("");
+      setItems([{ productName: "", quantity: 1, unitPrice: 0 }]);
+    },
+  });
 
   return (
     <div className="space-y-4">
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2"><FileText className="w-4 h-4" /> إنشاء فاتورة جديدة</CardTitle>
-          <CardDescription>من: {storeName}</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid sm:grid-cols-2 gap-3">
-            <div><Label>اسم العميل</Label><Input value={customerName} onChange={e => setCustomerName(e.target.value)} placeholder="اسم العميل (اختياري)" className="mt-1" /></div>
-            <div><Label>Pi UID العميل *</Label><Input value={customerPiUid} onChange={e => setCustomerPiUid(e.target.value)} placeholder="أدخل معرف Pi الخاص بالعميل" className="mt-1" /></div>
-          </div>
+      <div className="flex items-center justify-between">
+        <h2 className="font-bold text-base">إنشاء فاتورة</h2>
+        <Dialog open={open} onOpenChange={setOpen}>
+          <DialogTrigger asChild>
+            <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs">
+              <Plus className="h-3.5 w-3.5 ml-1.5" />فاتورة جديدة
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="text-sm">فاتورة جديدة</DialogTitle>
+              <DialogDescription className="text-xs">إنشاء فاتورة مع ضمان الدفع</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label className="text-xs">اسم المشتري</Label>
+                  <Input value={customerName} onChange={e => setCustomerName(e.target.value)} placeholder="اسم المستخدم" className="text-sm" />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">معرّف المشتري (UID)</Label>
+                  <Input value={customerUid} onChange={e => setCustomerUid(e.target.value)} placeholder="uid من Pi" className="text-sm" dir="ltr" />
+                </div>
+              </div>
 
-          <Separator />
-
-          {/* Items */}
-          <div>
-            <div className="flex items-center justify-between mb-3">
-              <Label className="text-sm font-bold">بنود الفاتورة *</Label>
-              <Button variant="outline" size="sm" onClick={addItem} className="text-xs"><Plus className="w-3 h-3 ml-1" /> إضافة بند</Button>
-            </div>
-            <div className="space-y-3">
-              {items.map((item, index) => (
-                <div key={index} className="flex flex-wrap gap-2 items-end p-3 bg-gray-50 rounded-lg">
-                  {products.length > 0 && (
-                    <div className="w-full">
-                      <Label className="text-xs">اختر منتج أو أدخل اسمه</Label>
-                      <select
-                        className="w-full mt-1 rounded-md border bg-white px-3 py-2 text-sm"
-                        value={item.productId || ""}
-                        onChange={e => { if (e.target.value) selectProduct(index, e.target.value); }}
-                      >
-                        <option value="">-- اختر منتج --</option>
-                        {products.map(p => <option key={p.id} value={p.id}>{p.name} ({p.price} Pi)</option>)}
-                      </select>
-                    </div>
-                  )}
-                  <div className="flex-1 min-w-[140px]">
-                    <Label className="text-xs">اسم المنتج</Label>
-                    <Input value={item.productName} onChange={e => updateItem(index, "productName", e.target.value)} placeholder="اسم المنتج" className="mt-1" />
-                  </div>
-                  <div className="w-20">
-                    <Label className="text-xs">الكمية</Label>
-                    <Input type="number" min={1} value={item.quantity} onChange={e => updateItem(index, "quantity", Number(e.target.value))} className="mt-1" />
-                  </div>
-                  <div className="w-24">
-                    <Label className="text-xs">السعر (Pi)</Label>
-                    <Input type="number" step="0.01" value={item.unitPrice} onChange={e => updateItem(index, "unitPrice", Number(e.target.value))} className="mt-1" />
-                  </div>
-                  <div className="w-24 text-left">
-                    <p className="text-xs text-gray-500 mb-1">الإجمالي</p>
-                    <p className="text-sm font-bold">{item.totalPrice.toFixed(2)} Pi</p>
-                  </div>
-                  {items.length > 1 && (
-                    <Button variant="ghost" size="sm" onClick={() => removeItem(index)} className="text-red-500 h-9 w-9 p-0"><Trash2 className="w-3.5 h-3.5" /></Button>
+              {/* Items */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs">المنتجات</Label>
+                  {items.length < 10 && (
+                    <Button variant="ghost" size="sm" onClick={addItem} className="h-7 text-xs text-emerald-600">
+                      <Plus className="h-3 w-3 ml-1" />إضافة
+                    </Button>
                   )}
                 </div>
-              ))}
+                <div className="space-y-2">
+                  {items.map((item, idx) => (
+                    <div key={idx} className="grid grid-cols-[1fr_60px_80px_28px] gap-2 items-end">
+                      <div className="space-y-1">
+                        {idx === 0 && <span className="text-[10px] text-muted-foreground">المنتج</span>}
+                        {idx === 0 ? (
+                          <Input value={item.productName} onChange={e => updateItem(idx, "productName", e.target.value)} placeholder="اسم المنتج" className="text-xs h-8" />
+                        ) : (
+                          <select
+                            value={item.productName}
+                            onChange={e => {
+                              const p = products.find(pr => pr.name === e.target.value);
+                              updateItem(idx, "productName", e.target.value);
+                              if (p) { updateItem(idx, "unitPrice", p.price); }
+                            }}
+                            className="w-full h-8 rounded-md border border-input bg-background px-2 text-xs"
+                          >
+                            <option value="">اختر منتجاً</option>
+                            {products.map(p => <option key={p.id} value={p.name}>{p.name} — {p.price} π</option>)}
+                          </select>
+                        )}
+                      </div>
+                      <div className="space-y-1">
+                        {idx === 0 && <span className="text-[10px] text-muted-foreground">الكمية</span>}
+                        <Input type="number" min="1" value={item.quantity} onChange={e => updateItem(idx, "quantity", parseInt(e.target.value) || 1)} className="text-xs h-8 text-center" />
+                      </div>
+                      <div className="space-y-1">
+                        {idx === 0 && <span className="text-[10px] text-muted-foreground">السعر (π)</span>}
+                        <Input type="number" step="0.01" value={item.unitPrice} onChange={e => updateItem(idx, "unitPrice", parseFloat(e.target.value) || 0)} className="text-xs h-8" dir="ltr" />
+                      </div>
+                      <Button variant="ghost" size="sm" onClick={() => removeItem(idx)} className="h-8 w-8 p-0 text-destructive" disabled={items.length <= 1}>
+                        <XCircle className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs">ملاحظات</Label>
+                <Textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="ملاحظات إضافية..." className="text-sm min-h-[60px]" />
+              </div>
+
+              {/* Summary */}
+              <div className="bg-muted/50 rounded-xl p-3 space-y-1.5 text-sm">
+                <div className="flex justify-between text-xs text-muted-foreground"><span>المجموع الفرعي</span><span>{subtotal.toFixed(2)} π</span></div>
+                <div className="flex justify-between text-xs text-muted-foreground"><span>رسوم الضمان ({(ESCROW_FEE_RATE * 100).toFixed(0)}%)</span><span>{escrowFee.toFixed(2)} π</span></div>
+                <Separator className="my-1.5" />
+                <div className="flex justify-between font-bold text-sm"><span>الإجمالي</span><span className="text-emerald-600">{total.toFixed(2)} π</span></div>
+              </div>
             </div>
-          </div>
+            <DialogFooter>
+              <Button onClick={() => createInvoice.mutate()} disabled={!customerUid.trim() || items.some(i => !i.productName || i.unitPrice <= 0) || createInvoice.isPending} size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs">
+                {createInvoice.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin ml-1.5" /> : <Receipt className="h-3.5 w-3.5 ml-1.5" />}
+                إنشاء الفاتورة
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </div>
 
-          <div><Label>ملاحظات</Label><Textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="ملاحظات إضافية للعميل (اختياري)" className="mt-1" /></div>
-
-          <Separator />
-
-          {/* Totals */}
-          <div className="bg-purple-50 rounded-lg p-4 space-y-2">
-            <div className="flex justify-between text-sm"><span>المجموع الفرعي</span><span>{subtotal.toFixed(2)} Pi</span></div>
-            <div className="flex justify-between text-sm text-gray-500"><span>رسوم الضمان (1%)</span><span>{escrowFee.toFixed(2)} Pi</span></div>
-            <Separator />
-            <div className="flex justify-between text-lg font-bold text-purple-800"><span>الإجمالي</span><span>{total.toFixed(2)} Pi</span></div>
-          </div>
-
-          <Button
-            className="w-full bg-purple-700 hover:bg-purple-800 text-white"
-            size="lg"
-            disabled={!customerPiUid || items.length === 0 || items.some(i => !i.productName || i.unitPrice <= 0) || loading}
-            onClick={handleSubmit}
-          >
-            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4 ml-2" />}
-            إنشاء الفاتورة وإرسالها
-          </Button>
+      <Card className="border-dashed">
+        <CardContent className="py-10 text-center text-muted-foreground">
+          <FileText className="h-10 w-10 mx-auto mb-3 opacity-30" />
+          <p className="text-sm">أنشئ فاتورة جديدة من الزر أعلاه</p>
+          <p className="text-xs mt-1">سيتم إرسال رابط الدفع للمشتري</p>
         </CardContent>
       </Card>
     </div>
   );
 }
 
-/* ─── Merchant Orders View ────────────────────────────── */
-function OrdersView({ invoices, onUpdateStatus, onReleaseEscrow }: {
-  invoices: Invoice[]; onUpdateStatus: (id: string, status: string) => void;
-  onReleaseEscrow: (invoice: Invoice) => void;
+/* ═══════════════════════════════════════════════════════════════
+   Orders View (Merchant + Customer)
+   ═══════════════════════════════════════════════════════════════ */
+function OrdersView({
+  merchantInvoices, customerInvoices, storeId, customerUid,
+  onStatusChange, onPay,
+}: {
+  merchantInvoices: InvoiceData[]; customerInvoices: InvoiceData[];
+  storeId: string; customerUid: string;
+  onStatusChange: (data: { id: string; status: string; paymentTxId?: string; releaseTxId?: string }) => void;
+  onPay: (invoice: InvoiceData) => void;
 }) {
+  const [view, setView] = useState<"merchant" | "customer">("merchant");
+  const invoices = view === "merchant" ? merchantInvoices : customerInvoices;
+
   return (
     <div className="space-y-4">
-      <h2 className="text-lg font-bold">الطلبات الواردة ({invoices.length})</h2>
+      <div className="flex items-center justify-between">
+        <h2 className="font-bold text-base">الطلبات</h2>
+        <div className="flex rounded-lg border p-0.5 bg-muted/50">
+          <button onClick={() => setView("merchant")} className={`px-3 py-1.5 rounded-md text-xs transition-colors ${view === "merchant" ? "bg-emerald-600 text-white" : "text-muted-foreground hover:text-foreground"}`}>
+            <Store className="h-3 w-3 inline ml-1" />كبائع
+          </button>
+          <button onClick={() => setView("customer")} className={`px-3 py-1.5 rounded-md text-xs transition-colors ${view === "customer" ? "bg-emerald-600 text-white" : "text-muted-foreground hover:text-foreground"}`}>
+            <ShoppingCart className="h-3 w-3 inline ml-1" />كمشتري
+          </button>
+        </div>
+      </div>
+
       {invoices.length === 0 ? (
-        <Card className="py-12 text-center">
-          <ShoppingCart className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-          <p className="text-sm text-gray-400">لا توجد طلبات بعد. أنشئ فاتورة لإرسال طلب لعميل.</p>
+        <Card className="border-dashed">
+          <CardContent className="py-12 text-center text-muted-foreground">
+            <ShoppingCart className="h-10 w-10 mx-auto mb-3 opacity-30" />
+            <p className="text-sm">{view === "merchant" ? "لا توجد طلبات بعد" : "لا توجد طلبات شراء بعد"}</p>
+          </CardContent>
         </Card>
       ) : (
         <div className="space-y-3">
-          {invoices.map((inv: Invoice) => (
-            <Card key={inv.id}>
-              <CardContent className="p-4">
-                <div className="flex flex-wrap items-start justify-between gap-3 mb-3">
-                  <div>
-                    <p className="font-mono text-xs text-gray-500">{inv.invoiceNumber}</p>
-                    <p className="font-bold">{inv.customerName || inv.customerPiUid}</p>
-                    <p className="text-xs text-gray-400">{new Date(inv.createdAt).toLocaleDateString("ar-DZ")}</p>
-                  </div>
-                  <div className="text-left">
-                    <p className="text-lg font-black text-purple-700">{inv.total.toFixed(2)} Pi</p>
-                    <StatusBadge status={inv.status} />
-                  </div>
-                </div>
-                <Separator className="my-3" />
-                <div className="space-y-1 mb-3">
-                  {inv.items.map((item: InvoiceItem, i: number) => (
-                    <div key={item.id || i} className="flex justify-between text-sm">
-                      <span>{item.productName} x{item.quantity}</span>
-                      <span className="font-medium">{item.totalPrice.toFixed(2)} Pi</span>
-                    </div>
-                  ))}
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {inv.status === "pending" && (
-                    <Button size="sm" variant="outline" disabled className="text-xs">في انتظار دفع الضمان</Button>
-                  )}
-                  {inv.status === "paid_escrow" && (
-                    <Button size="sm" className="bg-amber-600 hover:bg-amber-700 text-white text-xs" onClick={() => onUpdateStatus(inv.id, "shipped")}>
-                      <Truck className="w-3 h-3 ml-1" /> تأكيد الشحن
-                    </Button>
-                  )}
-                  {inv.status === "shipped" && (
-                    <Button size="sm" variant="outline" className="text-xs" disabled>في انتظار تأكيد التوصيل</Button>
-                  )}
-                  {inv.status === "delivered" && (
-                    <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs" onClick={() => onReleaseEscrow(inv)}>
-                      <ShieldCheck className="w-3 h-3 ml-1" /> إطلاق الضمان
-                    </Button>
-                  )}
-                  {inv.status === "disputed" && (
-                    <Button size="sm" variant="outline" className="text-xs border-red-300 text-red-600">
-                      <AlertTriangle className="w-3 h-3 ml-1" /> نزاع — قيد المراجعة
-                    </Button>
-                  )}
-                  {inv.status === "completed" && (
-                    <Badge className="bg-green-100 text-green-700 text-xs"><CheckCircle2 className="w-3 h-3 ml-1" /> مكتمل</Badge>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
+          {invoices.map(inv => (
+            <OrderCard key={inv.id} invoice={inv} view={view} onStatusChange={onStatusChange} onPay={onPay} />
           ))}
         </div>
       )}
@@ -768,94 +712,99 @@ function OrdersView({ invoices, onUpdateStatus, onReleaseEscrow }: {
   );
 }
 
-/* ─── Customer My Orders View ─────────────────────────── */
-function MyOrdersView({ invoices, onPayEscrow, onConfirmDelivery, onDispute }: {
-  invoices: Invoice[]; onPayEscrow: (invoice: Invoice) => void;
-  onConfirmDelivery: (id: string) => void; onDispute: (id: string) => void;
+function OrderCard({
+  invoice, view, onStatusChange, onPay,
+}: {
+  invoice: InvoiceData; view: "merchant" | "customer";
+  onStatusChange: (data: { id: string; status: string; paymentTxId?: string; releaseTxId?: string }) => void;
+  onPay: (invoice: InvoiceData) => void;
 }) {
-  return (
-    <div className="space-y-4">
-      <h2 className="text-lg font-bold">مشترياتي ({invoices.length})</h2>
-      {invoices.length === 0 ? (
-        <Card className="py-12 text-center">
-          <Eye className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-          <p className="text-sm text-gray-400">لا توجد مشتريات بعد.</p>
-        </Card>
-      ) : (
-        <div className="space-y-3">
-          {invoices.map((inv: Invoice) => (
-            <Card key={inv.id}>
-              <CardContent className="p-4">
-                <div className="flex flex-wrap items-start justify-between gap-3 mb-3">
-                  <div>
-                    <p className="font-mono text-xs text-gray-500">{inv.invoiceNumber}</p>
-                    <p className="font-bold">{inv.store?.name || "متجر"}</p>
-                    <p className="text-xs text-gray-400">{new Date(inv.createdAt).toLocaleDateString("ar-DZ")}</p>
-                  </div>
-                  <div className="text-left">
-                    <p className="text-lg font-black text-purple-700">{inv.total.toFixed(2)} Pi</p>
-                    <StatusBadge status={inv.status} />
-                  </div>
-                </div>
-                <Separator className="my-3" />
-                <div className="space-y-1 mb-3">
-                  {inv.items.map((item: InvoiceItem, i: number) => (
-                    <div key={item.id || i} className="flex justify-between text-sm">
-                      <span>{item.productName} x{item.quantity}</span>
-                      <span className="font-medium">{item.totalPrice.toFixed(2)} Pi</span>
-                    </div>
-                  ))}
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {inv.status === "pending" && (
-                    <Button size="sm" className="bg-purple-700 hover:bg-purple-800 text-white text-xs" onClick={() => onPayEscrow(inv)}>
-                      <ShieldCheck className="w-3 h-3 ml-1" /> دفع ووضع في الضمان
-                    </Button>
-                  )}
-                  {inv.status === "paid_escrow" && (
-                    <Badge className="bg-blue-100 text-blue-700 text-xs"><ShieldCheck className="w-3 h-3 ml-1" /> الأموال محفوظة في الضمان — في انتظار الشحن</Badge>
-                  )}
-                  {inv.status === "shipped" && (
-                    <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs" onClick={() => onConfirmDelivery(inv.id)}>
-                      <CheckCircle2 className="w-3 h-3 ml-1" /> تأكيد التوصيل
-                    </Button>
-                  )}
-                  {inv.status === "shipped" && (
-                    <Button size="sm" variant="outline" className="text-xs border-red-300 text-red-600" onClick={() => onDispute(inv.id)}>
-                      <AlertTriangle className="w-3 h-3 ml-1" /> الإبلاغ عن مشكلة
-                    </Button>
-                  )}
-                  {inv.status === "delivered" && (
-                    <Badge className="bg-emerald-100 text-emerald-700 text-xs">تم التوصيل — في انتظار إطلاق الضمان</Badge>
-                  )}
-                  {inv.status === "completed" && (
-                    <Badge className="bg-green-100 text-green-700 text-xs"><CheckCircle2 className="w-3 h-3 ml-1" /> مكتمل — تم إطلاق الضمان</Badge>
-                  )}
-                  {inv.status === "disputed" && (
-                    <Badge className="bg-red-100 text-red-700 text-xs"><AlertTriangle className="w-3 h-3 ml-1" /> نزاع — قيد المراجعة</Badge>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
+  const [expanded, setExpanded] = useState(false);
 
-/* ─── Study Page (embedded) ────────────────────────────── */
-function StudyPage({ onBack }: { onBack: () => void }) {
+  const canShip = view === "merchant" && invoice.status === "paid_escrow";
+  const canConfirmDelivery = view === "customer" && invoice.status === "shipped";
+  const canPay = view === "customer" && invoice.status === "pending";
+
   return (
-    <div dir="rtl" className="min-h-screen bg-white">
-      <header className="bg-gray-50 border-b sticky top-0 z-40">
-        <div className="max-w-4xl mx-auto px-4 h-12 flex items-center gap-3">
-          <Button variant="ghost" size="sm" onClick={onBack} className="text-xs"><ArrowLeft className="w-3.5 h-3.5 ml-1" /> العودة للتطبيق</Button>
-          <span className="text-xs text-gray-500">|</span>
-          <span className="text-xs font-bold">دراسة إكوسيستم Pi</span>
+    <Card className="border-0 shadow-sm hover:shadow-md transition-shadow">
+      <CardContent className="p-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-emerald-500/20 to-teal-500/20 flex items-center justify-center shrink-0">
+              <Receipt className="h-4 w-4 text-emerald-600" />
+            </div>
+            <div className="min-w-0">
+              <p className="font-semibold text-sm truncate">{invoice.invoiceNumber}</p>
+              <p className="text-[11px] text-muted-foreground">
+                {view === "merchant" ? invoice.customerName || invoice.customerPiUid : invoice.store?.name}
+                {" · "}
+                {new Date(invoice.createdAt).toLocaleDateString("ar-DZ")}
+              </p>
+            </div>
+          </div>
+          <div className="text-left shrink-0">
+            <StatusBadge status={invoice.status} />
+            <p className="text-xs font-bold mt-1 text-emerald-600">{invoice.total.toFixed(2)} π</p>
+          </div>
         </div>
-      </header>
-      <StudyContent />
-    </div>
+
+        {/* Quick items preview */}
+        <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+          <Package className="h-3 w-3" />
+          <span>{invoice.items?.length || 0} منتج</span>
+          <span>·</span>
+          <span>{invoice.subtotal.toFixed(2)} π</span>
+          {invoice.escrowFee > 0 && <><span>·</span><span>ضمان {invoice.escrowFee.toFixed(2)} π</span></>}
+        </div>
+
+        {/* Actions */}
+        <div className="flex items-center gap-2 flex-wrap">
+          {canPay && (
+            <Button size="sm" onClick={() => onPay(invoice)} className="h-8 bg-emerald-600 hover:bg-emerald-700 text-white text-xs">
+              <CreditCard className="h-3 w-3 ml-1.5" />دفع بالـ Pi
+            </Button>
+          )}
+          {canShip && (
+            <Button size="sm" variant="outline" onClick={() => onStatusChange({ id: invoice.id, status: "shipped" })} className="h-8 text-xs border-blue-500/30 text-blue-600 hover:bg-blue-50">
+              <Truck className="h-3 w-3 ml-1.5" />شحن
+            </Button>
+          )}
+          {canConfirmDelivery && (
+            <Button size="sm" variant="outline" onClick={() => onStatusChange({ id: invoice.id, status: "delivered" })} className="h-8 text-xs border-teal-500/30 text-teal-600 hover:bg-teal-50">
+              <CheckCircle2 className="h-3 w-3 ml-1.5" />تأكيد التسليم
+            </Button>
+          )}
+          <Button size="sm" variant="ghost" onClick={() => setExpanded(!expanded)} className="h-8 text-xs text-muted-foreground mr-auto">
+            {expanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+            التفاصيل
+          </Button>
+        </div>
+
+        {/* Expanded details */}
+        {expanded && (
+          <div className="border-t pt-3 space-y-2">
+            <p className="text-[11px] font-semibold text-muted-foreground mb-2">تفاصيل المنتجات</p>
+            {invoice.items?.map((item, i) => (
+              <div key={item.id || i} className="flex items-center justify-between text-xs py-1">
+                <span className="text-foreground">{item.productName}</span>
+                <span className="text-muted-foreground">
+                  {item.quantity} × {item.unitPrice.toFixed(2)} π = <span className="font-medium text-foreground">{item.totalPrice.toFixed(2)} π</span>
+                </span>
+              </div>
+            ))}
+            {invoice.notes && (
+              <div className="mt-2 text-xs text-muted-foreground bg-muted/50 rounded-lg p-2">
+                <span className="font-medium">ملاحظات:</span> {invoice.notes}
+              </div>
+            )}
+            {invoice.paymentTxId && (
+              <div className="text-[10px] text-muted-foreground font-mono bg-muted/50 rounded-lg p-2 mt-1" dir="ltr">
+                TX: {invoice.paymentTxId.slice(0, 16)}...
+              </div>
+            )}
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
