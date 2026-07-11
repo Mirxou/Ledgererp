@@ -281,7 +281,8 @@ async function handleIncomplete(body: {
   }
 
   const paymentId = payment.identifier as string | undefined;
-  const txid = payment.transaction?.txid as string | undefined;
+  const tx = payment.transaction as Record<string, unknown> | undefined;
+  const txid = tx?.txid as string | undefined;
 
   console.log("[pi_payment/incomplete] Found incomplete payment:", paymentId);
 

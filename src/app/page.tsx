@@ -529,9 +529,6 @@ function InvoicesView({ store, products }: { store: StoreData; products: Product
   const updateItem = (idx: number, field: string, value: string | number) => {
     const updated = [...items];
     (updated[idx] as Record<string, unknown>)[field] = value;
-    if (field === "unitPrice" || field === "quantity") {
-      updated[idx].totalPrice = updated[idx].unitPrice * updated[idx].quantity;
-    }
     setItems(updated);
   };
 
