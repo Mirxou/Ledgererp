@@ -63,7 +63,6 @@ export async function POST(
     const message = err instanceof Error ? err.message : "Unknown error";
     console.error(`[pi_payment/${action}]`, message);
 
-    // If a DB update was supposed to happen, don't leave invoice in limbo
     if (body.paymentId) {
       try {
         await db.invoice.updateMany({
@@ -71,7 +70,7 @@ export async function POST(
             paymentTxId: body.paymentId,
             status: { in: ["pending"] },
           },
-          data: { status: "cancelled" },
+          data: { status: "cancelled", cancelledAt: new Date() },
         });
       } catch {
         // best-effort rollback
@@ -83,8 +82,6 @@ export async function POST(
 }
 
 // ─── APPROVE ───────────────────────────────────────────────────────────────────
-// Frontend calls this after Pi SDK fires onReadyForServerApproval(paymentId)
-// We tell the Pi server to approve the escrow hold.
 async function handleApprove(body: { paymentId?: string; invoiceId?: string }) {
   const { paymentId, invoiceId } = body;
 
@@ -95,7 +92,6 @@ async function handleApprove(body: { paymentId?: string; invoiceId?: string }) {
     );
   }
 
-  // Call Pi API to approve the payment (escrow hold)
   const piRes = await fetch(
     `${PI_API_BASE}/payments/${paymentId}/approve`,
     {
@@ -115,24 +111,18 @@ async function handleApprove(body: { paymentId?: string; invoiceId?: string }) {
 
   const paymentDTO = await piRes.json();
 
-  // Update invoice status in DB to "paid_escrow"
   if (invoiceId) {
     await db.invoice.update({
       where: { id: invoiceId },
-      data: { status: "paid_escrow" },
+      data: { status: "paid_escrow", paidAt: new Date(), paymentTxId: paymentId },
     });
   } else {
-    // Fallback: try to find invoice by matching paymentId in paymentTxId
-    // or by looking at recent pending invoices (best-effort)
     await db.invoice.updateMany({
       where: {
-        OR: [
-          { paymentTxId: paymentId },
-          // If no direct match, we skip — frontend should always send invoiceId
-        ],
+        OR: [{ paymentTxId: paymentId }],
         status: "pending",
       },
-      data: { status: "paid_escrow", paymentTxId: paymentId },
+      data: { status: "paid_escrow", paidAt: new Date(), paymentTxId: paymentId },
     });
   }
 
@@ -143,8 +133,6 @@ async function handleApprove(body: { paymentId?: string; invoiceId?: string }) {
 }
 
 // ─── COMPLETE ──────────────────────────────────────────────────────────────────
-// Frontend calls this after Pi SDK fires onReadyForServerCompletion(paymentId, txid)
-// We tell the Pi server the transaction is complete and store the txid.
 async function handleComplete(body: {
   paymentId?: string;
   txid?: string;
@@ -159,7 +147,6 @@ async function handleComplete(body: {
     );
   }
 
-  // Call Pi API to complete the payment
   const piRes = await fetch(
     `${PI_API_BASE}/payments/${paymentId}/complete`,
     {
@@ -180,21 +167,24 @@ async function handleComplete(body: {
 
   const paymentDTO = await piRes.json();
 
-  // Update invoice with blockchain txid and completed status
+  // After U2A complete, the money is in escrow. Status stays paid_escrow.
+  // It moves to shipped/delivered/completed through the seller workflow.
   if (invoiceId) {
     await db.invoice.update({
       where: { id: invoiceId },
       data: {
-        status: "completed",
+        status: "paid_escrow",
         paymentTxId: txid,
+        paidAt: new Date(),
       },
     });
   } else {
     await db.invoice.updateMany({
       where: { paymentTxId: paymentId },
       data: {
-        status: "completed",
+        status: "paid_escrow",
         paymentTxId: txid,
+        paidAt: new Date(),
       },
     });
   }
@@ -206,7 +196,6 @@ async function handleComplete(body: {
 }
 
 // ─── CANCEL ────────────────────────────────────────────────────────────────────
-// Frontend calls this after Pi SDK fires onCancel(paymentId)
 async function handleCancel(body: { paymentId?: string; invoiceId?: string }) {
   const { paymentId, invoiceId } = body;
 
@@ -217,11 +206,10 @@ async function handleCancel(body: { paymentId?: string; invoiceId?: string }) {
     );
   }
 
-  // Update invoice status to cancelled
   if (invoiceId) {
     await db.invoice.update({
       where: { id: invoiceId },
-      data: { status: "cancelled" },
+      data: { status: "cancelled", cancelledAt: new Date() },
     });
   }
 
@@ -233,7 +221,6 @@ async function handleCancel(body: { paymentId?: string; invoiceId?: string }) {
 }
 
 // ─── ERROR ─────────────────────────────────────────────────────────────────────
-// Frontend calls this after Pi SDK fires onError(paymentId, error)
 async function handleError(body: {
   paymentId?: string;
   error?: string;
@@ -250,11 +237,14 @@ async function handleError(body: {
     );
   }
 
-  // Update invoice status to cancelled
   if (invoiceId) {
     await db.invoice.update({
       where: { id: invoiceId },
-      data: { status: "cancelled", notes: `Payment error: ${errorMessage || "unknown"}` },
+      data: {
+        status: "cancelled",
+        cancelledAt: new Date(),
+        notes: `Payment error: ${errorMessage || "unknown"}`,
+      },
     });
   }
 
@@ -266,8 +256,6 @@ async function handleError(body: {
 }
 
 // ─── INCOMPLETE PAYMENT ────────────────────────────────────────────────────────
-// Frontend calls this when Pi SDK fires onIncompletePaymentFound(payment)
-// This happens when a payment was started but never completed (e.g., app closed).
 async function handleIncomplete(body: {
   payment?: Record<string, unknown>;
 }) {
@@ -281,12 +269,9 @@ async function handleIncomplete(body: {
   }
 
   const paymentId = payment.identifier as string | undefined;
-  const tx = payment.transaction as Record<string, unknown> | undefined;
-  const txid = tx?.txid as string | undefined;
 
   console.log("[pi_payment/incomplete] Found incomplete payment:", paymentId);
 
-  // Try to find and update the corresponding invoice
   if (paymentId) {
     const updated = await db.invoice.updateMany({
       where: {
@@ -295,6 +280,7 @@ async function handleIncomplete(body: {
       },
       data: {
         status: "cancelled",
+        cancelledAt: new Date(),
         notes: `Incomplete payment found — paymentId: ${paymentId}`,
       },
     });
@@ -308,7 +294,6 @@ async function handleIncomplete(body: {
     }
   }
 
-  // No matching invoice found — just acknowledge
   return NextResponse.json({
     success: true,
     message: "Incomplete payment acknowledged, no matching invoice found",

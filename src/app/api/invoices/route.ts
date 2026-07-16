@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 
-// Generate unique invoice number
 function genInvoiceNumber(): string {
   const d = new Date();
   const prefix = "INV";
@@ -10,28 +9,31 @@ function genInvoiceNumber(): string {
   return `${prefix}-${date}-${rand}`;
 }
 
-// GET /api/invoices?storeId=xxx&customerPiUid=xxx
+// GET /api/invoices?storeId=xxx&customerPiUid=xxx&status=xxx
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
     const storeId = searchParams.get("storeId");
     const customerPiUid = searchParams.get("customerPiUid");
+    const status = searchParams.get("status");
 
-    const where: Record<string, string> = {};
+    const where: Record<string, unknown> = {};
     if (storeId) where.storeId = storeId;
     if (customerPiUid) where.customerPiUid = customerPiUid;
+    if (status) where.status = status;
 
     const invoices = await db.invoice.findMany({
       where: Object.keys(where).length > 0 ? where : undefined,
-      include: { items: true, store: { select: { name: true } } },
+      include: { items: true, store: { select: { name: true, piUid: true } } },
       orderBy: { createdAt: "desc" },
     });
     return NextResponse.json(invoices);
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: "Failed to fetch invoices" }, { status: 500 });
   }
 }
 
+// GET /api/invoices/[id] — single invoice (handled by page.tsx or separate route)
 // POST /api/invoices — create invoice with items
 export async function POST(req: Request) {
   try {
@@ -65,7 +67,7 @@ export async function POST(req: Request) {
           })),
         },
       },
-      include: { items: true },
+      include: { items: true, store: { select: { name: true, piUid: true } } },
     });
 
     return NextResponse.json(invoice);
@@ -75,7 +77,7 @@ export async function POST(req: Request) {
   }
 }
 
-// PATCH /api/invoices — update invoice status / payment tx ids
+// PATCH /api/invoices — update invoice status, payment tx ids, etc.
 export async function PATCH(req: Request) {
   try {
     const { id, status, paymentTxId, releaseTxId } = await req.json();
@@ -88,13 +90,36 @@ export async function PATCH(req: Request) {
     if (paymentTxId) data.paymentTxId = paymentTxId;
     if (releaseTxId) data.releaseTxId = releaseTxId;
 
+    // Auto-set timestamps based on status
+    if (status === "paid_escrow") data.paidAt = new Date();
+    if (status === "shipped") data.shippedAt = new Date();
+    if (status === "delivered") data.deliveredAt = new Date();
+    if (status === "completed") data.completedAt = new Date();
+    if (status === "cancelled") data.cancelledAt = new Date();
+
     const invoice = await db.invoice.update({
       where: { id },
       data,
-      include: { items: true, store: { select: { name: true } } },
+      include: { items: true, store: { select: { name: true, piUid: true } } },
     });
     return NextResponse.json(invoice);
   } catch (error) {
+    console.error("Update invoice error:", error);
     return NextResponse.json({ error: "Failed to update invoice" }, { status: 500 });
+  }
+}
+
+// DELETE /api/invoices — delete invoice and its items
+export async function DELETE(req: Request) {
+  try {
+    const { id } = await req.json();
+    if (!id) {
+      return NextResponse.json({ error: "id required" }, { status: 400 });
+    }
+    await db.invoiceItem.deleteMany({ where: { invoiceId: id } });
+    await db.invoice.delete({ where: { id } });
+    return NextResponse.json({ success: true });
+  } catch {
+    return NextResponse.json({ error: "Failed to delete invoice" }, { status: 500 });
   }
 }
