@@ -474,11 +474,13 @@ function DashboardView({ stats, store }: { stats: Record<string, unknown>; store
         <CardContent className="pb-4 px-4">
           <div className="flex items-center justify-around text-[10px] gap-1">
             {[["إنشاء", FileText, "text-slate-500 bg-slate-100 dark:bg-slate-800"], ["دفع", CreditCard, "text-blue-500 bg-blue-50 dark:bg-blue-950/50"], ["شحن", Truck, "text-purple-500 bg-purple-50 dark:bg-purple-950/50"], ["تسليم", CheckCircle2, "text-teal-500 bg-teal-50 dark:bg-teal-950/50"], ["إطلاق", Wallet, "text-emerald-500 bg-emerald-50 dark:bg-emerald-950/50"]].map(function(step, i, arr) {
-              let StepIcon = step[1];
+              let stepLabel = step[0] as string;
+              let StepIcon = step[1] as React.ElementType;
+              let stepColor = step[2] as string;
               return (
-                <div key={step[0]} className="flex items-center gap-1 shrink-0">
-                  <div className={"w-7 h-7 rounded-lg " + step[2] + " flex items-center justify-center"}><StepIcon className="h-3.5 w-3.5" /></div>
-                  <span className="text-muted-foreground whitespace-nowrap hidden sm:block">{step[0]}</span>
+                <div key={stepLabel} className="flex items-center gap-1 shrink-0">
+                  <div className={"w-7 h-7 rounded-lg " + stepColor + " flex items-center justify-center"}><StepIcon className="h-3.5 w-3.5" /></div>
+                  <span className="text-muted-foreground whitespace-nowrap hidden sm:block">{stepLabel}</span>
                   {i < arr.length - 1 && <ChevronDown className="h-3 w-3 text-muted-foreground/30 hidden sm:block" />}
                 </div>
               );
@@ -711,7 +713,7 @@ function InvoicesView({ store, products }: { store: StoreData; products: Product
                           {idx === 0 ? (
                             <Input value={item.productName} onChange={function(e) { updateItem(idx, "productName", e.target.value); }} placeholder="اسم المنتج" className="text-xs h-8" />
                           ) : (
-                            <select value={item.productName} onChange={function(e) { updateItem(idx, "productName", e.target.value); let found = null; for (let k = 0; k < activeProducts.length; k++) { if (activeProducts[k].name === e.target.value) { found = activeProducts[k]; break; } } if (found) updateItem(idx, "unitPrice", found.price); }} className="w-full h-8 rounded-md border border-input bg-background px-2 text-xs">
+                            <select value={item.productName} onChange={function(e) { updateItem(idx, "productName", e.target.value); let found: ProductData | null = null; for (let k = 0; k < activeProducts.length; k++) { if (activeProducts[k].name === e.target.value) { found = activeProducts[k]; break; } } if (found) updateItem(idx, "unitPrice", found.price); }} className="w-full h-8 rounded-md border border-input bg-background px-2 text-xs">
                               <option value="">اختر</option>
                               {activeProducts.map(function(p) { return <option key={p.id} value={p.name}>{p.name} — {p.price}π</option>; })}
                             </select>
