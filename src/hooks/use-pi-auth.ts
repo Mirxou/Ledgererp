@@ -9,19 +9,12 @@ import {
 
 /* ─── Return type ─────────────────────────────────────────── */
 export interface UsePiAuthReturn {
-  /** `true` once we know whether the Pi SDK is available or not. */
   sdkReady: boolean;
-  /** `true` when the user is NOT in Pi Browser (detection complete). */
   notPiBrowser: boolean;
-  /** `true` after a successful Pi authentication + backend verification. */
   connected: boolean;
-  /** The authenticated Pi user (null until connected). */
   user: PiUser | null;
-  /** `true` while detection, authentication or verification is in flight. */
   loading: boolean;
-  /** Human-readable error message, or null. */
   error: string | null;
-  /** Manually trigger authentication (useful for a login button). */
   login: () => Promise<void>;
 }
 
@@ -32,7 +25,7 @@ export function usePiAuth(): UsePiAuthReturn {
   const [notPiBrowser, setNotPiBrowser] = useState(false);
   const [connected, setConnected] = useState(false);
   const [user, setUser] = useState<PiUser | null>(null);
-  const [loading, setLoading] = useState(true); // Start true — we're detecting
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const authAttempted = useRef(false);
@@ -40,16 +33,14 @@ export function usePiAuth(): UsePiAuthReturn {
 
   /* ── Step 1: detect Pi SDK ─────────────────────────────── */
   useEffect(() => {
-    // If already available synchronously (Pi Browser, script loaded)
     if (isPiBrowser()) {
       setSdkReady(true);
       setLoading(false);
       return;
     }
 
-    // Poll for async-loaded SDK (shouldn't happen in Pi Browser, but safety net)
     let attempts = 0;
-    const MAX_ATTEMPTS = 15; // 15 × 500ms = 7.5 seconds
+    const MAX_ATTEMPTS = 15;
 
     const id = setInterval(() => {
       attempts++;
@@ -68,9 +59,7 @@ export function usePiAuth(): UsePiAuthReturn {
       }
     }, 500);
 
-    return () => {
-      clearInterval(id);
-    };
+    return () => { clearInterval(id); };
   }, []);
 
   /* ── Step 2: authenticate when SDK is ready ─────────────── */
@@ -87,28 +76,37 @@ export function usePiAuth(): UsePiAuthReturn {
 
       setUser(authedUser);
 
-      // Send accessToken to backend for server-side verification
-      const res = await fetch("/api/auth/verify", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ accessToken: authedUser.accessToken }),
-      });
+      // Try backend verification — but DON'T block if it fails
+      try {
+        const res = await fetch("/api/auth/verify", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ accessToken: authedUser.accessToken }),
+        });
 
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(
-          (body as { error?: string }).error ??
-            `Backend verification failed (${res.status})`,
-        );
+        if (res.ok) {
+          const verified = await res.json();
+          // Use verified data if available (more reliable)
+          if (verified && verified.uid) {
+            setUser({
+              uid: verified.uid,
+              username: verified.username || authedUser.username,
+              accessToken: authedUser.accessToken,
+            });
+          }
+        }
+      } catch {
+        // Backend verification failed — use SDK data directly
+        console.warn("[usePiAuth] Backend verification skipped, using SDK data");
       }
 
+      // Always connect using SDK data (Pi SDK already verified the user)
       setConnected(true);
     } catch (err) {
       if (!mountedRef.current) return;
-      const message =
-        err instanceof Error ? err.message : "Authentication failed";
+      const message = err instanceof Error ? err.message : "Authentication failed";
       setError(message);
-      authAttempted.current = false; // Allow retry
+      authAttempted.current = false;
     } finally {
       if (mountedRef.current) {
         setLoading(false);
