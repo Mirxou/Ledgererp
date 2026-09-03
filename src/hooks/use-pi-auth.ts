@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import {
   isPiBrowser,
+  initPi,
   authenticatePi,
   type PiUser,
 } from "@/lib/pi-sdk";
@@ -34,6 +35,7 @@ export function usePiAuth(): UsePiAuthReturn {
   /* ── Step 1: detect Pi SDK ─────────────────────────────── */
   useEffect(() => {
     if (isPiBrowser()) {
+      initPi(); // Initialize SDK before any other calls
       setSdkReady(true);
       setLoading(false);
       return;
@@ -47,6 +49,7 @@ export function usePiAuth(): UsePiAuthReturn {
       if (isPiBrowser()) {
         clearInterval(id);
         if (mountedRef.current) {
+          initPi(); // Initialize SDK
           setSdkReady(true);
           setLoading(false);
         }
