@@ -1,9 +1,11 @@
 /**
  * Pi SDK Client Wrapper
  *
- * Client-side only module that wraps the official Pi Network SDK (loaded from
- * https://sdk.minepi.com/pi-sdk.js). All functions gracefully handle the case
- * where the SDK is unavailable (i.e. the user is NOT inside the Pi Browser).
+ * Client-side only module that wraps the official Pi Network SDK.
+ *
+ * Pi.init() takes an OBJECT: { version: "2.0", sandbox: boolean }
+ * - sandbox: true  → Pi Sandbox / Developer Portal preview
+ * - sandbox: false → Pi Mainnet (production)
  */
 
 /* ─── Global type augmentation ─────────────────────────────── */
@@ -26,11 +28,17 @@ export interface PiPaymentCallbacks {
   onError: (error: { message: string }, payment?: { identifier: string }) => void;
 }
 
+/** Pi SDK init options — takes an OBJECT, not separate args */
+export interface PiInitOptions {
+  version: string;
+  sandbox?: boolean;
+}
+
 /**
  * Minimal shape of the `window.Pi` global object exposed by the SDK.
  */
 export interface PiSDK {
-  init: (appId: string, version: string) => void;
+  init: (options: PiInitOptions) => void;
   authenticate: (
     scopes: string[],
     onIncompletePaymentFound: (payment: unknown) => void,
@@ -48,11 +56,20 @@ declare global {
 }
 
 /* ─── Config ──────────────────────────────────────────────── */
-const PI_APP_ID = "ledgererp-audit";
-const PI_APP_VERSION = "2.0";
+// Auto-detect sandbox: if hostname includes 'sandbox' or we're in Pi Dev Portal
+function detectSandbox(): boolean {
+  if (typeof window === "undefined") return true;
+  // Pi Browser Developer Portal preview = sandbox
+  // Production domain = mainnet
+  const host = window.location.hostname;
+  // If not on our production domain, assume sandbox for safety
+  if (host === "ledgererp.online") return false;
+  return true;
+}
 
 /* ─── State ───────────────────────────────────────────────── */
 let sdkInitialized = false;
+let initError: string | null = null;
 
 /* ─── Helpers ─────────────────────────────────────────────── */
 
@@ -68,8 +85,8 @@ export function getP(): PiSDK | null {
 /* ─── Initialization ──────────────────────────────────────── */
 
 /**
- * Initialize the Pi SDK. MUST be called before authenticate() or createPayment().
- * Pi.init(appId, version) — required by Pi SDK v2.0+
+ * Initialize the Pi SDK.
+ * Pi.init({ version: "2.0", sandbox: true/false })
  */
 export function initPi(): void {
   const pi = getP();
@@ -77,13 +94,22 @@ export function initPi(): void {
   if (sdkInitialized) return;
 
   try {
-    pi.init(PI_APP_ID, PI_APP_VERSION);
+    const sandbox = detectSandbox();
+    pi.init({ version: "2.0", sandbox });
     sdkInitialized = true;
-    console.log("[Pi SDK] Initialized successfully:", PI_APP_ID, PI_APP_VERSION);
+    console.log("[Pi SDK] Initialized:", { version: "2.0", sandbox });
   } catch (err) {
-    console.error("[Pi SDK] init() failed:", err);
-    // Don't throw — some SDK versions may not require init()
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("[Pi SDK] init() failed:", msg);
+    initError = msg;
+    // Mark as initialized anyway to prevent infinite retries
+    sdkInitialized = true;
   }
+}
+
+/** Get the last init error, if any */
+export function getInitError(): string | null {
+  return initError;
 }
 
 /* ─── Authentication ──────────────────────────────────────── */
