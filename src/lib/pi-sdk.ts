@@ -49,7 +49,7 @@ declare global {
 
 /* ─── Config ──────────────────────────────────────────────── */
 const PI_APP_ID = "ledgererp-audit";
-const PI_APP_VERSION = "1.0.0";
+const PI_APP_VERSION = "2.0";
 
 /* ─── State ───────────────────────────────────────────────── */
 let sdkInitialized = false;
