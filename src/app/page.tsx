@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { usePiAuth } from "@/hooks/use-pi-auth";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { createPiPayment, type PiPaymentData, type PiPaymentCallbacks } from "@/lib/pi-sdk";
@@ -47,6 +47,8 @@ interface InvoiceData {
 }
 
 const ESCROW_FEE_RATE = 0.02;
+const DEMO_MODE = process.env.NODE_ENV === "development";
+const DEMO_USER = { uid: "demo_uid_12345", username: "demo_user" };
 
 const STATUS_MAP: Record<string, { label: string; color: string; icon: React.ElementType }> = {
   pending:     { label: "في الانتظار",  color: "bg-yellow-500/15 text-yellow-600 border-yellow-500/30",      icon: Clock },
@@ -170,6 +172,11 @@ function LoginScreen({ onLogin, loading, error }: { onLogin: () => void; loading
 export default function LedgererpApp() {
   let auth = usePiAuth();
 
+  // In demo/dev mode, bypass Pi Browser check
+  if (DEMO_MODE) {
+    return <AuthenticatedApp piUid={DEMO_USER.uid} username={DEMO_USER.username} />;
+  }
+
   if (auth.loading && !auth.sdkReady && !auth.notPiBrowser) return <FullPageLoader message="جارٍ تهيئة التطبيق..." />;
   if (auth.notPiBrowser) return <PiBrowserRequired />;
   if (auth.loading) return <FullPageLoader message="جارٍ الاتصال بشبكة Pi..." />;
@@ -186,10 +193,31 @@ function AuthenticatedApp({ piUid, username }: { piUid: string; username: string
   let tab = activeTab[0];
   let setTab = activeTab[1];
 
-  /* Store */
+  /* Store — persist store ID in localStorage for reload resilience */
   let storeState = useState<StoreData | null>(null);
   let createdStore = storeState[0];
   let setCreatedStore = storeState[1];
+
+  // On mount, try to restore store from localStorage
+  useEffect(function() {
+    if (createdStore) return;
+    try {
+      let saved = localStorage.getItem("ledgererp_store");
+      if (saved) {
+        let parsed = JSON.parse(saved);
+        if (parsed && parsed.id && parsed.piUid) {
+          setCreatedStore(parsed);
+        }
+      }
+    } catch {}
+  }, []);
+
+  // Persist store to localStorage whenever it changes
+  useEffect(function() {
+    if (createdStore) {
+      try { localStorage.setItem("ledgererp_store", JSON.stringify(createdStore)); } catch {}
+    }
+  }, [createdStore]);
 
   let storesRes = useQuery({
     queryKey: ["stores"],
@@ -230,7 +258,7 @@ function AuthenticatedApp({ piUid, username }: { piUid: string; username: string
     mutationFn: function(data: { piUid: string; name: string; description: string; avatar?: string }) {
       return fetch("/api/stores", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }).then(function(r) { return r.json(); });
     },
-    onSuccess: function(data) { setCreatedStore(data); qc.invalidateQueries({ queryKey: ["stores"] }); toast({ title: "تم إنشاء المتجر بنجاح" }); },
+    onSuccess: function(data) { setCreatedStore(data); qc.invalidateQueries({ queryKey: ["stores"] }); toast({ title: "تم إنشاء المتجر بنجاح" }); try { localStorage.setItem("ledgererp_store", JSON.stringify(data)); } catch {} },
     onError: function() { toast({ title: "فشل إنشاء المتجر", variant: "destructive" }); },
   });
 
@@ -238,7 +266,7 @@ function AuthenticatedApp({ piUid, username }: { piUid: string; username: string
     mutationFn: function(data: { id: string; name?: string; description?: string; avatar?: string }) {
       return fetch("/api/stores", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }).then(function(r) { return r.json(); });
     },
-    onSuccess: function() { qc.invalidateQueries({ queryKey: ["stores"] }); toast({ title: "تم تحديث المتجر" }); },
+    onSuccess: function(data) { setCreatedStore(function(prev) { return prev ? Object.assign({}, prev, data) : (data as StoreData); }); qc.invalidateQueries({ queryKey: ["stores"] }); toast({ title: "تم تحديث المتجر" }); },
     onError: function() { toast({ title: "فشل التحديث", variant: "destructive" }); },
   });
 
@@ -246,7 +274,7 @@ function AuthenticatedApp({ piUid, username }: { piUid: string; username: string
     mutationFn: function(id: string) {
       return fetch("/api/stores", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: id }) }).then(function(r) { return r.json(); });
     },
-    onSuccess: function() { setCreatedStore(null); qc.invalidateQueries({ queryKey: ["stores"] }); toast({ title: "تم حذف المتجر" }); },
+    onSuccess: function() { setCreatedStore(null); try { localStorage.removeItem("ledgererp_store"); } catch {} qc.invalidateQueries({ queryKey: ["stores"] }); toast({ title: "تم حذف المتجر" }); },
     onError: function() { toast({ title: "فشل الحذف", variant: "destructive" }); },
   });
 
@@ -528,14 +556,16 @@ function ProductsView({ products, storeId }: { products: ProductData[]; storeId:
 
   let handleAdd = function() {
     if (!formState[0].name.trim() || !formState[0].price) return;
+    let priceVal = parseFloat(formState[0].price);
+    if (isNaN(priceVal) || priceVal <= 0) { toast({ title: "السعر يجب أن يكون رقماً أكبر من صفر", variant: "destructive" }); return; }
     savingState[1](true);
     fetch("/api/products", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ storeId: storeId, name: formState[0].name.trim(), description: formState[0].description.trim(), price: parseFloat(formState[0].price) || 0 }),
+      body: JSON.stringify({ storeId: storeId, name: formState[0].name.trim(), description: formState[0].description.trim(), price: priceVal }),
     }).then(function(res) {
-      if (res.ok) { qc.invalidateQueries({ queryKey: ["products"] }); openState[1](false); formState[1]({ name: "", description: "", price: "" }); toast({ title: "تم إضافة المنتج" }); }
-      else toast({ title: "فشل الإضافة", variant: "destructive" });
-    }).finally(function() { savingState[1](false); });
+      if (res.ok) { qc.invalidateQueries({ queryKey: ["products", storeId] }); openState[1](false); formState[1]({ name: "", description: "", price: "" }); toast({ title: "تم إضافة المنتج" }); }
+      else { res.json().catch(function() { return {}; }).then(function(err) { toast({ title: "فشل الإضافة", description: err.error || "خطأ غير معروف", variant: "destructive" }); }); }
+    }).catch(function() { toast({ title: "خطأ في الاتصال", variant: "destructive" }); }).finally(function() { savingState[1](false); });
   };
 
   let handleEdit = function() {
@@ -546,18 +576,18 @@ function ProductsView({ products, storeId }: { products: ProductData[]; storeId:
       method: "PATCH", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id: ef.id, name: ef.name.trim(), description: ef.description.trim(), price: ef.price, isActive: ef.isActive }),
     }).then(function(res) {
-      if (res.ok) { qc.invalidateQueries({ queryKey: ["products"] }); editState[1](false); editFormState[1](null); toast({ title: "تم تحديث المنتج" }); }
-      else toast({ title: "فشل التحديث", variant: "destructive" });
-    }).finally(function() { savingState[1](false); });
+      if (res.ok) { qc.invalidateQueries({ queryKey: ["products", storeId] }); editState[1](false); editFormState[1](null); toast({ title: "تم تحديث المنتج" }); }
+      else { toast({ title: "فشل التحديث", variant: "destructive" }); }
+    }).catch(function() { toast({ title: "خطأ في الاتصال", variant: "destructive" }); }).finally(function() { savingState[1](false); });
   };
 
   let handleDelete = function(id: string) {
     fetch("/api/products", {
       method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: id }),
     }).then(function(res) {
-      if (res.ok) { qc.invalidateQueries({ queryKey: ["products"] }); toast({ title: "تم حذف المنتج" }); }
+      if (res.ok) { qc.invalidateQueries({ queryKey: ["products", storeId] }); toast({ title: "تم حذف المنتج" }); }
       else toast({ title: "فشل الحذف", variant: "destructive" });
-    });
+    }).catch(function() { toast({ title: "خطأ في الاتصال", variant: "destructive" }); });
   };
 
   let handleToggle = function(p: ProductData) {
@@ -565,8 +595,9 @@ function ProductsView({ products, storeId }: { products: ProductData[]; storeId:
       method: "PATCH", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id: p.id, isActive: !p.isActive }),
     }).then(function(res) {
-      if (res.ok) { qc.invalidateQueries({ queryKey: ["products"] }); toast({ title: p.isActive ? "تم تعطيل المنتج" : "تم تفعيل المنتج" }); }
-    });
+      if (res.ok) { qc.invalidateQueries({ queryKey: ["products", storeId] }); toast({ title: p.isActive ? "تم تعطيل المنتج" : "تم تفعيل المنتج" }); }
+      else toast({ title: "فشل التحديث", variant: "destructive" });
+    }).catch(function() { toast({ title: "خطأ في الاتصال", variant: "destructive" }); });
   };
 
   let filtered = searchState[0] ? products.filter(function(p) { return p.name.indexOf(searchState[0]) !== -1; }) : products;
@@ -678,8 +709,8 @@ function InvoicesView({ store, products }: { store: StoreData; products: Product
         openState[1](false); nameState[1](""); uidState[1](""); notesState[1]("");
         setItems([{ productName: "", quantity: 1, unitPrice: 0 }]);
         toast({ title: "تم إنشاء الفاتورة" });
-      } else toast({ title: "فشل إنشاء الفاتورة", variant: "destructive" });
-    }).finally(function() { savingState[1](false); });
+      } else { res.json().catch(function() { return {}; }).then(function(err) { toast({ title: "فشل إنشاء الفاتورة", description: err.error || "خطأ غير معروف", variant: "destructive" }); }); }
+    }).catch(function() { toast({ title: "خطأ في الاتصال", variant: "destructive" }); }).finally(function() { savingState[1](false); });
   };
 
   let invRes = useQuery({
@@ -953,6 +984,12 @@ function SettingsView({ store, onUpdate, onDelete, updating, deleting }: {
   let nameState = useState(store.name);
   let descState = useState(store.description);
   let savedState = useState(false);
+
+  // Sync local state when store data changes from server
+  useEffect(function() {
+    nameState[1](store.name);
+    descState[1](store.description);
+  }, [store.name, store.description]);
 
   let handleSave = function() {
     onUpdate({ id: store.id, name: nameState[0].trim(), description: descState[0].trim() });

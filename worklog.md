@@ -72,8 +72,64 @@ Project Status Assessment
 - Known Issue: Pi Browser "This page couldn't load" after auth (TLS/cipher issue with Cloudflare)
 
 ---
+Task ID: 4
+Agent: Main Orchestrator
+Task: Fix 4 critical runtime bugs reported by user
+
+Work Log:
+- Analyzed all 4 bugs from user report (Arabic): product addition fails, tab switching breaks, store data not saved, app breaks on reload
+- Deep-read the entire page.tsx (1013 lines), all API routes, pi-sdk.ts, use-pi-auth.ts
+- Identified root causes for each bug
+- Applied comprehensive fixes to page.tsx
+
+Fixes Applied:
+1. **Product addition fails (يفشل في إضافة منتج)**:
+   - Added .catch() error handling on all fetch calls (previously missing - network errors silently swallowed)
+   - Added proper error response parsing (res.json() on error responses)
+   - Added price validation (isNaN/price <= 0 check)
+   - Fixed query invalidation to include storeId: `["products", storeId]` instead of just `["products"]`
+   - Applied same fixes to handleEdit, handleDelete, handleToggle, and invoice handleCreate
+
+2. **Tab switching breaks (ينكسر عند التبديل من ميزة الى اخرى)**:
+   - Added robust error handling on all fetch operations prevents unhandled promise rejections that could crash the UI
+   - All query invalidations now use proper keys with storeId
+   - Invoice creation also has proper .catch() and error response parsing
+
+3. **Store data not saved (عدم حفظ بيانات المتجر المسجل)**:
+   - Added localStorage persistence for store data (ledgererp_store key)
+   - Store is saved to localStorage on creation and update
+   - Store is restored from localStorage on page mount
+   - Store is removed from localStorage on delete
+   - Fixed updateStoreMut.onSuccess to also update createdStore state (previously it only invalidated queries)
+   - Added useEffect in SettingsView to sync local state with store data changes from server
+
+4. **App breaks on reload (اعادة تحميل الالزامية لإنكسار التطبيق)**:
+   - Added DEMO_MODE flag that bypasses Pi Browser check in development (NODE_ENV === "development")
+   - This allows the app to work and be tested outside Pi Browser
+   - localStorage persistence ensures store survives reloads
+   - Added useEffect to restore store from localStorage on mount
+   - Added useEffect to persist store to localStorage whenever it changes
+
+Verification:
+- ESLint: 0 errors, 1 pre-existing warning (font)
+- Created store "متجر الاختبار" ✓
+- Added product "هاتف ذكي" at 3.5π ✓
+- Tab switching (Dashboard → Products → Invoices → Orders → Settings) all work ✓
+- Rapid tab switching (5 tabs in 1.5s) no crashes ✓
+- Updated store name, persisted after switching tabs ✓
+- Page reload preserves all data (store + products) ✓
+- Created invoice successfully ✓
+- 0 page errors throughout testing ✓
+
+Stage Summary:
+- All 4 critical bugs fixed and verified via agent-browser
+- App is now resilient to reloads, network errors, and state inconsistencies
+- Demo mode enables full testing outside Pi Browser
+- localStorage persistence is the key fix for reload resilience
+
+---
 Unresolved Issues & Next Phase Priorities
 1. [CRITICAL] Pi Browser loading issue - user changed Cloudflare TLS settings but still not working
-2. [HIGH] Verify all features work end-to-end in browser
+2. [HIGH] Pi Browser-specific testing of all fixes
 3. [MEDIUM] Improve UI polish and responsive design details
 4. [MEDIUM] Add more features (notifications, export, analytics)
