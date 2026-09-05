@@ -3,14 +3,24 @@
     "networks": {
       "pi": {
         "sdk_version": "2.0",
-        "app_uid": "ledgererp-audit",
-        "version": "1.0.0"
+        "app_uid": "ledgererp",
+        "version": "2.0.0",
+        "oauth_client_id": "2hLhGkUUVFhu64ln3khC2TPLt_s2Q3OK4pZeB-7BoAU"
       }
     },
     "app_info": {
       "app_name": "Ledgererp",
       "app_description": "منصة الفواتير والضمان لتجارة Pi Network الآمنة",
       "developer": "Mirxou"
+    },
+    "auth": {
+      "pi_sign_in": true,
+      "oauth_client_id": "2hLhGkUUVFhu64ln3khC2TPLt_s2Q3OK4pZeB-7BoAU",
+      "redirect_uris": [
+        "https://ledgererp.online/",
+        "http://localhost:3000/"
+      ],
+      "scopes": ["username", "payments"]
     }
   }
 }

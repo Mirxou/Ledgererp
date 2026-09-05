@@ -128,8 +128,34 @@ Stage Summary:
 - localStorage persistence is the key fix for reload resilience
 
 ---
+Task ID: 5
+Agent: Main Orchestrator
+Task: Configure Pi OAuth Client ID and Redirect URIs
+
+Work Log:
+- Analyzed Pi Developer Portal screenshot showing OAuth config
+- Extracted OAuth Client ID: 2hLhGkUUVFhu64ln3khC2TPLt_s2Q3OK4pZeB-7BoAU
+- Identified missing Redirect URIs as critical issue
+- Updated pi-sdk.ts with PI_CLIENT_ID, REDIRECT_URIS, APP_DOMAIN constants
+- Enhanced detectSandbox() to handle localhost properly
+- Improved authenticatePi() with better error logging
+- Updated use-pi-auth.ts to pass clientId during backend verification
+- Enhanced auth/verify route with GET endpoint for config debugging
+- Updated pi_app.json with OAuth metadata
+- Updated .env with PI_CLIENT_ID and placeholder PI_API_KEY, PI_WALLET_SEED
+
+Stage Summary:
+- OAuth Client ID configured in all relevant files
+- Redirect URIs defined: https://ledgererp.online/ and http://localhost:3000/
+- Auth verify endpoint returns OAuth config at GET /api/auth/verify
+- 0 lint errors, app running correctly
+- ⚠️ User still needs to configure Redirect URIs in Pi Developer Portal manually
+
+---
 Unresolved Issues & Next Phase Priorities
-1. [CRITICAL] Pi Browser loading issue - user changed Cloudflare TLS settings but still not working
-2. [HIGH] Pi Browser-specific testing of all fixes
-3. [MEDIUM] Improve UI polish and responsive design details
-4. [MEDIUM] Add more features (notifications, export, analytics)
+1. [CRITICAL] User must add Redirect URIs in Pi Developer Portal (https://ledgererp.online/ and http://localhost:3000/)
+2. [CRITICAL] PI_API_KEY must be set in .env for server-side Pi API calls (payment approval, A2U)
+3. [CRITICAL] PI_WALLET_SEED must be set for A2U escrow release payments
+4. [HIGH] Pi Browser-specific testing of all fixes
+5. [MEDIUM] Improve UI polish and responsive design details
+6. [MEDIUM] Add more features (notifications, export, analytics)

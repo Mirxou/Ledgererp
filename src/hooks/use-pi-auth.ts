@@ -5,6 +5,7 @@ import {
   isPiBrowser,
   initPi,
   authenticatePi,
+  PI_CLIENT_ID,
   type PiUser,
 } from "@/lib/pi-sdk";
 
@@ -84,7 +85,7 @@ export function usePiAuth(): UsePiAuthReturn {
         const res = await fetch("/api/auth/verify", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ accessToken: authedUser.accessToken }),
+          body: JSON.stringify({ accessToken: authedUser.accessToken, clientId: PI_CLIENT_ID }),
         });
 
         if (res.ok) {

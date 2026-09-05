@@ -56,14 +56,42 @@ declare global {
 }
 
 /* ─── Config ──────────────────────────────────────────────── */
+
+/**
+ * OAuth Client ID from Pi Developer Portal.
+ * This is configured in: Pi Network → Develop → Ledger ERP → Pi Sign-In
+ * IMPORTANT: Also configure Redirect URIs in the developer portal:
+ *   - Production: https://ledgererp.online/
+ *   - Development: http://localhost:3000/
+ */
+export const PI_CLIENT_ID = "2hLhGkUUVFhu64ln3khC2TPLt_s2Q3OK4pZeB-7BoAU";
+
+/**
+ * Redirect URIs for OAuth (must match Pi Developer Portal configuration)
+ */
+export const REDIRECT_URIS = {
+  production: "https://ledgererp.online/",
+  development: "http://localhost:3000/",
+} as const;
+
+/**
+ * App domain for sandbox detection and redirect URI
+ */
+export const APP_DOMAIN = "ledgererp.online";
+
 // Auto-detect sandbox: if hostname includes 'sandbox' or we're in Pi Dev Portal
 function detectSandbox(): boolean {
   if (typeof window === "undefined") return true;
   // Pi Browser Developer Portal preview = sandbox
   // Production domain = mainnet
   const host = window.location.hostname;
-  // If not on our production domain, assume sandbox for safety
-  if (host === "ledgererp.online") return false;
+  // If on our production domain, use mainnet (sandbox=false)
+  if (host === APP_DOMAIN) return false;
+  // If on localhost, check for explicit env var
+  if (host === "localhost" || host === "127.0.0.1") {
+    return process.env.NODE_ENV !== "production";
+  }
+  // Otherwise assume sandbox for safety
   return true;
 }
 
@@ -123,6 +151,12 @@ const DEFAULT_ON_INCOMPLETE = (payment: unknown) => {
 /**
  * Authenticate the current Pi user.
  * Automatically calls Pi.init() first if not already done.
+ * Uses OAuth implicit flow with the configured Client ID.
+ *
+ * Prerequisites (in Pi Developer Portal):
+ * 1. Pi Sign-In must be Enabled
+ * 2. Redirect URIs must include your app URL
+ * 3. OAuth Client ID must match PI_CLIENT_ID
  */
 export async function authenticatePi(
   onIncompletePaymentFound?: (payment: unknown) => void,
@@ -140,12 +174,19 @@ export async function authenticatePi(
     initPi();
   }
 
-  const auth = await pi.authenticate(
-    [...DEFAULT_SCOPES],
-    onIncompletePaymentFound ?? DEFAULT_ON_INCOMPLETE,
-  );
+  try {
+    const auth = await pi.authenticate(
+      [...DEFAULT_SCOPES],
+      onIncompletePaymentFound ?? DEFAULT_ON_INCOMPLETE,
+    );
 
-  return auth;
+    console.log("[Pi SDK] Authenticated user:", auth.username, "(uid:", auth.uid + ")");
+    return auth;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("[Pi SDK] authenticate() failed:", msg);
+    throw err;
+  }
 }
 
 /* ─── Payments ────────────────────────────────────────────── */
