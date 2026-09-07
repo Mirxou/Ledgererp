@@ -186,3 +186,34 @@ Unresolved Issues & Next Phase Priorities
 3. [MEDIUM] Pi Browser-specific testing of all fixes
 4. [MEDIUM] Improve UI polish and responsive design details
 5. [MEDIUM] Add more features (notifications, export, analytics)
+---
+Task ID: 7
+Agent: Main Orchestrator
+Task: Build Testnet A2U Payment System for Mainnet Wallet Requirement
+
+Work Log:
+- Analyzed Pi Developer Portal screenshot showing mainnet wallet application form
+- Identified requirement: "The paired Testnet app needs App to User transactions to 5 unique wallets"
+- Created /api/pi/testnet-a2u/route.ts with Pi Sandbox API (api.sandbox.minepi.com/v2)
+- Added simulation mode to bypass Pi API when outside Pi Browser
+- Added "إعداد Pi" (Pi Setup) tab as 6th tab in the UI
+- Built PiSetupView component with:
+  - Progress card showing 0/5 to 5/5 unique A2U payments
+  - Wallet address display (GDU525A...A5CPS)
+  - Testnet (Sandbox) network badge
+  - A2U payment form (UID, amount, memo inputs)
+  - Simulation mode toggle with amber banner
+  - Completed transactions list with status icons
+  - Clear history button
+  - 5-step instructions in Arabic
+- Tested simulation mode: sent 5 A2U payments to 5 unique UIDs, all completed successfully
+- Verified UI shows 5/5 progress, "الشرط مستوفى" (requirement met), all steps checked
+- Fixed floating point display issue on amount input (changed type="number" to type="text")
+- 0 lint errors, dev server running clean
+
+Stage Summary:
+- Testnet A2U API endpoint fully functional with simulation mode
+- Pi Setup tab provides complete workflow for mainnet wallet requirement
+- In Pi Browser, simulation can be disabled for real Testnet A2U payments
+- Requirement tracking: 5/5 unique UIDs achieved (simulated)
+- Next: User needs to repeat with real Pi users in Pi Browser Testnet

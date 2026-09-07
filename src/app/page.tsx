@@ -10,6 +10,7 @@ import {
   Receipt, BarChart3, Loader2, Shield, ArrowRightLeft,
   ChevronDown, ChevronUp, Wallet, Pencil, Trash2,
   FileCheck, Ban, CircleDot, Settings, Copy, Eye, Search, Send, LogOut,
+  Zap, Info, CheckCircle, ExternalLink,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -29,6 +30,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Progress } from "@/components/ui/progress";
 
 /* ═══ Types ═══ */
 interface StoreData { id: string; piUid: string; name: string; description: string; avatar: string; isVerified: boolean; _count?: { products: number; invoices: number } }
@@ -394,8 +396,8 @@ function AuthenticatedApp({ piUid, username }: { piUid: string; username: string
           <StoreSetup onCreate={function(n, d, a) { createStoreMut.mutate({ piUid: piUid, name: n, description: d, avatar: a }); }} loading={createStoreMut.isPending} />
         ) : (
           <Tabs value={tab} onValueChange={setTab} className="space-y-5">
-            <TabsList className="grid grid-cols-5 w-full h-auto p-1 bg-muted/50">
-              {[["dashboard", BarChart3, "الرئيسية"], ["products", Package, "المنتجات"], ["invoices", FileText, "الفواتير"], ["orders", ShoppingCart, "الطلبات"], ["settings", Settings, "الإعدادات"]].map(function(t) {
+            <TabsList className="grid grid-cols-6 w-full h-auto p-1 bg-muted/50">
+              {[["dashboard", BarChart3, "الرئيسية"], ["products", Package, "المنتجات"], ["invoices", FileText, "الفواتير"], ["orders", ShoppingCart, "الطلبات"], ["settings", Settings, "الإعدادات"], ["pisetup", Zap, "إعداد Pi"]].map(function(t) {
               let Ic = t[1];
                 return (
                   <TabsTrigger key={t[0] as string} value={t[0] as string} className="text-[11px] py-2 data-[state=active]:bg-emerald-600 data-[state=active]:text-white gap-1">
@@ -419,6 +421,9 @@ function AuthenticatedApp({ piUid, username }: { piUid: string; username: string
             </TabsContent>
             <TabsContent value="settings">
               <SettingsView store={myStore} onUpdate={function(d) { updateStoreMut.mutate(d); }} onDelete={function() { deleteStoreMut.mutate(myStore.id); }} updating={updateStoreMut.isPending} deleting={deleteStoreMut.isPending} />
+            </TabsContent>
+            <TabsContent value="pisetup">
+              <PiSetupView />
             </TabsContent>
           </Tabs>
         )}
@@ -1042,6 +1047,395 @@ function SettingsView({ store, onUpdate, onDelete, updating, deleting }: {
           </AlertDialogTrigger>
           <AlertDialogContent><AlertDialogHeader><AlertDialogTitle className="text-sm">هل أنت متأكد تماماً؟</AlertDialogTitle><AlertDialogDescription className="text-xs">سيتم حذف &quot;{store.name}&quot; وجميع بياناته نهائياً.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel className="text-xs">إلغاء</AlertDialogCancel><AlertDialogAction onClick={onDelete} className="text-xs bg-red-600 hover:bg-red-700">نعم، احذف</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
           </AlertDialog>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+/* ═══ Pi Setup ═══ */
+interface TestPaymentRecord {
+  uid: string;
+  amount: string;
+  memo: string;
+  status: "pending" | "completed" | "failed";
+  timestamp: string;
+  simulated?: boolean;
+  error?: string;
+}
+
+function PiSetupView() {
+  let toast = useToast().toast;
+  let uidState = useState("");
+  let amountState = useState("0.01");
+  let memoState = useState("Testnet A2U test payment");
+  let sendingState = useState(false);
+  let simModeState = useState(true); // Default: simulation mode ON (for dev/testing)
+  let paymentsState = useState<TestPaymentRecord[]>([]);
+  let walletCheckState = useState<{ checked: boolean; configured: boolean; walletAddress: string; message: string; hasSimulated?: boolean }>({
+    checked: false, configured: false, walletAddress: "", message: "", hasSimulated: false,
+  });
+
+  // Count unique UIDs from completed payments
+  let completedPayments = paymentsState[0].filter(function(p) { return p.status === "completed"; });
+  let uniqueUids = new Set(completedPayments.map(function(p) { return p.uid; }));
+  let uniqueCount = uniqueUids.size;
+  let progressPercent = Math.min((uniqueCount / 5) * 100, 100);
+  let requirementMet = uniqueCount >= 5;
+
+  // Check testnet wallet status on mount
+  useEffect(function() {
+    fetch("/api/pi/testnet-a2u", { method: "GET" })
+      .then(function(res) { return res.json(); })
+      .then(function(data) {
+        walletCheckState[1]({ checked: true, configured: data.configured, walletAddress: data.walletAddress || "", message: data.message || "", hasSimulated: data.hasSimulated || false });
+        // Load any existing payments from server
+        if (data.recentPayments && data.recentPayments.length > 0) {
+          let serverPayments: TestPaymentRecord[] = data.recentPayments.map(function(p: Record<string, unknown>) {
+            return {
+              uid: String(p.uid),
+              amount: String(p.amount),
+              memo: String(p.memo),
+              status: p.status as "pending" | "completed" | "failed",
+              timestamp: String(p.createdAt),
+              error: p.error ? String(p.error) : undefined,
+            };
+          });
+          // Merge with local state, avoiding duplicates
+          let localUids = new Set(paymentsState[0].map(function(lp) { return lp.uid + lp.timestamp; }));
+          let newFromServer = serverPayments.filter(function(sp) { return !localUids.has(sp.uid + sp.timestamp); });
+          paymentsState[1](function(prev) { return newFromServer.concat(prev); });
+        }
+      })
+      .catch(function() {
+        walletCheckState[1]({ checked: true, configured: false, walletAddress: "", message: "فشل الاتصال بالخادم" });
+      });
+  }, []);
+
+  let handleSendPayment = function() {
+    let uid = uidState[0].trim();
+    let amount = amountState[0].trim();
+    let memo = memoState[0].trim();
+
+    if (!uid) {
+      toast({ title: "يرجى إدخال معرّف Pi للمستلم", variant: "destructive" });
+      return;
+    }
+    if (!amount || isNaN(parseFloat(amount)) || parseFloat(amount) <= 0) {
+      toast({ title: "يرجى إدخال مبلغ صحيح", variant: "destructive" });
+      return;
+    }
+
+    sendingState[1](true);
+
+    // Add pending entry
+    let pendingRecord: TestPaymentRecord = {
+      uid: uid,
+      amount: amount,
+      memo: memo,
+      status: "pending",
+      timestamp: new Date().toISOString(),
+    };
+    paymentsState[1](function(prev) { return [pendingRecord].concat(prev); });
+
+    fetch("/api/pi/testnet-a2u", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ amount: amount, uid: uid, memo: memo, simulate: simModeState[0] }),
+    })
+      .then(function(res) {
+        return res.json().then(function(data) {
+          return { ok: res.ok, data: data };
+        });
+      })
+      .then(function(result) {
+        sendingState[1](false);
+        if (result.ok && result.data.success) {
+          // Update pending to completed
+          paymentsState[1](function(prev) {
+            return prev.map(function(p) {
+              if (p.uid === uid && p.timestamp === pendingRecord.timestamp && p.status === "pending") {
+                return Object.assign({}, p, { status: "completed" as const });
+              }
+              return p;
+            });
+          });
+          toast({
+            title: "تم إرسال الدفعة بنجاح ✅",
+            description: uniqueCount + 1 >= 5
+              ? "تهانينا! تم استيفاء شرط الـ 5 محافظ المختلفة 🎉"
+              : "تم الدفع لـ " + (uniqueCount + 1) + " من 5 محافظ مطلوبة",
+          });
+          uidState[1]("");
+        } else {
+          // Update pending to failed
+          paymentsState[1](function(prev) {
+            return prev.map(function(p) {
+              if (p.uid === uid && p.timestamp === pendingRecord.timestamp && p.status === "pending") {
+                return Object.assign({}, p, { status: "failed" as const, error: result.data.error || result.data.details || "خطأ غير معروف" });
+              }
+              return p;
+            });
+          });
+          toast({ title: "فشل إرسال الدفعة", description: result.data.error || "خطأ غير معروف", variant: "destructive" });
+        }
+      })
+      .catch(function() {
+        sendingState[1](false);
+        paymentsState[1](function(prev) {
+          return prev.map(function(p) {
+            if (p.uid === uid && p.timestamp === pendingRecord.timestamp && p.status === "pending") {
+              return Object.assign({}, p, { status: "failed" as const, error: "خطأ في الاتصال" });
+            }
+            return p;
+          });
+        });
+        toast({ title: "خطأ في الاتصال", variant: "destructive" });
+      });
+  };
+
+  return (
+    <div className="space-y-4 max-w-2xl mx-auto">
+      <div className="flex items-center justify-between">
+        <h2 className="font-bold text-base flex items-center gap-2">
+          <Zap className="h-4 w-4 text-amber-500" />
+          إعداد Pi للشبكة الرئيسية
+        </h2>
+        {requirementMet && (
+          <Badge className="bg-emerald-500/15 text-emerald-600 border-emerald-500/30 text-xs">
+            <CheckCircle2 className="h-3 w-3 ml-1" />
+            الشرط مستوفى
+          </Badge>
+        )}
+      </div>
+
+      {/* Progress Card */}
+      <Card className="border-0 shadow-sm">
+        <CardHeader className="pb-3 pt-4 px-4">
+          <CardTitle className="text-xs font-bold flex items-center gap-2">
+            <Wallet className="h-3.5 w-3.5 text-emerald-500" />
+            تقدّم شرط محفظة الشبكة الرئيسية
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="px-4 pb-4 space-y-3">
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-muted-foreground">المدفوعات A2U لمحافظ مختلفة</span>
+              <span className={"font-bold " + (requirementMet ? "text-emerald-600" : "text-amber-600")}>
+                {uniqueCount} / 5
+              </span>
+            </div>
+            <Progress value={progressPercent} className="h-3" />
+          </div>
+
+          <div className="bg-muted/50 rounded-lg p-2.5 space-y-1.5 text-xs">
+            <div className="flex items-center justify-between">
+              <span className="text-muted-foreground">عنوان المحفظة</span>
+              <span className="font-mono text-[10px] text-foreground max-w-[60%] truncate" dir="ltr">
+                GDU525A3XNGZKTTHSKVAEFFYONRKITRFQZUTPZANO5V27N4TSL3A5CPS
+              </span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-muted-foreground">الشبكة</span>
+              <Badge variant="outline" className="text-[10px] bg-amber-500/10 text-amber-600 border-amber-500/20">
+                Pi Testnet (Sandbox)
+              </Badge>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-muted-foreground">الحالة</span>
+              {requirementMet ? (
+                <Badge className="bg-emerald-500/15 text-emerald-600 border-emerald-500/30 text-[10px]">مستوفى ✓</Badge>
+              ) : (
+                <Badge className="bg-amber-500/15 text-amber-600 border-amber-500/30 text-[10px]">غير مستوفى</Badge>
+              )}
+            </div>
+          </div>
+
+          <p className="text-[11px] text-muted-foreground leading-relaxed">
+            للتقديم على محفظة الشبكة الرئيسية في بوابة مطوري Pi، يجب إرسال مدفوعات A2U
+            (من التطبيق إلى المستخدم) على شبكة الاختبار إلى <span className="font-bold text-foreground">5 محافظ (UIDs) مختلفة</span> على الأقل.
+          </p>
+        </CardContent>
+      </Card>
+
+      {/* Simulation Mode Banner */}
+      {simModeState[0] && (
+        <div className="flex items-center gap-2.5 p-3 rounded-xl bg-amber-500/5 border border-amber-500/15">
+          <Zap className="h-4 w-4 text-amber-500 shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-medium text-amber-700 dark:text-amber-400">وضع المحاكاة نشط</p>
+            <p className="text-[10px] text-amber-600/70 dark:text-amber-400/60">يتم تسجيل المدفوعات بدون اتصال فعلي بـ Pi API. أوقف المحاكاة عند التشغيل في متصفح Pi.</p>
+          </div>
+          <Button variant="outline" size="sm" className="text-[10px] shrink-0 h-7 border-amber-500/30 text-amber-600" onClick={function() { simModeState[1](false); }}>
+            إيقاف المحاكاة
+          </Button>
+        </div>
+      )}
+
+      {/* A2U Payment Form */}
+      <Card className="border-0 shadow-sm">
+        <CardHeader className="pb-3 pt-4 px-4">
+          <CardTitle className="text-xs font-bold flex items-center gap-2">
+            <Send className="h-3.5 w-3.5 text-emerald-500" />
+            إرسال دفعة اختبار A2U
+            {!simModeState[0] && (
+              <Button variant="ghost" size="sm" className="text-[10px] ml-auto h-6 text-amber-600 hover:text-amber-700" onClick={function() { simModeState[1](true); }}>
+                <Zap className="h-3 w-3 ml-1" />تفعيل المحاكاة
+              </Button>
+            )}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="px-4 pb-4 space-y-3">
+          <div className="space-y-1.5">
+            <Label className="text-xs">معرّف Pi للمستلم (UID)</Label>
+            <Input
+              value={uidState[0]}
+              onChange={function(e) { uidState[1](e.target.value); }}
+              placeholder="مثال: user_alphanumeric_uid"
+              className="text-sm font-mono"
+              dir="ltr"
+            />
+            <p className="text-[10px] text-muted-foreground">أدخل معرّف Pi فريد لكل دفعة — يجب أن يكونوا 5 معرّفات مختلفة</p>
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs">المبلغ (Pi)</Label>
+            <Input
+              type="text"
+              inputMode="decimal"
+              value={amountState[0]}
+              onChange={function(e) { amountState[1](e.target.value); }}
+              placeholder="0.01"
+              className="text-sm"
+              dir="ltr"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs">الملاحظة (Memo)</Label>
+            <Input
+              value={memoState[0]}
+              onChange={function(e) { memoState[1](e.target.value); }}
+              className="text-sm"
+            />
+          </div>
+          <Button
+            onClick={handleSendPayment}
+            disabled={!uidState[0].trim() || sendingState[0]}
+            className="w-full bg-emerald-600 hover:bg-emerald-700 text-white text-sm h-10"
+          >
+            {sendingState[0] ? (
+              <Loader2 className="h-4 w-4 animate-spin ml-2" />
+            ) : (
+              <Send className="h-4 w-4 ml-2" />
+            )}
+            إرسال دفعة اختبار
+          </Button>
+        </CardContent>
+      </Card>
+
+      {/* Completed Transactions */}
+      <Card className="border-0 shadow-sm">
+        <CardHeader className="pb-3 pt-4 px-4">
+          <CardTitle className="text-xs font-bold flex items-center gap-2">
+            <FileCheck className="h-3.5 w-3.5 text-emerald-500" />
+            المدفوعات المنفّذة
+            <Badge variant="outline" className="text-[10px]">
+              {completedPayments.length} دفعة — {uniqueCount} UID فريد
+            </Badge>
+            {paymentsState[0].length > 0 && (
+              <Button variant="ghost" size="sm" className="text-[10px] ml-auto h-6 text-red-400 hover:text-red-500" onClick={function() {
+                fetch("/api/pi/testnet-a2u", { method: "DELETE" }).then(function() {
+                  paymentsState[1]([]);
+                  toast({ title: "تم مسح السجل" });
+                }).catch(function() {});
+              }}>
+                <Trash2 className="h-3 w-3 ml-1" />مسح
+              </Button>
+            )}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="px-4 pb-4">
+          {paymentsState[0].length === 0 ? (
+            <div className="py-8 text-center text-muted-foreground">
+              <Send className="h-8 w-8 mx-auto mb-2 opacity-20" />
+              <p className="text-xs">لم يتم إرسال أي مدفوعات بعد</p>
+            </div>
+          ) : (
+            <div className="space-y-2 max-h-64 overflow-y-auto">
+              {paymentsState[0].map(function(p, idx) {
+                return (
+                  <div key={idx} className="flex items-center justify-between py-1.5 border-b border-border/30 last:border-0">
+                    <div className="flex items-center gap-2 min-w-0">
+                      {p.status === "completed" ? (
+                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+                      ) : p.status === "pending" ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin text-amber-500 shrink-0" />
+                      ) : (
+                        <XCircle className="h-3.5 w-3.5 text-red-400 shrink-0" />
+                      )}
+                      <span className="text-[11px] font-mono truncate" dir="ltr">{p.uid}</span>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="text-[11px] font-semibold text-emerald-600">{p.amount}π</span>
+                      {p.status === "completed" ? (
+                        <Badge className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20 text-[9px]">مكتمل</Badge>
+                      ) : p.status === "pending" ? (
+                        <Badge className="bg-amber-500/10 text-amber-600 border-amber-500/20 text-[9px]">في الانتظار</Badge>
+                      ) : (
+                        <Badge className="bg-red-500/10 text-red-600 border-red-500/20 text-[9px]">فشل</Badge>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          {uniqueCount > 0 && (
+            <div className="mt-3 pt-2 border-t text-[10px] text-muted-foreground">
+              <span className="font-medium">المعرّفات الفريدة:</span>{" "}
+              {Array.from(uniqueUids).map(function(u, i) {
+                return (
+                  <span key={u} className="font-mono">
+                    {i > 0 ? "، " : ""}{u.substring(0, 12)}...
+                  </span>
+                );
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Instructions Card */}
+      <Card className="border-0 shadow-sm border-t-2 border-t-amber-500/20">
+        <CardHeader className="pb-3 pt-4 px-4">
+          <CardTitle className="text-xs font-bold flex items-center gap-2">
+            <Info className="h-3.5 w-3.5 text-amber-500" />
+            خطوات استيفاء الشرط
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="px-4 pb-4 space-y-2.5">
+          {[
+            { step: 1, text: "افتح التطبيق في متصفح Pi على شبكة الاختبار (Testnet)" },
+            { step: 2, text: "اجعل 5 مستخدمين Pi مختلفين يزورون التطبيق" },
+            { step: 3, text: "استخدم النموذج أعلاه لإرسال مدفوعات A2U اختبارية إلى معرّف كل مستخدم" },
+            { step: 4, text: "بعد الدفع لـ 5 معرّفات فريدة، عُد إلى بوابة مطوري Pi" },
+            { step: 5, text: "قدّم طلب محفظة الشبكة الرئيسية (Mainnet Wallet)" },
+          ].map(function(s) {
+            return (
+              <div key={s.step} className="flex items-start gap-2.5">
+                <div className={"w-5 h-5 rounded-full flex items-center justify-center shrink-0 text-[10px] font-bold " +
+                  (s.step <= (requirementMet ? 4 : uniqueCount + 2) ? "bg-emerald-500/15 text-emerald-600" : "bg-muted text-muted-foreground")}>
+                  {s.step <= (requirementMet ? 4 : uniqueCount + 2) ? "✓" : s.step}
+                </div>
+                <p className="text-xs text-muted-foreground leading-relaxed">{s.text}</p>
+              </div>
+            );
+          })}
+          <div className="mt-2 p-2 bg-amber-500/5 rounded-lg border border-amber-500/10">
+            <p className="text-[11px] text-amber-700 dark:text-amber-400 leading-relaxed">
+              💡 <span className="font-medium">ملاحظة:</span> المدفوعات تتم على شبكة الاختبار (Sandbox) وليست الشبكة الرئيسية.
+              لا يتم خصم Pi حقيقي. استخدم API Key نفسه من ملف .env.
+            </p>
+          </div>
         </CardContent>
       </Card>
     </div>
