@@ -1404,6 +1404,93 @@ function PiSetupView() {
         </CardContent>
       </Card>
 
+      {/* Form Completion Guide — for Pi Developer Portal */}
+      <Card className="border-0 shadow-sm border-t-2 border-t-emerald-500/20">
+        <CardHeader className="pb-3 pt-4 px-4">
+          <CardTitle className="text-xs font-bold flex items-center gap-2">
+            <FileCheck className="h-3.5 w-3.5 text-emerald-500" />
+            دليل تعبئة نموذج بوابة المطورين
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="px-4 pb-4 space-y-3">
+          <p className="text-[11px] text-muted-foreground leading-relaxed">
+            انسخ المحتوى التالي والصقه في نموذج التقديم على محفظة الشبكة الرئيسية في بوابة مطوري Pi.
+          </p>
+
+          {/* Reason for Applying */}
+          <div className="space-y-1.5">
+            <Label className="text-[10px] font-semibold text-emerald-600">① سبب التقديم (Reason for applying)</Label>
+            <div className="bg-muted/50 rounded-lg p-2.5 border border-emerald-500/10">
+              <p className="text-[11px] text-foreground leading-relaxed" dir="ltr">
+                Ledgererp is an invoice and escrow management platform on Pi Network. It enables merchants to create invoices, receive payments via Pi escrow (U2A), and release funds to sellers after delivery confirmation (A2U). A mainnet wallet is essential to process real A2U payments for escrow release, allowing sellers to receive Pi for completed transactions on the mainnet.
+              </p>
+            </div>
+            <Button variant="outline" size="sm" className="text-[10px] h-6" onClick={function() {
+              copyText("Ledgererp is an invoice and escrow management platform on Pi Network. It enables merchants to create invoices, receive payments via Pi escrow (U2A), and release funds to sellers after delivery confirmation (A2U). A mainnet wallet is essential to process real A2U payments for escrow release, allowing sellers to receive Pi for completed transactions on the mainnet.", toast, "تم نسخ سبب التقديم");
+            }}>
+              <Copy className="h-3 w-3 ml-1" />نسخ النص
+            </Button>
+          </div>
+
+          {/* Privacy Policy URL */}
+          <div className="space-y-1.5">
+            <Label className="text-[10px] font-semibold text-emerald-600">② رابط سياسة الخصوصية (Privacy Policy URL)</Label>
+            <div className="flex items-center gap-2">
+              <code className="flex-1 text-[11px] font-mono bg-muted/50 rounded-lg px-2.5 py-1.5 border border-emerald-500/10 truncate" dir="ltr">
+                https://ledgererp.online/privacy-policy.html
+              </code>
+              <Button variant="outline" size="sm" className="text-[10px] h-7 shrink-0" onClick={function() {
+                copyText("https://ledgererp.online/privacy-policy.html", toast, "تم نسخ رابط سياسة الخصوصية");
+              }}>
+                <Copy className="h-3 w-3" />
+              </Button>
+            </div>
+            <a href="/privacy-policy.html" target="_blank" className="inline-flex items-center gap-1 text-[10px] text-emerald-600 hover:underline">
+              <ExternalLink className="h-3 w-3" />معاينة الصفحة
+            </a>
+          </div>
+
+          {/* Terms of Service URL */}
+          <div className="space-y-1.5">
+            <Label className="text-[10px] font-semibold text-emerald-600">③ رابط شروط الخدمة (Terms of Service URL) — اختياري</Label>
+            <div className="flex items-center gap-2">
+              <code className="flex-1 text-[11px] font-mono bg-muted/50 rounded-lg px-2.5 py-1.5 border border-emerald-500/10 truncate" dir="ltr">
+                https://ledgererp.online/terms-of-service.html
+              </code>
+              <Button variant="outline" size="sm" className="text-[10px] h-7 shrink-0" onClick={function() {
+                copyText("https://ledgererp.online/terms-of-service.html", toast, "تم نسخ رابط شروط الخدمة");
+              }}>
+                <Copy className="h-3 w-3" />
+              </Button>
+            </div>
+            <a href="/terms-of-service.html" target="_blank" className="inline-flex items-center gap-1 text-[10px] text-emerald-600 hover:underline">
+              <ExternalLink className="h-3 w-3" />معاينة الصفحة
+            </a>
+          </div>
+
+          {/* Wallet Address */}
+          <div className="space-y-1.5">
+            <Label className="text-[10px] font-semibold text-emerald-600">④ المحفظة (Wallet to use) — مملوء تلقائياً</Label>
+            <div className="flex items-center gap-2">
+              <code className="flex-1 text-[11px] font-mono bg-muted/50 rounded-lg px-2.5 py-1.5 border border-emerald-500/10 truncate" dir="ltr">
+                GDU525A3XNGZKTTHSKVAEFFYONRKITRFQZUTPZANO5V27N4TSL3A5CPS
+              </code>
+              <Button variant="outline" size="sm" className="text-[10px] h-7 shrink-0" onClick={function() {
+                copyText("GDU525A3XNGZKTTHSKVAEFFYONRKITRFQZUTPZANO5V27N4TSL3A5CPS", toast, "تم نسخ عنوان المحفظة");
+              }}>
+                <Copy className="h-3 w-3" />
+              </Button>
+            </div>
+          </div>
+
+          <div className="mt-2 p-2 bg-emerald-500/5 rounded-lg border border-emerald-500/10">
+            <p className="text-[11px] text-emerald-700 dark:text-emerald-400 leading-relaxed">
+              ✅ بعد تعبئة جميع الحقول وإكمال شرط الـ 5 محافظ، اضغط <span className="font-bold">Submit</span> في بوابة المطورين.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Instructions Card */}
       <Card className="border-0 shadow-sm border-t-2 border-t-amber-500/20">
         <CardHeader className="pb-3 pt-4 px-4">

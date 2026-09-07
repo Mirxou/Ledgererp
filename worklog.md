@@ -217,3 +217,32 @@ Stage Summary:
 - In Pi Browser, simulation can be disabled for real Testnet A2U payments
 - Requirement tracking: 5/5 unique UIDs achieved (simulated)
 - Next: User needs to repeat with real Pi users in Pi Browser Testnet
+---
+Task ID: 8
+Agent: Main Orchestrator
+Task: Complete Mainnet Wallet Application Form Requirements
+
+Work Log:
+- Analyzed Pi Developer Portal screenshot showing incomplete application form
+- Identified 3 missing fields: Reason for applying, Privacy Policy URL, Terms of Service URL
+- Created /public/privacy-policy.html - comprehensive Arabic RTL privacy policy page
+- Created /public/terms-of-service.html - comprehensive Arabic RTL terms of service page
+- Both pages accessible at https://ledgererp.online/privacy-policy.html and /terms-of-service.html
+- Added "Form Completion Guide" card to Pi Setup tab with:
+  - ① Reason for applying (ready-to-paste English text, 170 chars)
+  - ② Privacy Policy URL (https://ledgererp.online/privacy-policy.html)
+  - ③ Terms of Service URL (https://ledgererp.online/terms-of-service.html)
+  - ④ Wallet address (auto-filled in Pi portal)
+  - Copy buttons for each field
+  - Preview links for privacy/terms pages
+- Added simulation mode toggle to A2U payment form
+- Added clear history button to payment list
+- Fixed amount input floating point display issue
+- Added DELETE endpoint to testnet-a2u API for clearing history
+- 0 lint errors, all pages verified working via agent-browser
+
+Stage Summary:
+- All 4 form fields now have ready-to-paste content
+- Privacy Policy and Terms of Service pages are live and accessible
+- Pi Setup tab is comprehensive with A2U tracking + form guide
+- User can now complete the Pi Developer Portal form end-to-end
