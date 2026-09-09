@@ -7,6 +7,9 @@ datasource db {
   url      = "file:../db/ledgererp.db"
 }
 
+/// Invoice status enum (TypeScript-side validation, SQLite doesn't support DB enums)
+/// Valid values: pending | paid_escrow | shipped | delivered | completed | disputed | cancelled
+
 model Store {
   id          String   @id @default(cuid())
   piUid       String   @unique
@@ -26,6 +29,7 @@ model Product {
   storeId     String
   name        String
   description String   @default("")
+  /// Price in Pi — use roundPi() utility for all calculations to avoid Float rounding
   price       Float
   image       String   @default("")
   isActive    Boolean  @default(true)
@@ -45,6 +49,7 @@ model Invoice {
   storeId        String
   customerPiUid  String
   customerName   String
+  /// All Pi amounts use roundPi() to prevent Float rounding errors
   subtotal       Float
   escrowFee      Float     @default(0)
   total          Float
@@ -67,6 +72,7 @@ model Invoice {
   @@index([customerPiUid])
   @@index([status])
   @@index([storeId, status])
+  @@index([createdAt])
 }
 
 model InvoiceItem {

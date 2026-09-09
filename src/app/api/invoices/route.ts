@@ -31,13 +31,22 @@ export async function GET(req: NextRequest) {
     if (customerPiUid) where.customerPiUid = customerPiUid;
     if (status) where.status = status;
 
-    const invoices = await db.invoice.findMany({
-      where: Object.keys(where).length > 0 ? where : undefined,
-      include: { items: true, store: { select: { name: true, piUid: true } } },
-      orderBy: { createdAt: "desc" },
-      take: 100, // Pagination limit
-    });
-    return NextResponse.json(invoices);
+    const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10));
+    const limit = Math.min(200, Math.max(1, parseInt(searchParams.get("limit") || "50", 10)));
+    const skip = (page - 1) * limit;
+
+    const [invoices, total] = await Promise.all([
+      db.invoice.findMany({
+        where: Object.keys(where).length > 0 ? where : undefined,
+        include: { items: true, store: { select: { name: true, piUid: true } } },
+        orderBy: { createdAt: "desc" },
+        skip,
+        take: limit,
+      }),
+      db.invoice.count({ where: Object.keys(where).length > 0 ? where : undefined }),
+    ]);
+    const totalPages = Math.ceil(total / limit);
+    return NextResponse.json({ data: invoices, total, page, limit, totalPages });
   } catch {
     return NextResponse.json({ error: "Failed to fetch invoices" }, { status: 500 });
   }

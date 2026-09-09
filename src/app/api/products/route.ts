@@ -14,11 +14,21 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "storeId required" }, { status: 400 });
     }
 
-    const products = await db.product.findMany({
-      where: { storeId },
-      orderBy: { createdAt: "desc" },
-    });
-    return NextResponse.json(products);
+    const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10));
+    const limit = Math.min(200, Math.max(1, parseInt(searchParams.get("limit") || "50", 10)));
+    const skip = (page - 1) * limit;
+
+    const [products, total] = await Promise.all([
+      db.product.findMany({
+        where: { storeId },
+        orderBy: { createdAt: "desc" },
+        skip,
+        take: limit,
+      }),
+      db.product.count({ where: { storeId } }),
+    ]);
+    const totalPages = Math.ceil(total / limit);
+    return NextResponse.json({ data: products, total, page, limit, totalPages });
   } catch {
     return NextResponse.json({ error: "Failed to fetch products" }, { status: 500 });
   }
