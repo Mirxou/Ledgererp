@@ -4,6 +4,7 @@ import { useState, useMemo, useCallback, useEffect } from "react";
 import { usePiAuth } from "@/hooks/use-pi-auth";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { createPiPayment, type PiPaymentData, type PiPaymentCallbacks } from "@/lib/pi-sdk";
+import { api, setAccessToken } from "@/lib/api-client";
 import {
   ShoppingCart, FileText, Plus, Package, Store, Truck,
   CheckCircle2, Clock, XCircle, AlertTriangle, CreditCard,
@@ -125,7 +126,7 @@ function PiBrowserRequired() {
           </div>
           <div className="space-y-3 text-sm text-muted-foreground">
             {[["إدارة الفواتير الذكية", FileText], ["ضمان آمن للمعاملات", Shield], ["دفع بالـ Pi مع حماية البائع والمشتري", Wallet]].map(function(t) {
-              let Ic = t[1];
+              const Ic = t[1] as React.ElementType;
               return (
                 <div key={t[0] as string} className="flex items-center gap-3 justify-end">
                   <span>{t[0] as string}</span>
@@ -172,7 +173,14 @@ function LoginScreen({ onLogin, loading, error }: { onLogin: () => void; loading
 
 /* ═══ App Entry ═══ */
 export default function LedgererpApp() {
-  let auth = usePiAuth();
+  const auth = usePiAuth();
+
+  // Store Pi access token for API auth
+  useEffect(function() {
+    if (auth.user?.accessToken) {
+      setAccessToken(auth.user.accessToken);
+    }
+  }, [auth.user]);
 
   // In demo/dev mode, bypass Pi Browser check
   if (DEMO_MODE) {
@@ -189,25 +197,22 @@ export default function LedgererpApp() {
 
 /* ═══ Authenticated Shell ═══ */
 function AuthenticatedApp({ piUid, username }: { piUid: string; username: string }) {
-  let qc = useQueryClient();
-  let toast = useToast().toast;
-  let activeTab = useState("dashboard");
-  let tab = activeTab[0];
-  let setTab = activeTab[1];
+  const qc = useQueryClient();
+  const toast = useToast().toast;
+  const [tab, setTab] = useState("dashboard");
 
   /* Store — persist store ID in localStorage for reload resilience */
-  let storeState = useState<StoreData | null>(null);
-  let createdStore = storeState[0];
-  let setCreatedStore = storeState[1];
+  const [createdStore, setCreatedStore] = useState<StoreData | null>(null);
 
   // On mount, try to restore store from localStorage
   useEffect(function() {
     if (createdStore) return;
     try {
-      let saved = localStorage.getItem("ledgererp_store");
+      const saved = localStorage.getItem("ledgererp_store");
       if (saved) {
-        let parsed = JSON.parse(saved);
+        const parsed = JSON.parse(saved);
         if (parsed && parsed.id && parsed.piUid) {
+          // eslint-disable-next-line react-hooks/set-state-in-effect
           setCreatedStore(parsed);
         }
       }
@@ -221,13 +226,14 @@ function AuthenticatedApp({ piUid, username }: { piUid: string; username: string
     }
   }, [createdStore]);
 
-  let storesRes = useQuery({
+  const storesRes = useQuery({
     queryKey: ["stores"],
-    queryFn: function() { return fetch("/api/stores").then(function(r) { return r.json(); }); },
+    queryFn: function() { return api.get("/api/stores", piUid).then(function(r) { return r.json(); }); },
+    staleTime: 30_000,
   });
-  let stores = storesRes.data as StoreData[] | undefined;
+  const stores = storesRes.data as StoreData[] | undefined;
 
-  let myStore = useMemo(function() {
+  const myStore = useMemo(function() {
     if (createdStore) return createdStore;
     if (stores) {
       for (let i = 0; i < stores.length; i++) {
@@ -238,62 +244,65 @@ function AuthenticatedApp({ piUid, username }: { piUid: string; username: string
   }, [createdStore, stores, piUid]);
 
   /* Invoices */
-  let merchantInvRes = useQuery({
+  const merchantInvRes = useQuery({
     queryKey: ["invoices", "merchant", myStore ? myStore.id : ""],
-    queryFn: function() { return fetch("/api/invoices?storeId=" + myStore!.id).then(function(r) { return r.json(); }); },
+    queryFn: function() { return api.get("/api/invoices?storeId=" + myStore!.id, piUid).then(function(r) { return r.json(); }); },
     enabled: !!myStore && !!myStore.id,
+    staleTime: 30_000,
   });
-  let customerInvRes = useQuery({
+  const customerInvRes = useQuery({
     queryKey: ["invoices", "customer", piUid],
-    queryFn: function() { return fetch("/api/invoices?customerPiUid=" + piUid).then(function(r) { return r.json(); }); },
+    queryFn: function() { return api.get("/api/invoices?customerPiUid=" + piUid, piUid).then(function(r) { return r.json(); }); },
+    staleTime: 30_000,
   });
 
   /* Products */
-  let productsRes = useQuery({
+  const productsRes = useQuery({
     queryKey: ["products", myStore ? myStore.id : ""],
-    queryFn: function() { return fetch("/api/products?storeId=" + myStore!.id).then(function(r) { return r.json(); }); },
+    queryFn: function() { return api.get("/api/products?storeId=" + myStore!.id, piUid).then(function(r) { return r.json(); }); },
     enabled: !!myStore && !!myStore.id,
+    staleTime: 30_000,
   });
 
   /* Mutations */
-  let createStoreMut = useMutation({
+  const createStoreMut = useMutation({
     mutationFn: function(data: { piUid: string; name: string; description: string; avatar?: string }) {
-      return fetch("/api/stores", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }).then(function(r) { return r.json(); });
+      return api.post("/api/stores", data, piUid).then(function(r) { return r.json(); });
     },
     onSuccess: function(data) { setCreatedStore(data); qc.invalidateQueries({ queryKey: ["stores"] }); toast({ title: "تم إنشاء المتجر بنجاح" }); try { localStorage.setItem("ledgererp_store", JSON.stringify(data)); } catch {} },
     onError: function() { toast({ title: "فشل إنشاء المتجر", variant: "destructive" }); },
   });
 
-  let updateStoreMut = useMutation({
+  const updateStoreMut = useMutation({
     mutationFn: function(data: { id: string; name?: string; description?: string; avatar?: string }) {
-      return fetch("/api/stores", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }).then(function(r) { return r.json(); });
+      return api.patch("/api/stores", data, piUid).then(function(r) { return r.json(); });
     },
     onSuccess: function(data) { setCreatedStore(function(prev) { return prev ? Object.assign({}, prev, data) : (data as StoreData); }); qc.invalidateQueries({ queryKey: ["stores"] }); toast({ title: "تم تحديث المتجر" }); },
     onError: function() { toast({ title: "فشل التحديث", variant: "destructive" }); },
   });
 
-  let deleteStoreMut = useMutation({
+  const deleteStoreMut = useMutation({
     mutationFn: function(id: string) {
-      return fetch("/api/stores", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: id }) }).then(function(r) { return r.json(); });
+      return api.delete("/api/stores", { id: id }, piUid).then(function(r) { return r.json(); });
     },
     onSuccess: function() { setCreatedStore(null); try { localStorage.removeItem("ledgererp_store"); } catch {} qc.invalidateQueries({ queryKey: ["stores"] }); toast({ title: "تم حذف المتجر" }); },
     onError: function() { toast({ title: "فشل الحذف", variant: "destructive" }); },
   });
 
-  let updateInvoiceMut = useMutation({
+  const updateInvoiceMut = useMutation({
     mutationFn: function(data: { id: string; status: string; paymentTxId?: string; releaseTxId?: string }) {
-      return fetch("/api/invoices", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }).then(function(r) { return r.json(); });
+      return api.patch("/api/invoices", data, piUid).then(function(r) { return r.json(); });
     },
     onSuccess: function() { qc.invalidateQueries({ queryKey: ["invoices"] }); },
   });
 
   /* Stats */
-  let stats = useMemo(function() {
-    let mi = (merchantInvRes.data || []) as InvoiceData[];
-    let ci = (customerInvRes.data || []) as InvoiceData[];
-    let escrowed = mi.filter(function(inv) { return ["paid_escrow", "shipped", "delivered"].indexOf(inv.status) !== -1; });
-    let disputed = mi.filter(function(inv) { return inv.status === "disputed"; });
-    let cancelled = mi.filter(function(inv) { return inv.status === "cancelled"; });
+  const stats = useMemo(function() {
+    const mi = (merchantInvRes.data || []) as InvoiceData[];
+    const ci = (customerInvRes.data || []) as InvoiceData[];
+    const escrowed = mi.filter(function(inv) { return ["paid_escrow", "shipped", "delivered"].indexOf(inv.status) !== -1; });
+    const disputed = mi.filter(function(inv) { return inv.status === "disputed"; });
+    const cancelled = mi.filter(function(inv) { return inv.status === "cancelled"; });
     return {
       totalInvoices: mi.length,
       totalProducts: (productsRes.data || []).length,
@@ -307,19 +316,13 @@ function AuthenticatedApp({ piUid, username }: { piUid: string; username: string
   }, [merchantInvRes.data, customerInvRes.data, productsRes.data]);
 
   /* Pay with Pi (U2A) */
-  let payWithPi = useCallback(function(invoice: InvoiceData) {
-    let callbacks: PiPaymentCallbacks = {
+  const payWithPi = useCallback(function(invoice: InvoiceData) {
+    const callbacks: PiPaymentCallbacks = {
       onReadyForServerApproval: function(paymentId) {
-        fetch("/api/pi_payment/approve", {
-          method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ paymentId: paymentId, invoiceId: invoice.id }),
-        }).catch(function() { toast({ title: "فشل الموافقة على الدفعة", variant: "destructive" }); });
+        api.post("/api/pi_payment/approve", { paymentId: paymentId, invoiceId: invoice.id }, piUid).catch(function() { toast({ title: "فشل الموافقة على الدفعة", variant: "destructive" }); });
       },
       onReadyForServerCompletion: function(paymentId, txid) {
-        fetch("/api/pi_payment/complete", {
-          method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ paymentId: paymentId, txid: txid, invoiceId: invoice.id }),
-        }).then(function() {
+        api.post("/api/pi_payment/complete", { paymentId: paymentId, txid: txid, invoiceId: invoice.id }, piUid).then(function() {
           qc.invalidateQueries({ queryKey: ["invoices"] });
           toast({ title: "تم الدفع بنجاح! الأموال في الضمان" });
         }).catch(function() { toast({ title: "فشل إكمال الدفعة", variant: "destructive" }); });
@@ -327,28 +330,25 @@ function AuthenticatedApp({ piUid, username }: { piUid: string; username: string
       onCancel: function() { qc.invalidateQueries({ queryKey: ["invoices"] }); toast({ title: "تم إلغاء الدفع" }); },
       onError: function() { qc.invalidateQueries({ queryKey: ["invoices"] }); toast({ title: "خطأ في الدفع", variant: "destructive" }); },
     };
-    let paymentData: PiPaymentData = {
+    const paymentData: PiPaymentData = {
       amount: invoice.total,
       memo: "فاتورة " + invoice.invoiceNumber + " — " + (invoice.store ? invoice.store.name : "Ledgererp"),
       metadata: { invoiceId: invoice.id, invoiceNumber: invoice.invoiceNumber },
     };
     createPiPayment(paymentData, callbacks);
-  }, [qc, toast]);
+  }, [qc, toast, piUid]);
 
   /* A2U Release Pi to seller */
-  let handleRelease = useCallback(function(invoice: InvoiceData) {
+  const handleRelease = useCallback(function(invoice: InvoiceData) {
     if (!myStore) return;
     toast({ title: "جارٍ إطلاق الأموال..." });
-    fetch("/api/pi/a2u", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        amount: String(invoice.subtotal),
-        uid: myStore.piUid,
-        memo: "إطلاق ضمان فاتورة " + invoice.invoiceNumber,
-        metadata: { invoiceId: invoice.id, type: "escrow_release" },
-        invoiceId: invoice.id,
-      }),
-    }).then(function(res) {
+    api.post("/api/pi/a2u", {
+      amount: String(invoice.subtotal),
+      uid: myStore.piUid,
+      memo: "إطلاق ضمان فاتورة " + invoice.invoiceNumber,
+      metadata: { invoiceId: invoice.id, type: "escrow_release" },
+      invoiceId: invoice.id,
+    }, piUid).then(function(res) {
       if (res.ok) {
         qc.invalidateQueries({ queryKey: ["invoices"] });
         toast({ title: "تم إطلاق الأموال للبائع بنجاح ✅" });
@@ -358,12 +358,12 @@ function AuthenticatedApp({ piUid, username }: { piUid: string; username: string
     }).then(function(err) {
       if (err && err.error) toast({ title: "فشل الإطلاق", description: err.error, variant: "destructive" });
     }).catch(function() { toast({ title: "خطأ في الاتصال", variant: "destructive" }); });
-  }, [myStore, qc, toast]);
+  }, [myStore, qc, toast, piUid]);
 
-  let handleShip = function(inv: InvoiceData) { updateInvoiceMut.mutate({ id: inv.id, status: "shipped" }); toast({ title: "تم تحديث الحالة: تم الشحن" }); };
-  let handleConfirm = function(inv: InvoiceData) { updateInvoiceMut.mutate({ id: inv.id, status: "delivered" }); toast({ title: "تم تأكيد التسليم" }); };
-  let handleDispute = function(inv: InvoiceData) { updateInvoiceMut.mutate({ id: inv.id, status: "disputed" }); toast({ title: "تم فتح نزاع" }); };
-  let handleCancel = function(inv: InvoiceData) { updateInvoiceMut.mutate({ id: inv.id, status: "cancelled" }); toast({ title: "تم إلغاء الطلب" }); };
+  const handleShip = useCallback(function(inv: InvoiceData) { updateInvoiceMut.mutate({ id: inv.id, status: "shipped" }); toast({ title: "تم تحديث الحالة: تم الشحن" }); }, [updateInvoiceMut, toast]);
+  const handleConfirm = useCallback(function(inv: InvoiceData) { updateInvoiceMut.mutate({ id: inv.id, status: "delivered" }); toast({ title: "تم تأكيد التسليم" }); }, [updateInvoiceMut, toast]);
+  const handleDispute = useCallback(function(inv: InvoiceData) { updateInvoiceMut.mutate({ id: inv.id, status: "disputed" }); toast({ title: "تم فتح نزاع" }); }, [updateInvoiceMut, toast]);
+  const handleCancel = useCallback(function(inv: InvoiceData) { updateInvoiceMut.mutate({ id: inv.id, status: "cancelled" }); toast({ title: "تم إلغاء الطلب" }); }, [updateInvoiceMut, toast]);
 
   /* ── Render ────────────────────────────────────────── */
   return (
@@ -398,7 +398,7 @@ function AuthenticatedApp({ piUid, username }: { piUid: string; username: string
           <Tabs value={tab} onValueChange={setTab} className="space-y-5">
             <TabsList className="grid grid-cols-6 w-full h-auto p-1 bg-muted/50">
               {[["dashboard", BarChart3, "الرئيسية"], ["products", Package, "المنتجات"], ["invoices", FileText, "الفواتير"], ["orders", ShoppingCart, "الطلبات"], ["settings", Settings, "الإعدادات"], ["pisetup", Zap, "إعداد Pi"]].map(function(t) {
-              let Ic = t[1];
+              const Ic = t[1] as React.ElementType;
                 return (
                   <TabsTrigger key={t[0] as string} value={t[0] as string} className="text-[11px] py-2 data-[state=active]:bg-emerald-600 data-[state=active]:text-white gap-1">
                     <Ic className="h-3.5 w-3.5" /><span className="hidden xs:inline">{t[2] as string}</span>
@@ -407,8 +407,8 @@ function AuthenticatedApp({ piUid, username }: { piUid: string; username: string
               })}
             </TabsList>
             <TabsContent value="dashboard"><DashboardView stats={stats} store={myStore} /></TabsContent>
-            <TabsContent value="products"><ProductsView products={(productsRes.data || []) as ProductData[]} storeId={myStore.id} /></TabsContent>
-            <TabsContent value="invoices"><InvoicesView store={myStore} products={(productsRes.data || []) as ProductData[]} /></TabsContent>
+            <TabsContent value="products"><ProductsView products={(productsRes.data || []) as ProductData[]} storeId={myStore.id} piUid={piUid} /></TabsContent>
+            <TabsContent value="invoices"><InvoicesView store={myStore} products={(productsRes.data || []) as ProductData[]} piUid={piUid} /></TabsContent>
             <TabsContent value="orders">
               <OrdersView
                 merchantInvoices={(merchantInvRes.data || []) as InvoiceData[]}
@@ -420,10 +420,10 @@ function AuthenticatedApp({ piUid, username }: { piUid: string; username: string
               />
             </TabsContent>
             <TabsContent value="settings">
-              <SettingsView store={myStore} onUpdate={function(d) { updateStoreMut.mutate(d); }} onDelete={function() { deleteStoreMut.mutate(myStore.id); }} updating={updateStoreMut.isPending} deleting={deleteStoreMut.isPending} />
+              <SettingsView store={myStore} onUpdate={function(d) { updateStoreMut.mutate(d); }} onDelete={function() { deleteStoreMut.mutate(myStore.id); }} updating={updateStoreMut.isPending} deleting={deleteStoreMut.isPending} piUid={piUid} />
             </TabsContent>
             <TabsContent value="pisetup">
-              <PiSetupView />
+              <PiSetupView piUid={piUid} />
             </TabsContent>
           </Tabs>
         )}
@@ -442,9 +442,9 @@ function AuthenticatedApp({ piUid, username }: { piUid: string; username: string
 
 /* ═══ Store Setup ═══ */
 function StoreSetup({ onCreate, loading }: { onCreate: (name: string, desc: string, avatar: string) => void; loading: boolean }) {
-  let nameState = useState("");
-  let descState = useState("");
-  let avatarState = useState("");
+  const [name, setName] = useState("");
+  const [desc, setDesc] = useState("");
+  const [avatar, setAvatar] = useState("");
   return (
     <div className="flex items-center justify-center min-h-[60vh]">
       <Card className="max-w-md w-full border-0 shadow-lg">
@@ -456,10 +456,10 @@ function StoreSetup({ onCreate, loading }: { onCreate: (name: string, desc: stri
           <CardDescription className="text-xs">أنشئ متجرك لبدء إصدار الفواتير واستقبال المدفوعات بالـ Pi</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="space-y-1.5"><Label className="text-xs">اسم المتجر</Label><Input value={nameState[0]} onChange={function(e) { nameState[1](e.target.value); }} placeholder="مثال: متجر الإلكترونيات" className="text-sm" /></div>
-          <div className="space-y-1.5"><Label className="text-xs">وصف المتجر</Label><Textarea value={descState[0]} onChange={function(e) { descState[1](e.target.value); }} placeholder="وصف مختصر لمتجرك..." className="text-sm min-h-[72px]" /></div>
-          <div className="space-y-1.5"><Label className="text-xs">رابط الصورة (اختياري)</Label><Input value={avatarState[0]} onChange={function(e) { avatarState[1](e.target.value); }} placeholder="https://..." className="text-sm" dir="ltr" /></div>
-          <Button onClick={function() { if (nameState[0].trim()) onCreate(nameState[0].trim(), descState[0].trim(), avatarState[0].trim()); }} disabled={!nameState[0].trim() || loading} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white text-sm h-10">
+          <div className="space-y-1.5"><Label className="text-xs">اسم المتجر</Label><Input value={name} onChange={function(e) { setName(e.target.value); }} placeholder="مثال: متجر الإلكترونيات" className="text-sm" /></div>
+          <div className="space-y-1.5"><Label className="text-xs">وصف المتجر</Label><Textarea value={desc} onChange={function(e) { setDesc(e.target.value); }} placeholder="وصف مختصر لمتجرك..." className="text-sm min-h-[72px]" /></div>
+          <div className="space-y-1.5"><Label className="text-xs">رابط الصورة (اختياري)</Label><Input value={avatar} onChange={function(e) { setAvatar(e.target.value); }} placeholder="https://..." className="text-sm" dir="ltr" /></div>
+          <Button onClick={function() { if (name.trim()) onCreate(name.trim(), desc.trim(), avatar.trim()); }} disabled={!name.trim() || loading} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white text-sm h-10">
             {loading ? <Loader2 className="h-4 w-4 animate-spin ml-2" /> : <Plus className="h-4 w-4 ml-2" />}
             إنشاء المتجر
           </Button>
@@ -471,13 +471,13 @@ function StoreSetup({ onCreate, loading }: { onCreate: (name: string, desc: stri
 
 /* ═══ Dashboard ═══ */
 function DashboardView({ stats, store }: { stats: Record<string, unknown>; store: StoreData }) {
-  let cards = [
+  const cards = [
     { label: "إجمالي الفواتير", value: String(stats.totalInvoices), icon: FileText, color: "text-blue-500", bg: "bg-blue-500/10" },
     { label: "المنتجات", value: String(stats.totalProducts), icon: Package, color: "text-violet-500", bg: "bg-violet-500/10" },
     { label: "π في الضمان", value: Number(stats.escrowedPi || 0).toFixed(2), icon: Shield, color: "text-amber-500", bg: "bg-amber-500/10" },
     { label: "π مكتمل", value: Number(stats.completedPi || 0).toFixed(2), icon: CheckCircle2, color: "text-emerald-500", bg: "bg-emerald-500/10" },
   ];
-  let recent = (stats.recentOrders || []) as InvoiceData[];
+  const recent = (stats.recentOrders || []) as InvoiceData[];
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -507,9 +507,9 @@ function DashboardView({ stats, store }: { stats: Record<string, unknown>; store
         <CardContent className="pb-4 px-4">
           <div className="flex items-center justify-around text-[10px] gap-1">
             {[["إنشاء", FileText, "text-slate-500 bg-slate-100 dark:bg-slate-800"], ["دفع", CreditCard, "text-blue-500 bg-blue-50 dark:bg-blue-950/50"], ["شحن", Truck, "text-purple-500 bg-purple-50 dark:bg-purple-950/50"], ["تسليم", CheckCircle2, "text-teal-500 bg-teal-50 dark:bg-teal-950/50"], ["إطلاق", Wallet, "text-emerald-500 bg-emerald-50 dark:bg-emerald-950/50"]].map(function(step, i, arr) {
-              let stepLabel = step[0] as string;
-              let StepIcon = step[1] as React.ElementType;
-              let stepColor = step[2] as string;
+              const stepLabel = step[0] as string;
+              const StepIcon = step[1] as React.ElementType;
+              const stepColor = step[2] as string;
               return (
                 <div key={stepLabel} className="flex items-center gap-1 shrink-0">
                   <div className={"w-7 h-7 rounded-lg " + stepColor + " flex items-center justify-center"}><StepIcon className="h-3.5 w-3.5" /></div>
@@ -549,83 +549,85 @@ function DashboardView({ stats, store }: { stats: Record<string, unknown>; store
 }
 
 /* ═══ Products ═══ */
-function ProductsView({ products, storeId }: { products: ProductData[]; storeId: string }) {
-  let qc = useQueryClient();
-  let toast = useToast().toast;
-  let openState = useState(false);
-  let editState = useState(false);
-  let formState = useState({ name: "", description: "", price: "" });
-  let editFormState = useState<ProductData | null>(null);
-  let savingState = useState(false);
-  let searchState = useState("");
+function ProductsView({ products, storeId, piUid }: { products: ProductData[]; storeId: string; piUid: string }) {
+  const qc = useQueryClient();
+  const toast = useToast().toast;
+  const [open, setOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [form, setForm] = useState({ name: "", description: "", price: "" });
+  const [editForm, setEditForm] = useState<ProductData | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [search, setSearch] = useState("");
+  const [deleteTarget, setDeleteTarget] = useState<ProductData | null>(null);
 
-  let handleAdd = function() {
-    if (!formState[0].name.trim() || !formState[0].price) return;
-    let priceVal = parseFloat(formState[0].price);
+  const handleAdd = function() {
+    if (!form.name.trim() || !form.price) return;
+    const priceVal = parseFloat(form.price);
     if (isNaN(priceVal) || priceVal <= 0) { toast({ title: "السعر يجب أن يكون رقماً أكبر من صفر", variant: "destructive" }); return; }
-    savingState[1](true);
-    fetch("/api/products", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ storeId: storeId, name: formState[0].name.trim(), description: formState[0].description.trim(), price: priceVal }),
-    }).then(function(res) {
-      if (res.ok) { qc.invalidateQueries({ queryKey: ["products", storeId] }); openState[1](false); formState[1]({ name: "", description: "", price: "" }); toast({ title: "تم إضافة المنتج" }); }
+    setSaving(true);
+    api.post("/api/products", { storeId: storeId, name: form.name.trim(), description: form.description.trim(), price: priceVal }, piUid).then(function(res) {
+      if (res.ok) { qc.invalidateQueries({ queryKey: ["products", storeId] }); setOpen(false); setForm({ name: "", description: "", price: "" }); toast({ title: "تم إضافة المنتج" }); }
       else { res.json().catch(function() { return {}; }).then(function(err) { toast({ title: "فشل الإضافة", description: err.error || "خطأ غير معروف", variant: "destructive" }); }); }
-    }).catch(function() { toast({ title: "خطأ في الاتصال", variant: "destructive" }); }).finally(function() { savingState[1](false); });
+    }).catch(function() { toast({ title: "خطأ في الاتصال", variant: "destructive" }); }).finally(function() { setSaving(false); });
   };
 
-  let handleEdit = function() {
-    if (!editFormState[0] || !editFormState[0].name.trim()) return;
-    savingState[1](true);
-    let ef = editFormState[0];
-    fetch("/api/products", {
-      method: "PATCH", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: ef.id, name: ef.name.trim(), description: ef.description.trim(), price: ef.price, isActive: ef.isActive }),
-    }).then(function(res) {
-      if (res.ok) { qc.invalidateQueries({ queryKey: ["products", storeId] }); editState[1](false); editFormState[1](null); toast({ title: "تم تحديث المنتج" }); }
+  const handleEdit = function() {
+    if (!editForm || !editForm.name.trim()) return;
+    setSaving(true);
+    const ef = editForm;
+    api.patch("/api/products", { id: ef.id, name: ef.name.trim(), description: ef.description.trim(), price: ef.price, isActive: ef.isActive }, piUid).then(function(res) {
+      if (res.ok) { qc.invalidateQueries({ queryKey: ["products", storeId] }); setEditOpen(false); setEditForm(null); toast({ title: "تم تحديث المنتج" }); }
       else { toast({ title: "فشل التحديث", variant: "destructive" }); }
-    }).catch(function() { toast({ title: "خطأ في الاتصال", variant: "destructive" }); }).finally(function() { savingState[1](false); });
+    }).catch(function() { toast({ title: "خطأ في الاتصال", variant: "destructive" }); }).finally(function() { setSaving(false); });
   };
 
-  let handleDelete = function(id: string) {
-    fetch("/api/products", {
-      method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: id }),
-    }).then(function(res) {
+  const handleDelete = function(id: string) {
+    api.delete("/api/products", { id: id }, piUid).then(function(res) {
       if (res.ok) { qc.invalidateQueries({ queryKey: ["products", storeId] }); toast({ title: "تم حذف المنتج" }); }
       else toast({ title: "فشل الحذف", variant: "destructive" });
     }).catch(function() { toast({ title: "خطأ في الاتصال", variant: "destructive" }); });
   };
 
-  let handleToggle = function(p: ProductData) {
-    fetch("/api/products", {
-      method: "PATCH", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: p.id, isActive: !p.isActive }),
-    }).then(function(res) {
+  const handleToggle = function(p: ProductData) {
+    api.patch("/api/products", { id: p.id, isActive: !p.isActive }, piUid).then(function(res) {
       if (res.ok) { qc.invalidateQueries({ queryKey: ["products", storeId] }); toast({ title: p.isActive ? "تم تعطيل المنتج" : "تم تفعيل المنتج" }); }
       else toast({ title: "فشل التحديث", variant: "destructive" });
     }).catch(function() { toast({ title: "خطأ في الاتصال", variant: "destructive" }); });
   };
 
-  let filtered = searchState[0] ? products.filter(function(p) { return p.name.indexOf(searchState[0]) !== -1; }) : products;
+  const filtered = search ? products.filter(function(p) { return p.name.indexOf(search) !== -1; }) : products;
 
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2">
-        <div className="relative flex-1"><Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input value={searchState[0]} onChange={function(e) { searchState[1](e.target.value); }} placeholder="بحث عن منتج..." className="text-sm pr-9" /></div>
-        <Dialog open={openState[0]} onOpenChange={openState[1]}>
+        <div className="relative flex-1"><Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input value={search} onChange={function(e) { setSearch(e.target.value); }} placeholder="بحث عن منتج..." className="text-sm pr-9" /></div>
+        <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild><Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs shrink-0"><Plus className="h-3.5 w-3.5 ml-1.5" />إضافة</Button></DialogTrigger>
           <DialogContent><DialogHeader><DialogTitle className="text-sm">منتج جديد</DialogTitle><DialogDescription className="text-xs">أضف منتجاً لمتجرك</DialogDescription></DialogHeader>
             <div className="space-y-3">
-              <div className="space-y-1.5"><Label className="text-xs">الاسم</Label><Input value={formState[0].name} onChange={function(e) { formState[1](Object.assign({}, formState[0], { name: e.target.value })); }} placeholder="اسم المنتج" className="text-sm" /></div>
-              <div className="space-y-1.5"><Label className="text-xs">الوصف</Label><Textarea value={formState[0].description} onChange={function(e) { formState[1](Object.assign({}, formState[0], { description: e.target.value })); }} placeholder="وصف مختصر" className="text-sm" /></div>
-              <div className="space-y-1.5"><Label className="text-xs">السعر (Pi)</Label><Input type="number" step="0.01" inputMode="decimal" value={formState[0].price} onChange={function(e) { formState[1](Object.assign({}, formState[0], { price: e.target.value })); }} placeholder="0.00" className="text-sm" dir="ltr" /></div>
+              <div className="space-y-1.5"><Label className="text-xs">الاسم</Label><Input value={form.name} onChange={function(e) { setForm(Object.assign({}, form, { name: e.target.value })); }} placeholder="اسم المنتج" className="text-sm" /></div>
+              <div className="space-y-1.5"><Label className="text-xs">الوصف</Label><Textarea value={form.description} onChange={function(e) { setForm(Object.assign({}, form, { description: e.target.value })); }} placeholder="وصف مختصر" className="text-sm" /></div>
+              <div className="space-y-1.5"><Label className="text-xs">السعر (Pi)</Label><Input type="number" step="0.01" inputMode="decimal" value={form.price} onChange={function(e) { setForm(Object.assign({}, form, { price: e.target.value })); }} placeholder="0.00" className="text-sm" dir="ltr" /></div>
             </div>
-            <DialogFooter><Button onClick={handleAdd} disabled={!formState[0].name.trim() || !formState[0].price || savingState[0]} size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs">{savingState[0] ? <Loader2 className="h-3.5 w-3.5 animate-spin ml-1.5" /> : <Plus className="h-3.5 w-3.5 ml-1.5" />}إضافة</Button></DialogFooter>
+            <DialogFooter><Button onClick={handleAdd} disabled={!form.name.trim() || !form.price || saving} size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs">{saving ? <Loader2 className="h-3.5 w-3.5 animate-spin ml-1.5" /> : <Plus className="h-3.5 w-3.5 ml-1.5" />}إضافة</Button></DialogFooter>
           </DialogContent>
         </Dialog>
       </div>
 
       {filtered.length === 0 ? (
-        <Card className="border-dashed"><CardContent className="py-12 text-center text-muted-foreground"><Package className="h-10 w-10 mx-auto mb-3 opacity-30" /><p className="text-sm">لا توجد منتجات</p><p className="text-xs mt-1">أضف منتجاتك لبدء إنشاء الفواتير</p></CardContent></Card>
+        search ? (
+          <div className="flex flex-col items-center justify-center py-12 text-center">
+            <Search className="h-12 w-12 text-muted-foreground/30 mb-3" />
+            <p className="text-sm font-medium text-muted-foreground">لا توجد نتائج</p>
+            <p className="text-xs text-muted-foreground/70 mt-1">جرب بحثاً آخر</p>
+          </div>
+        ) : (
+          <div className="flex flex-col items-center justify-center py-12 text-center">
+            <Package className="h-12 w-12 text-muted-foreground/30 mb-3" />
+            <p className="text-sm font-medium text-muted-foreground">لا توجد منتجات بعد</p>
+            <p className="text-xs text-muted-foreground/70 mt-1">أضف أول منتج لمتجرك</p>
+          </div>
+        )
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {filtered.map(function(p) {
@@ -633,7 +635,7 @@ function ProductsView({ products, storeId }: { products: ProductData[]; storeId:
               <Card key={p.id} className="border-0 shadow-sm hover:shadow-md transition-shadow">
                 <CardContent className="p-4 space-y-2.5">
                   <div className="flex items-start justify-between">
-                    <div className="min-w-0 flex-1 cursor-pointer" onClick={function() { editFormState[1](Object.assign({}, p)); editState[1](true); }}>
+                    <div className="min-w-0 flex-1 cursor-pointer" onClick={function() { setEditForm(Object.assign({}, p)); setEditOpen(true); }}>
                       <h3 className="font-semibold text-sm truncate">{p.name}</h3>
                       <p className="text-[11px] text-muted-foreground mt-0.5 line-clamp-1">{p.description || "بدون وصف"}</p>
                     </div>
@@ -644,10 +646,8 @@ function ProductsView({ products, storeId }: { products: ProductData[]; storeId:
                       {p.isActive ? "نشط" : "معطّل"}
                     </button>
                     <div className="flex items-center gap-1">
-                      <button onClick={function() { editFormState[1](Object.assign({}, p)); editState[1](true); }} className="p-1.5 rounded-md hover:bg-muted transition-colors"><Pencil className="h-3.5 w-3.5 text-muted-foreground" /></button>
-                      <AlertDialog><AlertDialogTrigger asChild><button className="p-1.5 rounded-md hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"><Trash2 className="h-3.5 w-3.5 text-red-400" /></button></AlertDialogTrigger>
-                        <AlertDialogContent><AlertDialogHeader><AlertDialogTitle className="text-sm">حذف المنتج</AlertDialogTitle><AlertDialogDescription className="text-xs">هل أنت متأكد؟ لا يمكن التراجع.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel className="text-xs">إلغاء</AlertDialogCancel><AlertDialogAction onClick={function() { handleDelete(p.id); }} className="text-xs bg-red-600 hover:bg-red-700">حذف</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
-                      </AlertDialog>
+                      <button onClick={function() { setEditForm(Object.assign({}, p)); setEditOpen(true); }} className="p-1.5 rounded-md hover:bg-muted transition-colors"><Pencil className="h-3.5 w-3.5 text-muted-foreground" /></button>
+                      <button onClick={function() { setDeleteTarget(p); }} className="p-1.5 rounded-md hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"><Trash2 className="h-3.5 w-3.5 text-red-400" /></button>
                     </div>
                   </div>
                 </CardContent>
@@ -657,18 +657,23 @@ function ProductsView({ products, storeId }: { products: ProductData[]; storeId:
         </div>
       )}
 
+      {/* Delete Confirmation */}
+      <AlertDialog open={deleteTarget !== null} onOpenChange={function(open) { if (!open) setDeleteTarget(null); }}>
+        <AlertDialogContent><AlertDialogHeader><AlertDialogTitle className="text-sm">حذف المنتج</AlertDialogTitle><AlertDialogDescription className="text-xs">{deleteTarget ? "هل أنت متأكد من حذف «" + deleteTarget.name + "»؟ هذا الإجراء لا يمكن التراجع عنه." : ""}</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel className="text-xs">إلغاء</AlertDialogCancel><AlertDialogAction onClick={function() { if (deleteTarget) { handleDelete(deleteTarget.id); setDeleteTarget(null); } }} className="text-xs bg-red-600 hover:bg-red-700">حذف</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
+      </AlertDialog>
+
       {/* Edit Dialog */}
-      <Dialog open={editState[0]} onOpenChange={editState[1]}>
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
         <DialogContent><DialogHeader><DialogTitle className="text-sm">تعديل المنتج</DialogTitle><DialogDescription className="text-xs">عدّل بيانات المنتج</DialogDescription></DialogHeader>
-          {editFormState[0] && (
+          {editForm && (
             <div className="space-y-3">
-              <div className="space-y-1.5"><Label className="text-xs">الاسم</Label><Input value={editFormState[0].name} onChange={function(e) { editFormState[1](Object.assign({}, editFormState[0], { name: e.target.value })); }} className="text-sm" /></div>
-              <div className="space-y-1.5"><Label className="text-xs">الوصف</Label><Textarea value={editFormState[0].description} onChange={function(e) { editFormState[1](Object.assign({}, editFormState[0], { description: e.target.value })); }} className="text-sm" /></div>
-              <div className="space-y-1.5"><Label className="text-xs">السعر (Pi)</Label><Input type="number" step="0.01" value={editFormState[0].price} onChange={function(e) { editFormState[1](Object.assign({}, editFormState[0], { price: parseFloat(e.target.value) || 0 })); }} className="text-sm" dir="ltr" /></div>
-              <div className="flex items-center justify-between"><Label className="text-xs">حالة النشر</Label><Switch checked={editFormState[0].isActive} onCheckedChange={function(v) { editFormState[1](Object.assign({}, editFormState[0], { isActive: v })); }} /></div>
+              <div className="space-y-1.5"><Label className="text-xs">الاسم</Label><Input value={editForm.name} onChange={function(e) { setEditForm(Object.assign({}, editForm, { name: e.target.value })); }} className="text-sm" /></div>
+              <div className="space-y-1.5"><Label className="text-xs">الوصف</Label><Textarea value={editForm.description} onChange={function(e) { setEditForm(Object.assign({}, editForm, { description: e.target.value })); }} className="text-sm" /></div>
+              <div className="space-y-1.5"><Label className="text-xs">السعر (Pi)</Label><Input type="number" step="0.01" value={editForm.price} onChange={function(e) { setEditForm(Object.assign({}, editForm, { price: parseFloat(e.target.value) || 0 })); }} className="text-sm" dir="ltr" /></div>
+              <div className="flex items-center justify-between"><Label className="text-xs">حالة النشر</Label><Switch checked={editForm.isActive} onCheckedChange={function(v) { setEditForm(Object.assign({}, editForm, { isActive: v })); }} /></div>
             </div>
           )}
-          <DialogFooter><Button onClick={handleEdit} disabled={!editFormState[0] || !editFormState[0].name.trim() || savingState[0]} size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs">{savingState[0] ? <Loader2 className="h-3.5 w-3.5 animate-spin ml-1.5" /> : <Pencil className="h-3.5 w-3.5 ml-1.5" />}حفظ</Button></DialogFooter>
+          <DialogFooter><Button onClick={handleEdit} disabled={!editForm || !editForm.name.trim() || saving} size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs">{saving ? <Loader2 className="h-3.5 w-3.5 animate-spin ml-1.5" /> : <Pencil className="h-3.5 w-3.5 ml-1.5" />}حفظ</Button></DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
@@ -676,72 +681,67 @@ function ProductsView({ products, storeId }: { products: ProductData[]; storeId:
 }
 
 /* ═══ Invoices ═══ */
-function InvoicesView({ store, products }: { store: StoreData; products: ProductData[] }) {
-  let qc = useQueryClient();
-  let toast = useToast().toast;
-  let openState = useState(false);
-  let nameState = useState("");
-  let uidState = useState("");
-  let notesState = useState("");
-  let savingState = useState(false);
-  let itemsState = useState([{ productName: "", quantity: 1, unitPrice: 0 }]);
-  let detailState = useState<InvoiceData | null>(null);
+function InvoicesView({ store, products, piUid }: { store: StoreData; products: ProductData[]; piUid: string }) {
+  const qc = useQueryClient();
+  const toast = useToast().toast;
+  const [open, setOpen] = useState(false);
+  const [customerName, setCustomerName] = useState("");
+  const [customerUid, setCustomerUid] = useState("");
+  const [notes, setNotes] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [items, setItems] = useState([{ productName: "", quantity: 1, unitPrice: 0 }]);
+  const [detail, setDetail] = useState<InvoiceData | null>(null);
 
-  let items = itemsState[0];
-  let setItems = itemsState[1];
-
-  let addItem = function() { setItems(items.concat([{ productName: "", quantity: 1, unitPrice: 0 }])); };
-  let removeItem = function(idx: number) { setItems(items.filter(function(_, i) { return i !== idx; })); };
-  let updateItem = function(idx: number, field: string, value: string | number) {
-    let u = items.map(function(item, i) { if (i === idx) { let copy = Object.assign({}, item); (copy as Record<string, unknown>)[field] = value; return copy; } return item; });
+  const addItem = function() { setItems(items.concat([{ productName: "", quantity: 1, unitPrice: 0 }])); };
+  const removeItem = function(idx: number) { setItems(items.filter(function(_, i) { return i !== idx; })); };
+  const updateItem = function(idx: number, field: string, value: string | number) {
+    const u = items.map(function(item, i) { if (i === idx) { const copy = Object.assign({}, item); (copy as Record<string, unknown>)[field] = value; return copy; } return item; });
     setItems(u);
   };
 
-  let subtotal = items.reduce(function(s, i) { return s + i.unitPrice * i.quantity; }, 0);
-  let escrowFee = subtotal * ESCROW_FEE_RATE;
-  let total = subtotal + escrowFee;
-  let canCreate = uidState[0].trim() !== "" && items.some(function(i) { return i.productName && i.unitPrice > 0; });
+  const subtotal = items.reduce(function(s, i) { return s + i.unitPrice * i.quantity; }, 0);
+  const escrowFee = subtotal * ESCROW_FEE_RATE;
+  const total = subtotal + escrowFee;
+  const canCreate = customerUid.trim() !== "" && items.some(function(i) { return i.productName && i.unitPrice > 0; });
 
-  let handleCreate = function() {
+  const handleCreate = function() {
     if (!canCreate) return;
-    savingState[1](true);
-    fetch("/api/invoices", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ storeId: store.id, customerPiUid: uidState[0].trim(), customerName: nameState[0].trim(), items: items, notes: notesState[0], escrowFee: escrowFee }),
-    }).then(function(res) {
+    setSaving(true);
+    api.post("/api/invoices", { storeId: store.id, customerPiUid: customerUid.trim(), customerName: customerName.trim(), items: items, notes: notes, escrowFee: escrowFee }, piUid).then(function(res) {
       if (res.ok) {
         qc.invalidateQueries({ queryKey: ["invoices"] });
-        openState[1](false); nameState[1](""); uidState[1](""); notesState[1]("");
+        setOpen(false); setCustomerName(""); setCustomerUid(""); setNotes("");
         setItems([{ productName: "", quantity: 1, unitPrice: 0 }]);
         toast({ title: "تم إنشاء الفاتورة" });
       } else { res.json().catch(function() { return {}; }).then(function(err) { toast({ title: "فشل إنشاء الفاتورة", description: err.error || "خطأ غير معروف", variant: "destructive" }); }); }
-    }).catch(function() { toast({ title: "خطأ في الاتصال", variant: "destructive" }); }).finally(function() { savingState[1](false); });
+    }).catch(function() { toast({ title: "خطأ في الاتصال", variant: "destructive" }); }).finally(function() { setSaving(false); });
   };
 
-  let invRes = useQuery({
+  const invRes = useQuery({
     queryKey: ["invoices", "merchant", store.id],
-    queryFn: function() { return fetch("/api/invoices?storeId=" + store.id).then(function(r) { return r.json(); }); },
+    queryFn: function() { return api.get("/api/invoices?storeId=" + store.id, piUid).then(function(r) { return r.json(); }); },
+    staleTime: 30_000,
   });
-  let invoiceList = (invRes.data || []) as InvoiceData[];
+  const invoiceList = (invRes.data || []) as InvoiceData[];
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h2 className="font-bold text-base">الفواتير <span className="text-muted-foreground font-normal text-xs">({invoiceList.length})</span></h2>
-        <Dialog open={openState[0]} onOpenChange={openState[1]}>
+        <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild><Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs"><Plus className="h-3.5 w-3.5 ml-1.5" />فاتورة جديدة</Button></DialogTrigger>
           <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
             <DialogHeader><DialogTitle className="text-sm">فاتورة جديدة</DialogTitle><DialogDescription className="text-xs">إنشاء فاتورة مع ضمان الدفع</DialogDescription></DialogHeader>
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5"><Label className="text-xs">اسم المشتري</Label><Input value={nameState[0]} onChange={function(e) { nameState[1](e.target.value); }} placeholder="اختياري" className="text-sm" /></div>
-                <div className="space-y-1.5"><Label className="text-xs">UID المشتري *</Label><Input value={uidState[0]} onChange={function(e) { uidState[1](e.target.value); }} placeholder="من Pi" className="text-sm" dir="ltr" /></div>
+                <div className="space-y-1.5"><Label className="text-xs">اسم المشتري</Label><Input value={customerName} onChange={function(e) { setCustomerName(e.target.value); }} placeholder="اختياري" className="text-sm" /></div>
+                <div className="space-y-1.5"><Label className="text-xs">UID المشتري *</Label><Input value={customerUid} onChange={function(e) { setCustomerUid(e.target.value); }} placeholder="من Pi" className="text-sm" dir="ltr" /></div>
               </div>
               <div className="space-y-2">
                 <div className="flex items-center justify-between"><Label className="text-xs">المنتجات</Label>{items.length < 10 && <Button variant="ghost" size="sm" onClick={addItem} className="h-7 text-xs text-emerald-600"><Plus className="h-3 w-3 ml-1" />إضافة</Button>}</div>
                 <div className="space-y-2">
                   {items.map(function(item, idx) {
-                    let activeProducts = products.filter(function(p) { return p.isActive; });
+                    const activeProducts = products.filter(function(p) { return p.isActive; });
                     return (
                       <div key={idx} className="grid grid-cols-[1fr_48px_68px_28px] gap-1.5 items-end">
                         <div>
@@ -763,7 +763,7 @@ function InvoicesView({ store, products }: { store: StoreData; products: Product
                   })}
                 </div>
               </div>
-              <div className="space-y-1.5"><Label className="text-xs">ملاحظات</Label><Textarea value={notesState[0]} onChange={function(e) { notesState[1](e.target.value); }} placeholder="اختياري..." className="text-sm min-h-[56px]" /></div>
+              <div className="space-y-1.5"><Label className="text-xs">ملاحظات</Label><Textarea value={notes} onChange={function(e) { setNotes(e.target.value); }} placeholder="اختياري..." className="text-sm min-h-[56px]" /></div>
               <div className="bg-muted/50 rounded-xl p-3 space-y-1 text-sm">
                 <div className="flex justify-between text-xs text-muted-foreground"><span>المجموع الفرعي</span><span>{subtotal.toFixed(2)} π</span></div>
                 <div className="flex justify-between text-xs text-muted-foreground"><span>رسوم الضمان ({(ESCROW_FEE_RATE * 100).toFixed(0)}%)</span><span>{escrowFee.toFixed(2)} π</span></div>
@@ -771,19 +771,23 @@ function InvoicesView({ store, products }: { store: StoreData; products: Product
                 <div className="flex justify-between font-bold text-sm"><span>الإجمالي</span><span className="text-emerald-600">{total.toFixed(2)} π</span></div>
               </div>
             </div>
-            <DialogFooter><Button onClick={handleCreate} disabled={!canCreate || savingState[0]} size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs">{savingState[0] ? <Loader2 className="h-3.5 w-3.5 animate-spin ml-1.5" /> : <Receipt className="h-3.5 w-3.5 ml-1.5" />}إنشاء</Button></DialogFooter>
+            <DialogFooter><Button onClick={handleCreate} disabled={!canCreate || saving} size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs">{saving ? <Loader2 className="h-3.5 w-3.5 animate-spin ml-1.5" /> : <Receipt className="h-3.5 w-3.5 ml-1.5" />}إنشاء</Button></DialogFooter>
           </DialogContent>
         </Dialog>
       </div>
 
       {invoiceList.length === 0 ? (
-        <Card className="border-dashed"><CardContent className="py-12 text-center text-muted-foreground"><FileText className="h-10 w-10 mx-auto mb-3 opacity-30" /><p className="text-sm">لا توجد فواتير</p></CardContent></Card>
+        <div className="flex flex-col items-center justify-center py-12 text-center">
+          <FileText className="h-12 w-12 text-muted-foreground/30 mb-3" />
+          <p className="text-sm font-medium text-muted-foreground">لا توجد فواتير بعد</p>
+          <p className="text-xs text-muted-foreground/70 mt-1">أنشئ أول فاتورة</p>
+        </div>
       ) : (
         <div className="space-y-2.5">
           {invoiceList.map(function(inv) {
             return (
               <Card key={inv.id} className="border-0 shadow-sm">
-                <CardContent className="p-3.5 space-y-2 cursor-pointer" onClick={function() { detailState[1](inv); }}>
+                <CardContent className="p-3.5 space-y-2 cursor-pointer" onClick={function() { setDetail(inv); }}>
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2.5 min-w-0">
                       <div className="w-8 h-8 rounded-lg bg-emerald-500/10 flex items-center justify-center shrink-0"><Receipt className="h-4 w-4 text-emerald-600" /></div>
@@ -802,16 +806,16 @@ function InvoicesView({ store, products }: { store: StoreData; products: Product
       )}
 
       {/* Detail Dialog */}
-      <Dialog open={!!detailState[0]} onOpenChange={function(open) { if (!open) detailState[1](null); }}>
+      <Dialog open={!!detail} onOpenChange={function(open) { if (!open) setDetail(null); }}>
         <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
-          {detailState[0] && (
+          {detail && (
             <div className="space-y-4">
-              <DialogHeader><DialogTitle className="text-sm">{detailState[0].invoiceNumber}</DialogTitle><DialogDescription className="text-xs">{fmtDate(detailState[0].createdAt)} — {detailState[0].customerName || detailState[0].customerPiUid}</DialogDescription></DialogHeader>
-              <div className="flex items-center gap-2"><StatusBadge status={detailState[0].status} /><span className="text-sm font-bold text-emerald-600">{detailState[0].total.toFixed(2)} π</span></div>
+              <DialogHeader><DialogTitle className="text-sm">{detail.invoiceNumber}</DialogTitle><DialogDescription className="text-xs">{fmtDate(detail.createdAt)} — {detail.customerName || detail.customerPiUid}</DialogDescription></DialogHeader>
+              <div className="flex items-center gap-2"><StatusBadge status={detail.status} /><span className="text-sm font-bold text-emerald-600">{detail.total.toFixed(2)} π</span></div>
               <Separator />
               <div className="space-y-1.5">
                 <p className="text-[10px] font-semibold text-muted-foreground">المنتجات</p>
-                {detailState[0].items.map(function(item, i) {
+                {detail.items.map(function(item, i) {
                   return (
                     <div key={item.id || i} className="flex items-center justify-between text-xs py-0.5">
                       <span className="truncate max-w-[50%]">{item.productName}</span>
@@ -821,28 +825,28 @@ function InvoicesView({ store, products }: { store: StoreData; products: Product
                 })}
               </div>
               <div className="bg-muted/50 rounded-lg p-3 space-y-1 text-xs">
-                <div className="flex justify-between"><span className="text-muted-foreground">المجموع الفرعي</span><span>{detailState[0].subtotal.toFixed(2)} π</span></div>
-                {detailState[0].escrowFee > 0 && <div className="flex justify-between"><span className="text-muted-foreground">رسوم الضمان</span><span>{detailState[0].escrowFee.toFixed(2)} π</span></div>}
+                <div className="flex justify-between"><span className="text-muted-foreground">المجموع الفرعي</span><span>{detail.subtotal.toFixed(2)} π</span></div>
+                {detail.escrowFee > 0 && <div className="flex justify-between"><span className="text-muted-foreground">رسوم الضمان</span><span>{detail.escrowFee.toFixed(2)} π</span></div>}
                 <Separator className="my-1" />
-                <div className="flex justify-between font-bold"><span>الإجمالي</span><span className="text-emerald-600">{detailState[0].total.toFixed(2)} π</span></div>
+                <div className="flex justify-between font-bold"><span>الإجمالي</span><span className="text-emerald-600">{detail.total.toFixed(2)} π</span></div>
               </div>
-              {detailState[0].notes && <div className="text-xs text-muted-foreground bg-muted/30 rounded-lg p-2"><span className="font-medium">ملاحظات:</span> {detailState[0].notes}</div>}
-              {detailState[0].paymentTxId && <div className="text-[9px] text-muted-foreground font-mono bg-muted/30 rounded-lg p-2 break-all" dir="ltr">TX الدفع: {detailState[0].paymentTxId}</div>}
-              {detailState[0].releaseTxId && <div className="text-[9px] text-muted-foreground font-mono bg-muted/30 rounded-lg p-2 break-all" dir="ltr">TX الإطلاق: {detailState[0].releaseTxId}</div>}
+              {detail.notes && <div className="text-xs text-muted-foreground bg-muted/30 rounded-lg p-2"><span className="font-medium">ملاحظات:</span> {detail.notes}</div>}
+              {detail.paymentTxId && <div className="text-[9px] text-muted-foreground font-mono bg-muted/30 rounded-lg p-2 break-all" dir="ltr">TX الدفع: {detail.paymentTxId}</div>}
+              {detail.releaseTxId && <div className="text-[9px] text-muted-foreground font-mono bg-muted/30 rounded-lg p-2 break-all" dir="ltr">TX الإطلاق: {detail.releaseTxId}</div>}
               {/* Timeline */}
               <div className="space-y-1.5">
                 <p className="text-[10px] font-semibold text-muted-foreground">تاريخ الحالة</p>
                 <div className="text-[11px] space-y-1">
-                  <div className="flex justify-between"><span className="text-muted-foreground">إنشاء</span><span>{fmtDate(detailState[0].createdAt)} {fmtTime(detailState[0].createdAt)}</span></div>
-                  {detailState[0].paidAt && <div className="flex justify-between"><span className="text-blue-500">دفع الضمان</span><span>{fmtDate(detailState[0].paidAt)} {fmtTime(detailState[0].paidAt)}</span></div>}
-                  {detailState[0].shippedAt && <div className="flex justify-between"><span className="text-purple-500">شحن</span><span>{fmtDate(detailState[0].shippedAt)} {fmtTime(detailState[0].shippedAt)}</span></div>}
-                  {detailState[0].deliveredAt && <div className="flex justify-between"><span className="text-teal-500">تسليم</span><span>{fmtDate(detailState[0].deliveredAt)} {fmtTime(detailState[0].deliveredAt)}</span></div>}
-                  {detailState[0].completedAt && <div className="flex justify-between"><span className="text-emerald-500">إكمال</span><span>{fmtDate(detailState[0].completedAt)} {fmtTime(detailState[0].completedAt)}</span></div>}
-                  {detailState[0].cancelledAt && <div className="flex justify-between"><span className="text-zinc-500">إلغاء</span><span>{fmtDate(detailState[0].cancelledAt)} {fmtTime(detailState[0].cancelledAt)}</span></div>}
+                  <div className="flex justify-between"><span className="text-muted-foreground">إنشاء</span><span>{fmtDate(detail.createdAt)} {fmtTime(detail.createdAt)}</span></div>
+                  {detail.paidAt && <div className="flex justify-between"><span className="text-blue-500">دفع الضمان</span><span>{fmtDate(detail.paidAt)} {fmtTime(detail.paidAt)}</span></div>}
+                  {detail.shippedAt && <div className="flex justify-between"><span className="text-purple-500">شحن</span><span>{fmtDate(detail.shippedAt)} {fmtTime(detail.shippedAt)}</span></div>}
+                  {detail.deliveredAt && <div className="flex justify-between"><span className="text-teal-500">تسليم</span><span>{fmtDate(detail.deliveredAt)} {fmtTime(detail.deliveredAt)}</span></div>}
+                  {detail.completedAt && <div className="flex justify-between"><span className="text-emerald-500">إكمال</span><span>{fmtDate(detail.completedAt)} {fmtTime(detail.completedAt)}</span></div>}
+                  {detail.cancelledAt && <div className="flex justify-between"><span className="text-zinc-500">إلغاء</span><span>{fmtDate(detail.cancelledAt)} {fmtTime(detail.cancelledAt)}</span></div>}
                 </div>
               </div>
               <div className="flex gap-2 pt-2">
-                <Button variant="outline" size="sm" className="text-xs" onClick={function() { copyText(detailState[0]!.invoiceNumber, toast, "تم نسخ رقم الفاتورة"); }}><Copy className="h-3 w-3 ml-1" />نسخ الرقم</Button>
+                <Button variant="outline" size="sm" className="text-xs" onClick={function() { copyText(detail!.invoiceNumber, toast, "تم نسخ رقم الفاتورة"); }}><Copy className="h-3 w-3 ml-1" />نسخ الرقم</Button>
               </div>
             </div>
           )}
@@ -860,11 +864,10 @@ function OrdersView({ merchantInvoices, customerInvoices, store, customerUid, on
   onConfirmDelivery: (i: InvoiceData) => void; onRelease: (i: InvoiceData) => void;
   onDispute: (i: InvoiceData) => void; onCancel: (i: InvoiceData) => void;
 }) {
-  let viewState = useState<string>("merchant");
-  let view = viewState[0];
-  let filterState = useState("");
-  let invoices = view === "merchant" ? merchantInvoices : customerInvoices;
-  let filtered = filterState[0] ? invoices.filter(function(inv) { return inv.status === filterState[0]; }) : invoices;
+  const [view, setView] = useState<string>("merchant");
+  const [filter, setFilter] = useState("");
+  const invoices = view === "merchant" ? merchantInvoices : customerInvoices;
+  const filtered = filter ? invoices.filter(function(inv) { return inv.status === filter; }) : invoices;
 
   return (
     <div className="space-y-4">
@@ -872,14 +875,20 @@ function OrdersView({ merchantInvoices, customerInvoices, store, customerUid, on
         <h2 className="font-bold text-base shrink-0">الطلبات</h2>
         <div className="flex gap-2">
           <div className="flex rounded-lg border p-0.5 bg-muted/50">
-            <button onClick={function() { viewState[1]("merchant"); }} className={"px-3 py-1.5 rounded-md text-xs transition-colors" + (view === "merchant" ? " bg-emerald-600 text-white" : " text-muted-foreground")}><Store className="h-3 w-3 inline ml-1" />بائع</button>
-            <button onClick={function() { viewState[1]("customer"); }} className={"px-3 py-1.5 rounded-md text-xs transition-colors" + (view === "customer" ? " bg-emerald-600 text-white" : " text-muted-foreground")}><ShoppingCart className="h-3 w-3 inline ml-1" />مشتري</button>
+            <button onClick={function() { setView("merchant"); }} className={"px-3 py-1.5 rounded-md text-xs transition-colors" + (view === "merchant" ? " bg-emerald-600 text-white" : " text-muted-foreground")}><Store className="h-3 w-3 inline ml-1" />بائع</button>
+            <button onClick={function() { setView("customer"); }} className={"px-3 py-1.5 rounded-md text-xs transition-colors" + (view === "customer" ? " bg-emerald-600 text-white" : " text-muted-foreground")}><ShoppingCart className="h-3 w-3 inline ml-1" />مشتري</button>
           </div>
         </div>
       </div>
 
-      {filtered.length === 0 ? (
-        <Card className="border-dashed"><CardContent className="py-12 text-center text-muted-foreground"><ShoppingCart className="h-10 w-10 mx-auto mb-3 opacity-30" /><p className="text-sm">لا توجد طلبات</p></CardContent></Card>
+      {merchantInvoices.length === 0 && customerInvoices.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-12 text-center">
+          <ShoppingCart className="h-12 w-12 text-muted-foreground/30 mb-3" />
+          <p className="text-sm font-medium text-muted-foreground">لا توجد طلبات بعد</p>
+          <p className="text-xs text-muted-foreground/70 mt-1">ستظهر الطلبات هنا عند إنشاء فواتير</p>
+        </div>
+      ) : filtered.length === 0 ? (
+        <Card className="border-dashed"><CardContent className="py-12 text-center text-muted-foreground"><ShoppingCart className="h-10 w-10 mx-auto mb-3 opacity-30" /><p className="text-sm">لا توجد طلبات بهذا التصنيف</p></CardContent></Card>
       ) : (
         <div className="space-y-2.5 max-h-[70vh] overflow-y-auto">
           {filtered.map(function(inv) {
@@ -899,16 +908,15 @@ function OrderCard({ invoice: inv, view, store, onPay, onShip, onConfirmDelivery
   onConfirmDelivery: (i: InvoiceData) => void; onRelease: (i: InvoiceData) => void;
   onDispute: (i: InvoiceData) => void; onCancel: (i: InvoiceData) => void;
 }) {
-  let expandedState = useState(false);
-  let expanded = expandedState[0];
-  let loadingState = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  const [loading, setLoading] = useState(false);
 
-  let canPay = view === "customer" && inv.status === "pending";
-  let canShip = view === "merchant" && inv.status === "paid_escrow";
-  let canConfirm = view === "customer" && inv.status === "shipped";
-  let canRelease = view === "merchant" && inv.status === "delivered";
-  let canDispute = view === "customer" && (inv.status === "paid_escrow" || inv.status === "shipped");
-  let canCancel = inv.status === "pending";
+  const canPay = view === "customer" && inv.status === "pending";
+  const canShip = view === "merchant" && inv.status === "paid_escrow";
+  const canConfirm = view === "customer" && inv.status === "shipped";
+  const canRelease = view === "merchant" && inv.status === "delivered";
+  const canDispute = view === "customer" && (inv.status === "paid_escrow" || inv.status === "shipped");
+  const canCancel = inv.status === "pending";
 
   return (
     <Card className="border-0 shadow-sm hover:shadow-md transition-shadow">
@@ -934,14 +942,14 @@ function OrderCard({ invoice: inv, view, store, onPay, onShip, onConfirmDelivery
           {canPay && <ActionBtn icon={<CreditCard className="h-3 w-3 ml-1" />} label="دفع بالـ Pi" onClick={function() { onPay(inv); }} primary />}
           {canShip && <ActionBtn icon={<Truck className="h-3 w-3 ml-1" />} label="شحن" onClick={function() { onShip(inv); }} outline="border-blue-500/30 text-blue-600" />}
           {canConfirm && <ActionBtn icon={<CheckCircle2 className="h-3 w-3 ml-1" />} label="تأكيد التسليم" onClick={function() { onConfirmDelivery(inv); }} outline="border-teal-500/30 text-teal-600" />}
-          {canRelease && <ActionBtn icon={<Wallet className="h-3 w-3 ml-1" />} label="إطلاق Pi" onClick={function() { loadingState[1](true); onRelease(inv); loadingState[1](false); }} primary loading={loadingState[0]} />}
+          {canRelease && <ActionBtn icon={<Wallet className="h-3 w-3 ml-1" />} label="إطلاق Pi" onClick={function() { setLoading(true); onRelease(inv); setLoading(false); }} primary loading={loading} />}
           {canDispute && <ActionBtn icon={<AlertTriangle className="h-3 w-3 ml-1" />} label="فتح نزاع" onClick={function() { onDispute(inv); }} outline="border-red-500/30 text-red-500" />}
           {canCancel && (
             <AlertDialog><AlertDialogTrigger asChild><ActionBtn icon={<Ban className="h-3 w-3 ml-1" />} label="إلغاء" outline="border-red-500/30 text-red-500" /></AlertDialogTrigger>
               <AlertDialogContent><AlertDialogHeader><AlertDialogTitle className="text-sm">إلغاء الطلب</AlertDialogTitle><AlertDialogDescription className="text-xs">هل تريد إلغاء هذا الطلب؟</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel className="text-xs">لا</AlertDialogCancel><AlertDialogAction onClick={function() { onCancel(inv); }} className="text-xs bg-red-600 hover:bg-red-700">نعم، إلغاء</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
             </AlertDialog>
           )}
-          <button onClick={function() { expandedState[1](!expanded); }} className="h-7 px-2 text-[11px] text-muted-foreground mr-auto rounded-md hover:bg-muted transition-colors">
+          <button onClick={function() { setExpanded(!expanded); }} className="h-7 px-2 text-[11px] text-muted-foreground mr-auto rounded-md hover:bg-muted transition-colors">
             {expanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}التفاصيل
           </button>
         </div>
@@ -982,27 +990,28 @@ function ActionBtn({ icon, label, onClick, primary, outline, loading }: { icon: 
 }
 
 /* ═══ Settings ═══ */
-function SettingsView({ store, onUpdate, onDelete, updating, deleting }: {
+function SettingsView({ store, onUpdate, onDelete, updating, deleting, piUid: _piUid }: {
   store: StoreData; onUpdate: (d: { id: string; name?: string; description?: string; avatar?: string }) => void;
-  onDelete: () => void; updating: boolean; deleting: boolean;
+  onDelete: () => void; updating: boolean; deleting: boolean; piUid: string;
 }) {
-  let nameState = useState(store.name);
-  let descState = useState(store.description);
-  let savedState = useState(false);
+  const [name, setName] = useState(store.name);
+  const [desc, setDesc] = useState(store.description);
+  const [saved, setSaved] = useState(false);
 
   // Sync local state when store data changes from server
   useEffect(function() {
-    nameState[1](store.name);
-    descState[1](store.description);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setName(store.name);
+    setDesc(store.description);
   }, [store.name, store.description]);
 
-  let handleSave = function() {
-    onUpdate({ id: store.id, name: nameState[0].trim(), description: descState[0].trim() });
-    savedState[1](true);
-    setTimeout(function() { savedState[1](false); }, 2000);
+  const handleSave = function() {
+    onUpdate({ id: store.id, name: name.trim(), description: desc.trim() });
+    setSaved(true);
+    setTimeout(function() { setSaved(false); }, 2000);
   };
 
-  let toast = useToast().toast;
+  const toast = useToast().toast;
 
   return (
     <div className="space-y-4 max-w-lg mx-auto">
@@ -1010,8 +1019,8 @@ function SettingsView({ store, onUpdate, onDelete, updating, deleting }: {
       <Card className="border-0 shadow-sm">
         <CardHeader className="pb-3 pt-4 px-4"><CardTitle className="text-xs font-bold flex items-center gap-2"><Store className="h-3.5 w-3.5 text-emerald-500" />معلومات المتجر</CardTitle></CardHeader>
         <CardContent className="px-4 pb-4 space-y-3">
-          <div className="space-y-1.5"><Label className="text-xs">اسم المتجر</Label><Input value={nameState[0]} onChange={function(e) { nameState[1](e.target.value); savedState[1](false); }} className="text-sm" /></div>
-          <div className="space-y-1.5"><Label className="text-xs">الوصف</Label><Textarea value={descState[0]} onChange={function(e) { descState[1](e.target.value); savedState[1](false); }} className="text-sm min-h-[72px]" /></div>
+          <div className="space-y-1.5"><Label className="text-xs">اسم المتجر</Label><Input value={name} onChange={function(e) { setName(e.target.value); setSaved(false); }} className="text-sm" /></div>
+          <div className="space-y-1.5"><Label className="text-xs">الوصف</Label><Textarea value={desc} onChange={function(e) { setDesc(e.target.value); setSaved(false); }} className="text-sm min-h-[72px]" /></div>
           <div className="space-y-1.5">
             <Label className="text-xs">معرّف Pi (UID)</Label>
             <div className="flex items-center gap-2">
@@ -1019,9 +1028,9 @@ function SettingsView({ store, onUpdate, onDelete, updating, deleting }: {
               <Button variant="outline" size="sm" className="shrink-0 h-8" onClick={function() { copyText(store.piUid, toast, "تم نسخ المعرف"); }}><Copy className="h-3.5 w-3.5" /></Button>
             </div>
           </div>
-          <Button onClick={handleSave} disabled={updating || savedState[0]} size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs">
-            {updating ? <Loader2 className="h-3.5 w-3.5 animate-spin ml-1.5" /> : savedState[0] ? <CheckCircle2 className="h-3.5 w-3.5 ml-1.5" /> : <Pencil className="h-3.5 w-3.5 ml-1.5" />}
-            {savedState[0] ? "تم الحفظ" : "حفظ التغييرات"}
+          <Button onClick={handleSave} disabled={updating || saved} size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs">
+            {updating ? <Loader2 className="h-3.5 w-3.5 animate-spin ml-1.5" /> : saved ? <CheckCircle2 className="h-3.5 w-3.5 ml-1.5" /> : <Pencil className="h-3.5 w-3.5 ml-1.5" />}
+            {saved ? "تم الحفظ" : "حفظ التغييرات"}
           </Button>
         </CardContent>
       </Card>
@@ -1064,34 +1073,34 @@ interface TestPaymentRecord {
   error?: string;
 }
 
-function PiSetupView() {
-  let toast = useToast().toast;
-  let uidState = useState("");
-  let amountState = useState("0.01");
-  let memoState = useState("Testnet A2U test payment");
-  let sendingState = useState(false);
-  let simModeState = useState(true); // Default: simulation mode ON (for dev/testing)
-  let paymentsState = useState<TestPaymentRecord[]>([]);
-  let walletCheckState = useState<{ checked: boolean; configured: boolean; walletAddress: string; message: string; hasSimulated?: boolean }>({
+function PiSetupView({ piUid }: { piUid: string }) {
+  const toast = useToast().toast;
+  const [uid, setUid] = useState("");
+  const [amount, setAmount] = useState("0.01");
+  const [memo, setMemo] = useState("Testnet A2U test payment");
+  const [sending, setSending] = useState(false);
+  const [simMode, setSimMode] = useState(true); // Default: simulation mode ON (for dev/testing)
+  const [payments, setPayments] = useState<TestPaymentRecord[]>([]);
+  const [walletCheck, setWalletCheck] = useState<{ checked: boolean; configured: boolean; walletAddress: string; message: string; hasSimulated?: boolean }>({
     checked: false, configured: false, walletAddress: "", message: "", hasSimulated: false,
   });
 
   // Count unique UIDs from completed payments
-  let completedPayments = paymentsState[0].filter(function(p) { return p.status === "completed"; });
-  let uniqueUids = new Set(completedPayments.map(function(p) { return p.uid; }));
-  let uniqueCount = uniqueUids.size;
-  let progressPercent = Math.min((uniqueCount / 5) * 100, 100);
-  let requirementMet = uniqueCount >= 5;
+  const completedPayments = payments.filter(function(p) { return p.status === "completed"; });
+  const uniqueUids = new Set(completedPayments.map(function(p) { return p.uid; }));
+  const uniqueCount = uniqueUids.size;
+  const progressPercent = Math.min((uniqueCount / 5) * 100, 100);
+  const requirementMet = uniqueCount >= 5;
 
   // Check testnet wallet status on mount
   useEffect(function() {
-    fetch("/api/pi/testnet-a2u", { method: "GET" })
+    api.get("/api/pi/testnet-a2u", piUid)
       .then(function(res) { return res.json(); })
       .then(function(data) {
-        walletCheckState[1]({ checked: true, configured: data.configured, walletAddress: data.walletAddress || "", message: data.message || "", hasSimulated: data.hasSimulated || false });
+        setWalletCheck({ checked: true, configured: data.configured, walletAddress: data.walletAddress || "", message: data.message || "", hasSimulated: data.hasSimulated || false });
         // Load any existing payments from server
         if (data.recentPayments && data.recentPayments.length > 0) {
-          let serverPayments: TestPaymentRecord[] = data.recentPayments.map(function(p: Record<string, unknown>) {
+          const serverPayments: TestPaymentRecord[] = data.recentPayments.map(function(p: Record<string, unknown>) {
             return {
               uid: String(p.uid),
               amount: String(p.amount),
@@ -1102,59 +1111,55 @@ function PiSetupView() {
             };
           });
           // Merge with local state, avoiding duplicates
-          let localUids = new Set(paymentsState[0].map(function(lp) { return lp.uid + lp.timestamp; }));
-          let newFromServer = serverPayments.filter(function(sp) { return !localUids.has(sp.uid + sp.timestamp); });
-          paymentsState[1](function(prev) { return newFromServer.concat(prev); });
+          const localUids = new Set(payments.map(function(lp) { return lp.uid + lp.timestamp; }));
+          const newFromServer = serverPayments.filter(function(sp) { return !localUids.has(sp.uid + sp.timestamp); });
+          setPayments(function(prev) { return newFromServer.concat(prev); });
         }
       })
       .catch(function() {
-        walletCheckState[1]({ checked: true, configured: false, walletAddress: "", message: "فشل الاتصال بالخادم" });
+        setWalletCheck({ checked: true, configured: false, walletAddress: "", message: "فشل الاتصال بالخادم" });
       });
   }, []);
 
-  let handleSendPayment = function() {
-    let uid = uidState[0].trim();
-    let amount = amountState[0].trim();
-    let memo = memoState[0].trim();
+  const handleSendPayment = function() {
+    const targetUid = uid.trim();
+    const amountVal = amount.trim();
+    const memoVal = memo.trim();
 
-    if (!uid) {
+    if (!targetUid) {
       toast({ title: "يرجى إدخال معرّف Pi للمستلم", variant: "destructive" });
       return;
     }
-    if (!amount || isNaN(parseFloat(amount)) || parseFloat(amount) <= 0) {
+    if (!amountVal || isNaN(parseFloat(amountVal)) || parseFloat(amountVal) <= 0) {
       toast({ title: "يرجى إدخال مبلغ صحيح", variant: "destructive" });
       return;
     }
 
-    sendingState[1](true);
+    setSending(true);
 
     // Add pending entry
-    let pendingRecord: TestPaymentRecord = {
-      uid: uid,
-      amount: amount,
-      memo: memo,
+    const pendingRecord: TestPaymentRecord = {
+      uid: targetUid,
+      amount: amountVal,
+      memo: memoVal,
       status: "pending",
       timestamp: new Date().toISOString(),
     };
-    paymentsState[1](function(prev) { return [pendingRecord].concat(prev); });
+    setPayments(function(prev) { return [pendingRecord].concat(prev); });
 
-    fetch("/api/pi/testnet-a2u", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ amount: amount, uid: uid, memo: memo, simulate: simModeState[0] }),
-    })
+    api.post("/api/pi/testnet-a2u", { amount: amountVal, uid: targetUid, memo: memoVal, simulate: simMode }, piUid)
       .then(function(res) {
         return res.json().then(function(data) {
           return { ok: res.ok, data: data };
         });
       })
       .then(function(result) {
-        sendingState[1](false);
+        setSending(false);
         if (result.ok && result.data.success) {
           // Update pending to completed
-          paymentsState[1](function(prev) {
+          setPayments(function(prev) {
             return prev.map(function(p) {
-              if (p.uid === uid && p.timestamp === pendingRecord.timestamp && p.status === "pending") {
+              if (p.uid === targetUid && p.timestamp === pendingRecord.timestamp && p.status === "pending") {
                 return Object.assign({}, p, { status: "completed" as const });
               }
               return p;
@@ -1166,12 +1171,12 @@ function PiSetupView() {
               ? "تهانينا! تم استيفاء شرط الـ 5 محافظ المختلفة 🎉"
               : "تم الدفع لـ " + (uniqueCount + 1) + " من 5 محافظ مطلوبة",
           });
-          uidState[1]("");
+          setUid("");
         } else {
           // Update pending to failed
-          paymentsState[1](function(prev) {
+          setPayments(function(prev) {
             return prev.map(function(p) {
-              if (p.uid === uid && p.timestamp === pendingRecord.timestamp && p.status === "pending") {
+              if (p.uid === targetUid && p.timestamp === pendingRecord.timestamp && p.status === "pending") {
                 return Object.assign({}, p, { status: "failed" as const, error: result.data.error || result.data.details || "خطأ غير معروف" });
               }
               return p;
@@ -1181,10 +1186,10 @@ function PiSetupView() {
         }
       })
       .catch(function() {
-        sendingState[1](false);
-        paymentsState[1](function(prev) {
+        setSending(false);
+        setPayments(function(prev) {
           return prev.map(function(p) {
-            if (p.uid === uid && p.timestamp === pendingRecord.timestamp && p.status === "pending") {
+            if (p.uid === targetUid && p.timestamp === pendingRecord.timestamp && p.status === "pending") {
               return Object.assign({}, p, { status: "failed" as const, error: "خطأ في الاتصال" });
             }
             return p;
@@ -1259,14 +1264,14 @@ function PiSetupView() {
       </Card>
 
       {/* Simulation Mode Banner */}
-      {simModeState[0] && (
+      {simMode && (
         <div className="flex items-center gap-2.5 p-3 rounded-xl bg-amber-500/5 border border-amber-500/15">
           <Zap className="h-4 w-4 text-amber-500 shrink-0" />
           <div className="flex-1 min-w-0">
             <p className="text-xs font-medium text-amber-700 dark:text-amber-400">وضع المحاكاة نشط</p>
             <p className="text-[10px] text-amber-600/70 dark:text-amber-400/60">يتم تسجيل المدفوعات بدون اتصال فعلي بـ Pi API. أوقف المحاكاة عند التشغيل في متصفح Pi.</p>
           </div>
-          <Button variant="outline" size="sm" className="text-[10px] shrink-0 h-7 border-amber-500/30 text-amber-600" onClick={function() { simModeState[1](false); }}>
+          <Button variant="outline" size="sm" className="text-[10px] shrink-0 h-7 border-amber-500/30 text-amber-600" onClick={function() { setSimMode(false); }}>
             إيقاف المحاكاة
           </Button>
         </div>
@@ -1278,8 +1283,8 @@ function PiSetupView() {
           <CardTitle className="text-xs font-bold flex items-center gap-2">
             <Send className="h-3.5 w-3.5 text-emerald-500" />
             إرسال دفعة اختبار A2U
-            {!simModeState[0] && (
-              <Button variant="ghost" size="sm" className="text-[10px] ml-auto h-6 text-amber-600 hover:text-amber-700" onClick={function() { simModeState[1](true); }}>
+            {!simMode && (
+              <Button variant="ghost" size="sm" className="text-[10px] ml-auto h-6 text-amber-600 hover:text-amber-700" onClick={function() { setSimMode(true); }}>
                 <Zap className="h-3 w-3 ml-1" />تفعيل المحاكاة
               </Button>
             )}
@@ -1289,8 +1294,8 @@ function PiSetupView() {
           <div className="space-y-1.5">
             <Label className="text-xs">معرّف Pi للمستلم (UID)</Label>
             <Input
-              value={uidState[0]}
-              onChange={function(e) { uidState[1](e.target.value); }}
+              value={uid}
+              onChange={function(e) { setUid(e.target.value); }}
               placeholder="مثال: user_alphanumeric_uid"
               className="text-sm font-mono"
               dir="ltr"
@@ -1302,8 +1307,8 @@ function PiSetupView() {
             <Input
               type="text"
               inputMode="decimal"
-              value={amountState[0]}
-              onChange={function(e) { amountState[1](e.target.value); }}
+              value={amount}
+              onChange={function(e) { setAmount(e.target.value); }}
               placeholder="0.01"
               className="text-sm"
               dir="ltr"
@@ -1312,17 +1317,17 @@ function PiSetupView() {
           <div className="space-y-1.5">
             <Label className="text-xs">الملاحظة (Memo)</Label>
             <Input
-              value={memoState[0]}
-              onChange={function(e) { memoState[1](e.target.value); }}
+              value={memo}
+              onChange={function(e) { setMemo(e.target.value); }}
               className="text-sm"
             />
           </div>
           <Button
             onClick={handleSendPayment}
-            disabled={!uidState[0].trim() || sendingState[0]}
+            disabled={!uid.trim() || sending}
             className="w-full bg-emerald-600 hover:bg-emerald-700 text-white text-sm h-10"
           >
-            {sendingState[0] ? (
+            {sending ? (
               <Loader2 className="h-4 w-4 animate-spin ml-2" />
             ) : (
               <Send className="h-4 w-4 ml-2" />
@@ -1341,10 +1346,10 @@ function PiSetupView() {
             <Badge variant="outline" className="text-[10px]">
               {completedPayments.length} دفعة — {uniqueCount} UID فريد
             </Badge>
-            {paymentsState[0].length > 0 && (
+            {payments.length > 0 && (
               <Button variant="ghost" size="sm" className="text-[10px] ml-auto h-6 text-red-400 hover:text-red-500" onClick={function() {
-                fetch("/api/pi/testnet-a2u", { method: "DELETE" }).then(function() {
-                  paymentsState[1]([]);
+                api.delete("/api/pi/testnet-a2u", undefined, piUid).then(function() {
+                  setPayments([]);
                   toast({ title: "تم مسح السجل" });
                 }).catch(function() {});
               }}>
@@ -1354,14 +1359,14 @@ function PiSetupView() {
           </CardTitle>
         </CardHeader>
         <CardContent className="px-4 pb-4">
-          {paymentsState[0].length === 0 ? (
+          {payments.length === 0 ? (
             <div className="py-8 text-center text-muted-foreground">
               <Send className="h-8 w-8 mx-auto mb-2 opacity-20" />
               <p className="text-xs">لم يتم إرسال أي مدفوعات بعد</p>
             </div>
           ) : (
             <div className="space-y-2 max-h-64 overflow-y-auto">
-              {paymentsState[0].map(function(p, idx) {
+              {payments.map(function(p, idx) {
                 return (
                   <div key={idx} className="flex items-center justify-between py-1.5 border-b border-border/30 last:border-0">
                     <div className="flex items-center gap-2 min-w-0">
@@ -1519,7 +1524,7 @@ function PiSetupView() {
           })}
           <div className="mt-2 p-2 bg-amber-500/5 rounded-lg border border-amber-500/10">
             <p className="text-[11px] text-amber-700 dark:text-amber-400 leading-relaxed">
-              💡 <span className="font-medium">ملاحظة:</span> المدفوعات تتم على شبكة الاختبار (Sandbox) وليست الشبكة الرئيسية.
+              💡 <span className="font-medium">ملاحظة:</span> المدفوعات تتم على شبكة الاختبار (Sandbox) وليس الشبكة الرئيسية.
               لا يتم خصم Pi حقيقي. استخدم API Key نفسه من ملف .env.
             </p>
           </div>

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { verifyPiAuth, sanitizeString, checkRateLimit } from "@/lib/api-auth";
 
 const PI_API_BASE = "https://api.minepi.com/v2";
 
@@ -33,24 +34,32 @@ export async function GET(
   });
 }
 
-// POST /api/pi_payment/[action] — main handler
+// POST /api/pi_payment/[action] — main handler (auth required)
 export async function POST(
   req: NextRequest,
   context: RouteContext,
 ) {
   const { action } = await context.params;
+
+  // Auth check for all payment actions
+  const rateLimitErr = checkRateLimit(req);
+  if (rateLimitErr) return rateLimitErr;
+
+  const auth = await verifyPiAuth(req);
+  if (!auth.ok) return auth.response;
+
   const body = await req.json();
 
   try {
     switch (action) {
       case "approve":
-        return handleApprove(body);
+        return handleApprove(body, auth.user.uid);
       case "complete":
-        return handleComplete(body);
+        return handleComplete(body, auth.user.uid);
       case "cancel":
-        return handleCancel(body);
+        return handleCancel(body, auth.user.uid);
       case "error":
-        return handleError(body);
+        return handleError(body, auth.user.uid);
       case "incomplete":
         return handleIncomplete(body);
       default:
@@ -82,7 +91,7 @@ export async function POST(
 }
 
 // ─── APPROVE ───────────────────────────────────────────────────────────────────
-async function handleApprove(body: { paymentId?: string; invoiceId?: string }) {
+async function handleApprove(body: { paymentId?: string; invoiceId?: string }, _userUid: string) {
   const { paymentId, invoiceId } = body;
 
   if (!paymentId) {
@@ -93,7 +102,7 @@ async function handleApprove(body: { paymentId?: string; invoiceId?: string }) {
   }
 
   const piRes = await fetch(
-    `${PI_API_BASE}/payments/${paymentId}/approve`,
+    `${PI_API_BASE}/payments/${sanitizeString(paymentId, 200)}/approve`,
     {
       method: "POST",
       headers: piHeaders(),
@@ -137,7 +146,7 @@ async function handleComplete(body: {
   paymentId?: string;
   txid?: string;
   invoiceId?: string;
-}) {
+}, _userUid: string) {
   const { paymentId, txid, invoiceId } = body;
 
   if (!paymentId || !txid) {
@@ -148,11 +157,11 @@ async function handleComplete(body: {
   }
 
   const piRes = await fetch(
-    `${PI_API_BASE}/payments/${paymentId}/complete`,
+    `${PI_API_BASE}/payments/${sanitizeString(paymentId, 200)}/complete`,
     {
       method: "POST",
       headers: piHeaders(),
-      body: JSON.stringify({ txid }),
+      body: JSON.stringify({ txid: sanitizeString(txid, 200) }),
     },
   );
 
@@ -167,8 +176,6 @@ async function handleComplete(body: {
 
   const paymentDTO = await piRes.json();
 
-  // After U2A complete, the money is in escrow. Status stays paid_escrow.
-  // It moves to shipped/delivered/completed through the seller workflow.
   if (invoiceId) {
     await db.invoice.update({
       where: { id: invoiceId },
@@ -196,7 +203,7 @@ async function handleComplete(body: {
 }
 
 // ─── CANCEL ────────────────────────────────────────────────────────────────────
-async function handleCancel(body: { paymentId?: string; invoiceId?: string }) {
+async function handleCancel(body: { paymentId?: string; invoiceId?: string }, _userUid: string) {
   const { paymentId, invoiceId } = body;
 
   if (!paymentId) {
@@ -225,7 +232,7 @@ async function handleError(body: {
   paymentId?: string;
   error?: string;
   invoiceId?: string;
-}) {
+}, _userUid: string) {
   const { paymentId, error: errorMessage, invoiceId } = body;
 
   console.error(`[pi_payment/error] Payment error for ${paymentId}:`, errorMessage);
@@ -243,7 +250,7 @@ async function handleError(body: {
       data: {
         status: "cancelled",
         cancelledAt: new Date(),
-        notes: `Payment error: ${errorMessage || "unknown"}`,
+        notes: `Payment error: ${sanitizeString(errorMessage || "unknown", 500)}`,
       },
     });
   }

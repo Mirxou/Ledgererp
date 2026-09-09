@@ -1,14 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
+import { checkRateLimit } from "@/lib/api-auth";
 
 const PI_API_BASE = "https://api.minepi.com/v2";
 const PI_CLIENT_ID = "2hLhGkUUVFhu64ln3khC2TPLt_s2Q3OK4pZeB-7BoAU";
 
 // POST /api/auth/verify
-// Verifies a Pi access token by calling the Pi server and returns the user profile.
-// Also validates the OAuth Client ID for additional security.
 export async function POST(req: NextRequest) {
   try {
-    const { accessToken, clientId } = await req.json();
+    const rateLimitErr = checkRateLimit(req);
+    if (rateLimitErr) return rateLimitErr;
+
+    const body = await req.json();
+    const { accessToken, clientId } = body;
 
     if (!accessToken || typeof accessToken !== "string") {
       return NextResponse.json(
@@ -17,11 +20,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Optional: Validate Client ID if provided
-    // This ensures the request is coming from our registered Pi app
+    // Validate Client ID if provided
     if (clientId && clientId !== PI_CLIENT_ID) {
       console.warn("[auth/verify] Client ID mismatch:", clientId, "!== expected");
-      // Don't reject — just log the warning. The Pi SDK handles client validation.
     }
 
     // Call Pi API to verify the token and get user info
@@ -51,12 +52,10 @@ export async function POST(req: NextRequest) {
 
     const userDTO = await piRes.json();
 
-    // Return the relevant user fields with our Client ID info
     return NextResponse.json({
       uid: userDTO.uid,
       username: userDTO.username,
       clientId: PI_CLIENT_ID,
-      // Pass through any additional fields Pi returns
       ...userDTO,
     });
   } catch (err) {
@@ -66,8 +65,7 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// GET /api/auth/verify
-// Returns the OAuth configuration for the app (useful for debugging)
+// GET /api/auth/verify — OAuth config (minimal, no secrets)
 export async function GET() {
   return NextResponse.json({
     appId: PI_CLIENT_ID,
@@ -75,7 +73,6 @@ export async function GET() {
       "https://ledgererp.online/",
       "http://localhost:3000/",
     ],
-    piApiBase: PI_API_BASE,
-    message: "Ledgererp Pi Auth endpoint is active. Configure these Redirect URIs in Pi Developer Portal.",
+    message: "Ledgererp Pi Auth endpoint is active.",
   });
 }

@@ -32,8 +32,11 @@ model Product {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  store Store @relation(fields: [storeId], references: [id])
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
   items InvoiceItem[]
+
+  @@index([storeId])
+  @@index([storeId, isActive])
 }
 
 model Invoice {
@@ -57,8 +60,13 @@ model Invoice {
   completedAt    DateTime?
   cancelledAt    DateTime?
 
-  store Store          @relation(fields: [storeId], references: [id])
+  store Store          @relation(fields: [storeId], references: [id], onDelete: Cascade)
   items InvoiceItem[]
+
+  @@index([storeId])
+  @@index([customerPiUid])
+  @@index([status])
+  @@index([storeId, status])
 }
 
 model InvoiceItem {
@@ -70,6 +78,9 @@ model InvoiceItem {
   unitPrice   Float
   totalPrice  Float
 
-  invoice Invoice  @relation(fields: [invoiceId], references: [id])
-  product Product? @relation(fields: [productId], references: [id])
+  invoice Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  product Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  @@index([invoiceId])
+  @@index([productId])
 }

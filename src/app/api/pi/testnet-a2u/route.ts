@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { verifyPiAuth, sanitizeString, validatePositiveNumber, checkRateLimit } from "@/lib/api-auth";
 
 const PI_SANDBOX_API_BASE = "https://api.sandbox.minepi.com/v2";
 
@@ -22,8 +23,6 @@ function piHeaders(): HeadersInit {
   };
 }
 
-// In-memory store for recent testnet A2U payments (resets on server restart)
-// This is fine for a test/requirement-checking tool
 interface TestPayment {
   id: string;
   uid: string;
@@ -38,22 +37,23 @@ interface TestPayment {
 
 let recentPayments: TestPayment[] = [];
 
-// POST /api/pi/testnet-a2u
-// Creates a testnet App-to-User payment for the Mainnet Wallet requirement.
-// Supports simulation mode when Pi API is unreachable (outside Pi Browser)
+// POST /api/pi/testnet-a2u (auth required)
 export async function POST(req: NextRequest) {
   try {
-    const {
-      amount,      // Amount in Pi (string, e.g. "0.01")
-      uid,         // Recipient's Pi UID (must be a different user for each of the 5)
-      memo,        // Transaction memo
-      simulate,    // If true, simulate the payment without calling Pi API
-    } = await req.json();
+    const rateLimitErr = checkRateLimit(req);
+    if (rateLimitErr) return rateLimitErr;
 
-    // Validate required fields
+    const auth = await verifyPiAuth(req);
+    if (!auth.ok) return auth.response;
+
+    const body = await req.json();
+    const { memo, simulate } = body;
+    const amount = validatePositiveNumber(body.amount);
+    const uid = sanitizeString(body.uid, 100);
+
     if (!amount || !uid) {
       return NextResponse.json(
-        { error: "amount and uid are required" },
+        { error: "amount (positive number) and uid are required" },
         { status: 400 },
       );
     }
@@ -68,10 +68,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // ── Simulation Mode ──
-    // When outside Pi Browser or Pi API is unreachable, we can simulate
-    // the A2U payment to test the flow. This records the payment as completed
-    // without actually calling the Pi Sandbox API.
     if (simulate) {
       const simPaymentId = "sim_" + Date.now() + "_" + Math.random().toString(36).substring(2, 8);
 
@@ -79,7 +75,7 @@ export async function POST(req: NextRequest) {
         id: simPaymentId,
         uid,
         amount: String(amount),
-        memo: memo || "Testnet A2U test payment",
+        memo: sanitizeString(memo, 200) || "Testnet A2U test payment",
         status: "completed",
         createdAt: new Date().toISOString(),
         piPaymentId: simPaymentId,
@@ -92,7 +88,7 @@ export async function POST(req: NextRequest) {
         recentPayments.filter(p => p.status === "completed").map(p => p.uid)
       );
 
-      console.log(`[pi/testnet-a2u] SIMULATED payment: ${amount}π to UID ${uid} (sim_id: ${simPaymentId})`);
+      console.log(`[pi/testnet-a2u] SIMULATED payment: ${amount}π to UID ${uid}`);
 
       return NextResponse.json({
         success: true,
@@ -101,30 +97,28 @@ export async function POST(req: NextRequest) {
           identifier: simPaymentId,
           amount: String(amount),
           uid,
-          memo: memo || "Testnet A2U test payment",
+          memo: sanitizeString(memo, 200) || "Testnet A2U test payment",
           status: "completed",
         },
-        walletAddress: walletAddress,
+        walletAddress,
         sandbox: true,
         uniqueUidCount: uniqueUids.size,
         required: 5,
         requirementMet: uniqueUids.size >= 5,
-        message: "Simulated payment recorded. In Pi Browser, real Testnet payments will be sent.",
+        message: "Simulated payment recorded.",
       });
     }
 
-    // ── Real Pi API Mode ──
-    // Build the A2U payment request body per Pi sandbox API docs
+    // Real Pi API Mode
     const paymentBody = {
       amount: String(amount),
-      memo: memo || "Testnet A2U test payment",
+      memo: sanitizeString(memo, 200) || "Testnet A2U test payment",
       metadata: { type: "testnet_a2u_test", purpose: "mainnet_wallet_requirement" },
-      uid,  // recipient Pi user UID
+      uid,
     };
 
     console.log(`[pi/testnet-a2u] Creating testnet A2U payment: ${amount}π to UID ${uid}`);
 
-    // Call Pi SANDBOX API to create an A2U payment
     const piRes = await fetch(`${PI_SANDBOX_API_BASE}/payments`, {
       method: "POST",
       headers: piHeaders(),
@@ -135,12 +129,11 @@ export async function POST(req: NextRequest) {
       const errText = await piRes.text();
       console.error(`[pi/testnet-a2u] Pi Sandbox API error ${piRes.status}:`, errText);
 
-      // Store failed payment
       const failedPayment: TestPayment = {
         id: "tp_" + Date.now() + "_" + Math.random().toString(36).substring(2, 8),
         uid,
         amount: String(amount),
-        memo: memo || "Testnet A2U test payment",
+        memo: sanitizeString(memo, 200) || "Testnet A2U test payment",
         status: "failed",
         createdAt: new Date().toISOString(),
         error: `API ${piRes.status}: ${errText}`,
@@ -156,12 +149,11 @@ export async function POST(req: NextRequest) {
 
     const paymentDTO = await piRes.json();
 
-    // Store successful payment
     const completedPayment: TestPayment = {
       id: paymentDTO.identifier || ("tp_" + Date.now() + "_" + Math.random().toString(36).substring(2, 8)),
       uid,
       amount: String(amount),
-      memo: memo || "Testnet A2U test payment",
+      memo: sanitizeString(memo, 200) || "Testnet A2U test payment",
       status: "completed",
       createdAt: new Date().toISOString(),
       piPaymentId: paymentDTO.identifier,
@@ -173,12 +165,10 @@ export async function POST(req: NextRequest) {
       recentPayments.filter(p => p.status === "completed").map(p => p.uid)
     );
 
-    console.log(`[pi/testnet-a2u] Payment created: ${paymentDTO.identifier}, unique UIDs so far: ${uniqueUids.size}`);
-
     return NextResponse.json({
       success: true,
       payment: paymentDTO,
-      walletAddress: walletAddress,
+      walletAddress,
       sandbox: true,
       uniqueUidCount: uniqueUids.size,
       required: 5,
@@ -191,8 +181,14 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// GET /api/pi/testnet-a2u — returns testnet wallet status and recent payments
-export async function GET() {
+// GET /api/pi/testnet-a2u (auth required)
+export async function GET(req: NextRequest) {
+  const rateLimitErr = checkRateLimit(req);
+  if (rateLimitErr) return rateLimitErr;
+
+  const auth = await verifyPiAuth(req);
+  if (!auth.ok) return auth.response;
+
   const hasApiKey = !!process.env.PI_API_KEY;
   const walletAddress = getWalletAddress();
 
@@ -205,21 +201,27 @@ export async function GET() {
     apiKeySet: hasApiKey,
     walletAddress: walletAddress || "not set",
     sandboxApiBase: PI_SANDBOX_API_BASE,
-    recentPayments: recentPayments,
+    recentPayments,
     completedCount: completedPayments.length,
     uniqueUidCount: uniqueUids.size,
     uniqueUids: Array.from(uniqueUids),
     required: 5,
     requirementMet: uniqueUids.size >= 5,
-    hasSimulated: hasSimulated,
+    hasSimulated,
     message: hasApiKey
-      ? "Testnet A2U payments are configured. Send payments to 5 unique Pi UIDs."
-      : "PI_API_KEY must be set in .env for testnet A2U payments",
+      ? "Testnet A2U payments are configured."
+      : "PI_API_KEY must be set in .env",
   });
 }
 
-// DELETE /api/pi/testnet-a2u — clear all test payment history
-export async function DELETE() {
+// DELETE /api/pi/testnet-a2u — clear history (auth required)
+export async function DELETE(req: NextRequest) {
+  const rateLimitErr = checkRateLimit(req);
+  if (rateLimitErr) return rateLimitErr;
+
+  const auth = await verifyPiAuth(req);
+  if (!auth.ok) return auth.response;
+
   recentPayments = [];
   return NextResponse.json({
     success: true,

@@ -4,6 +4,7 @@ import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
 import { ThemeProvider } from "@/components/theme-provider";
 import { QueryProvider } from "@/components/QueryProvider";
+import { ErrorBoundary } from "@/components/error-boundary";
 
 export const viewport: Viewport = {
   width: "device-width",
@@ -54,7 +55,9 @@ export default function RootLayout({
       <body className="font-[Cairo,system-ui,-apple-system,sans-serif] antialiased bg-background text-foreground">
         <ThemeProvider attribute="class" defaultTheme="dark" enableSystem disableTransitionOnChange>
           <QueryProvider>
-            {children}
+            <ErrorBoundary>
+              {children}
+            </ErrorBoundary>
           </QueryProvider>
         </ThemeProvider>
         <Toaster />

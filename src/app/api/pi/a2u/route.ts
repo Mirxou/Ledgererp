@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { verifyPiAuth, verifyStoreOwnership, sanitizeString, validatePositiveNumber, checkRateLimit } from "@/lib/api-auth";
 
 const PI_API_BASE = "https://api.minepi.com/v2";
 
 function getApiKey(): string {
   const key = process.env.PI_API_KEY;
   if (!key) {
-    throw new Error("PI_API_KEY environment variable is not set");
+    throw new Error("PI_API_KEY environment variable is not set. Configure it in .env to enable A2U payments.");
   }
   return key;
 }
@@ -32,41 +33,84 @@ function piHeaders(): HeadersInit {
 }
 
 // POST /api/pi/a2u
-// Creates an App-to-User payment for escrow release (paying the seller).
-//
-// A2U payments do NOT require an approval step — the developer wallet
-// sends Pi directly to the recipient's wallet on the blockchain.
-// Requires: PI_API_KEY, PI_WALLET_SEED, PI_WALLET_ADDRESS in .env
+// Creates an App-to-User payment for escrow release.
+// REQUIRES AUTH: Only the store owner can release escrow.
 export async function POST(req: NextRequest) {
   try {
-    const {
-      paymentId,   // Our internal reference (optional, for linking)
-      amount,      // Amount in Pi (string, e.g. "3.14")
-      memo,        // Transaction memo
-      metadata,    // Arbitrary JSON metadata object
-      uid,         // Recipient's Pi UID (seller/customer receiving escrow)
-      invoiceId,   // Our invoice ID (to update DB)
-    } = await req.json();
+    // Rate limit (stricter for payments: 10/min)
+    const rateLimitErr = checkRateLimit(req);
+    if (rateLimitErr) return rateLimitErr;
 
-    // Validate required fields
+    // AUTH REQUIRED: Verify Pi user
+    const auth = await verifyPiAuth(req);
+    if (!auth.ok) return auth.response;
+
+    const body = await req.json();
+    const {
+      paymentId,
+      memo,
+      metadata,
+      uid,         // Recipient's Pi UID
+      invoiceId,   // Our invoice ID
+    } = body;
+    const amount = validatePositiveNumber(body.amount);
+
     if (!amount || !uid) {
       return NextResponse.json(
-        { error: "amount and uid are required" },
+        { error: "amount (positive number) and uid are required" },
         { status: 400 },
       );
+    }
+
+    // OWNERSHIP CHECK: If invoiceId provided, verify the authenticated user owns the store
+    if (invoiceId) {
+      const invoice = await db.invoice.findUnique({
+        where: { id: invoiceId },
+        select: { storeId: true, status: true, total: true },
+      });
+
+      if (!invoice) {
+        return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
+      }
+
+      const ownership = await verifyStoreOwnership(req, invoice.storeId, auth.user.uid);
+      if (!ownership.ok) return ownership.response!;
+
+      // Verify invoice is in a releasable state
+      if (invoice.status !== "delivered" && invoice.status !== "paid_escrow" && invoice.status !== "shipped") {
+        return NextResponse.json(
+          { error: `Cannot release escrow for invoice in '${invoice.status}' status. Must be delivered, shipped, or paid_escrow.` },
+          { status: 400 }
+        );
+      }
+
+      // Sanity check: amount should not exceed invoice total
+      if (amount > invoice.total * 1.01) { // 1% tolerance for rounding
+        return NextResponse.json(
+          { error: `Amount ${amount}π exceeds invoice total ${invoice.total}π` },
+          { status: 400 }
+        );
+      }
     }
 
     // Verify wallet is configured
     const walletSeed = getWalletSeed();
     const walletAddress = getWalletAddress();
 
+    if (!walletAddress) {
+      return NextResponse.json(
+        { error: "PI_WALLET_ADDRESS is not configured. Set it in .env." },
+        { status: 500 }
+      );
+    }
+
     // Build the A2U payment request body per Pi docs
     const paymentBody: Record<string, unknown> = {
-      amount,
-      memo: memo || "Escrow release payment",
+      amount: String(amount),
+      memo: sanitizeString(memo, 200) || "Escrow release payment",
       metadata: metadata || {},
-      uid,                       // recipient Pi user UID
-      paymentId: paymentId || undefined,  // our reference (optional)
+      uid: sanitizeString(uid, 100),
+      paymentId: paymentId || undefined,
     };
 
     console.log(`[pi/a2u] Creating A2U payment: ${amount}π to ${uid}, from wallet ${walletAddress.substring(0, 8)}...`);
@@ -100,7 +144,6 @@ export async function POST(req: NextRequest) {
         where: { id: invoiceId },
         data: {
           releaseTxId: txid,
-          // If the payment is fully done, mark as completed
           status: "completed",
           completedAt: new Date(),
         },
@@ -121,19 +164,18 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// GET /api/pi/a2u — returns wallet configuration status (for debugging)
-export async function GET() {
+// GET /api/pi/a2u — returns wallet configuration status (minimal info)
+export async function GET(req: NextRequest) {
+  const rateLimitErr = checkRateLimit(req);
+  if (rateLimitErr) return rateLimitErr;
+
   const hasApiKey = !!process.env.PI_API_KEY;
   const hasWalletSeed = !!process.env.PI_WALLET_SEED;
   const hasWalletAddress = !!process.env.PI_WALLET_ADDRESS;
-  const walletAddress = getWalletAddress();
 
+  // Don't expose wallet address details to unauthenticated users
   return NextResponse.json({
     configured: hasApiKey && hasWalletSeed && hasWalletAddress,
-    apiKeySet: hasApiKey,
-    walletSeedSet: hasWalletSeed,
-    walletAddress: walletAddress ? `${walletAddress.substring(0, 8)}...${walletAddress.substring(walletAddress.length - 6)}` : "not set",
-    piApiBase: PI_API_BASE,
     message: hasApiKey && hasWalletSeed && hasWalletAddress
       ? "A2U payments are fully configured"
       : "A2U payments require PI_API_KEY, PI_WALLET_SEED, and PI_WALLET_ADDRESS in .env",
