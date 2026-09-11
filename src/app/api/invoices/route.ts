@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { verifyPiAuth, verifyStoreOwnership, sanitizeString, validateNonNegativeNumber, isValidInvoiceStatus, checkRateLimit } from "@/lib/api-auth";
+import { roundPi } from "@/lib/pi-amount";
 
 function genInvoiceNumber(): string {
   const d = new Date();
@@ -87,13 +88,13 @@ export async function POST(req: NextRequest) {
         productName,
         quantity,
         unitPrice,
-        totalPrice: unitPrice * quantity,
+        totalPrice: roundPi(unitPrice * quantity),
       };
     });
 
-    const subtotal = validatedItems.reduce((sum: number, i) => sum + i.totalPrice, 0);
-    const fee = validateNonNegativeNumber(escrowFee) || 0;
-    const total = subtotal + fee;
+    const subtotal = roundPi(validatedItems.reduce((sum: number, i) => sum + i.totalPrice, 0));
+    const fee = roundPi(validateNonNegativeNumber(escrowFee) || 0);
+    const total = roundPi(subtotal + fee);
 
     const invoice = await db.invoice.create({
       data: {

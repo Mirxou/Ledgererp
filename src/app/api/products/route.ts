@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { verifyPiAuth, verifyStoreOwnership, sanitizeString, validatePositiveNumber, checkRateLimit } from "@/lib/api-auth";
+import { roundPi } from "@/lib/pi-amount";
 
 // GET /api/products?storeId=xxx
 export async function GET(req: NextRequest) {
@@ -61,8 +62,9 @@ export async function POST(req: NextRequest) {
     const ownership = await verifyStoreOwnership(req, storeId, auth.user.uid);
     if (!ownership.ok) return ownership.response!;
 
+    const roundedPrice = roundPi(price);
     const product = await db.product.create({
-      data: { storeId, name, description, price, image },
+      data: { storeId, name, description, price: roundedPrice, image },
     });
     return NextResponse.json(product);
   } catch (error) {
@@ -106,7 +108,7 @@ export async function PATCH(req: NextRequest) {
     const data: Record<string, unknown> = {};
     if (name) data.name = name;
     if (description !== undefined) data.description = description;
-    if (price !== null && price !== undefined) data.price = price;
+    if (price !== null && price !== undefined) data.price = roundPi(price);
     if (isActive !== undefined) data.isActive = isActive;
 
     const updated = await db.product.update({ where: { id }, data });

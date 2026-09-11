@@ -7,6 +7,11 @@ datasource db {
   url      = "file:../db/ledgererp.db"
 }
 
+/// NOTE: SQLite does not support native DECIMAL type.
+/// All Pi price fields use Float + roundPi() utility (src/lib/pi-amount.ts)
+/// to prevent rounding errors (e.g., 0.1 + 0.2 ≠ 0.3 in JS).
+/// Always use roundPi() for all price calculations in API routes.
+
 /// Invoice status enum (TypeScript-side validation, SQLite doesn't support DB enums)
 /// Valid values: pending | paid_escrow | shipped | delivered | completed | disputed | cancelled
 

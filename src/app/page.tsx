@@ -89,7 +89,7 @@ function AuthenticatedApp({ piUid, username }: { piUid: string; username: string
     queryFn: function() { return api.get("/api/stores", piUid).then(function(r) { return r.json(); }); },
     staleTime: 30_000,
   });
-  const stores = storesRes.data as StoreData[] | undefined;
+  const stores = ((storesRes.data as Record<string, unknown>)?.data || []) as StoreData[];
 
   const myStore = useMemo(function() {
     if (createdStore) return createdStore;

@@ -114,7 +114,7 @@ export function ProductsView({ products, storeId, piUid }: { products: ProductDa
                       <h3 className="font-semibold text-sm truncate">{p.name}</h3>
                       <p className="text-[11px] text-muted-foreground mt-0.5 line-clamp-1">{p.description || "بدون وصف"}</p>
                     </div>
-                    <Badge className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20 text-xs shrink-0 mr-2">{p.price} π</Badge>
+                    <Badge dir="ltr" className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20 text-xs shrink-0 mr-2">{p.price} π</Badge>
                   </div>
                   <div className="flex items-center justify-between pt-1 border-t border-border/50">
                     <button onClick={function() { handleToggle(p); }} className={"text-[10px] px-2 py-0.5 rounded-full border transition-colors cursor-pointer" + (p.isActive ? " border-emerald-500/30 text-emerald-600 bg-emerald-500/10" : " border-zinc-500/30 text-zinc-500 bg-zinc-500/10")}>

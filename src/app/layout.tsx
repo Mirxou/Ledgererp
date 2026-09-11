@@ -52,7 +52,7 @@ export default function RootLayout({
           strategy="beforeInteractive"
         />
       </head>
-      <body className="font-[Cairo,system-ui,-apple-system,sans-serif] antialiased bg-background text-foreground">
+      <body className="antialiased bg-background text-foreground" style={{ fontFamily: "'Cairo', system-ui, -apple-system, sans-serif" }}>
         <ThemeProvider attribute="class" defaultTheme="dark" enableSystem disableTransitionOnChange>
           <QueryProvider>
             <ErrorBoundary>

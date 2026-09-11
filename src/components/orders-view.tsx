@@ -94,7 +94,7 @@ function OrderCard({ invoice: inv, view, store, onPay, onShip, onConfirmDelivery
           <div className="flex items-center gap-2.5 min-w-0">
             <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-emerald-500/20 to-teal-500/20 flex items-center justify-center shrink-0"><Receipt className="h-4 w-4 text-emerald-600" /></div>
             <div className="min-w-0">
-              <p className="font-semibold text-xs truncate">{inv.invoiceNumber}</p>
+              <p className="font-semibold text-xs truncate" dir="ltr">{inv.invoiceNumber}</p>
               <p className="text-[10px] text-muted-foreground">{view === "merchant" ? (inv.customerName || inv.customerPiUid) : (inv.store ? inv.store.name : "—")} · {fmtDate(inv.createdAt)}</p>
             </div>
           </div>

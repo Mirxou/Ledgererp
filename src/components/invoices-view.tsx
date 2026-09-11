@@ -164,7 +164,7 @@ export function InvoicesView({ store, products, piUid }: { store: StoreData; pro
                     <div className="flex items-center gap-2.5 min-w-0">
                       <div className="w-8 h-8 rounded-lg bg-emerald-500/10 flex items-center justify-center shrink-0"><Receipt className="h-4 w-4 text-emerald-600" /></div>
                       <div className="min-w-0">
-                        <p className="font-semibold text-xs truncate">{inv.invoiceNumber}</p>
+                        <p className="font-semibold text-xs truncate" dir="ltr">{inv.invoiceNumber}</p>
                         <p className="text-[10px] text-muted-foreground">{inv.customerName || inv.customerPiUid} · {fmtDate(inv.createdAt)}</p>
                       </div>
                     </div>
@@ -182,7 +182,7 @@ export function InvoicesView({ store, products, piUid }: { store: StoreData; pro
         <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
           {detail && (
             <div className="space-y-4">
-              <DialogHeader><DialogTitle className="text-sm">{detail.invoiceNumber}</DialogTitle><DialogDescription className="text-xs">{fmtDate(detail.createdAt)} — {detail.customerName || detail.customerPiUid}</DialogDescription></DialogHeader>
+              <DialogHeader><DialogTitle className="text-sm" dir="ltr">{detail.invoiceNumber}</DialogTitle><DialogDescription className="text-xs">{fmtDate(detail.createdAt)} — {detail.customerName || detail.customerPiUid}</DialogDescription></DialogHeader>
               <div className="flex items-center gap-2"><StatusBadge status={detail.status} /><span className="text-sm font-bold text-emerald-600">{formatPi(detail.total)} π</span></div>
               <Separator />
               <div className="space-y-1.5">

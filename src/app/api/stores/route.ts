@@ -18,15 +18,26 @@ export async function GET(req: NextRequest) {
         where: { piUid: auth.user.uid },
         include: { _count: { select: { products: true, invoices: true } } },
       });
-      return NextResponse.json(store ? [store] : []);
+      // Return data envelope format for consistency with paginated response
+      return NextResponse.json(store ? { data: [store], total: 1, page: 1, limit: 1, totalPages: 1 } : { data: [], total: 0, page: 1, limit: 1, totalPages: 0 });
     }
 
-    // Fallback: return all stores (for backwards compat in dev)
-    const stores = await db.store.findMany({
-      orderBy: { createdAt: "desc" },
-      include: { _count: { select: { products: true, invoices: true } } },
-    });
-    return NextResponse.json(stores);
+    // Fallback: return stores with pagination
+    const page = Math.max(1, parseInt(new URL(req.url).searchParams.get("page") || "1", 10));
+    const limit = Math.min(200, Math.max(1, parseInt(new URL(req.url).searchParams.get("limit") || "50", 10)));
+    const skip = (page - 1) * limit;
+
+    const [stores, total] = await Promise.all([
+      db.store.findMany({
+        orderBy: { createdAt: "desc" },
+        include: { _count: { select: { products: true, invoices: true } } },
+        skip,
+        take: limit,
+      }),
+      db.store.count(),
+    ]);
+    const totalPages = Math.ceil(total / limit);
+    return NextResponse.json({ data: stores, total, page, limit, totalPages });
   } catch {
     return NextResponse.json({ error: "Failed to fetch stores" }, { status: 500 });
   }

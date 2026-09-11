@@ -9,17 +9,17 @@
  *   const display = formatPi(3.5); // "3.50"
  */
 
-/** Round a Pi amount>amount to 2 decimal places */
+/** Round a Pi amount to 2 decimal places */
 export function roundPi(value: number): number {
   return Math.round(value * 100) / 100;
 }
 
-/** Format a Pi>amount for display (always 2 decimals) */
+/** Format a Pi amount for display (always 2 decimals) */
 export function formatPi(value: number): string {
   return roundPi(value).toFixed(2);
 }
 
-/**;Format Pi with symbol */
+/** Format Pi with symbol */
 export function formatPiWithSymbol(value: number): string {
   return `${formatPi(value)}π`;
 }
@@ -34,7 +34,15 @@ export function calcTotal(subtotal: number, escrowFee: number = 0): number {
   return roundPi(subtotal + escrowFee);
 }
 
-/** Saf' validate a Pi amount from user input */
+/** Format Pi amount with Arabic-aware locale */
+export function formatPiLocale(value: number): string {
+  return roundPi(value).toLocaleString("ar-DZ", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
+/** Safely validate a Pi amount from user input */
 export function parsePiAmount(input: string | number): number | null {
   const num = Number(input);
   if (isNaN(num) || !isFinite(num) || num <= 0) return null;
