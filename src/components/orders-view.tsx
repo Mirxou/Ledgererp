@@ -14,6 +14,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { formatPi } from "@/lib/pi-amount";
+import { useDebounce } from "@/hooks/use-debounce";
 import { StatusBadge, fmtDate, fmtTime } from "@/lib/helpers";
 import type { StoreData, InvoiceData } from "@/lib/types";
 
@@ -30,8 +31,9 @@ export function OrdersView({ merchantInvoices, customerInvoices, store, customer
   const [orderSearch, setOrderSearch] = useState("");
   const invoices = view === "merchant" ? merchantInvoices : customerInvoices;
   const statusFiltered = filter ? invoices.filter(function(inv) { return inv.status === filter; }) : invoices;
-  const filtered = orderSearch ? statusFiltered.filter(function(inv) {
-    const q = orderSearch.toLowerCase();
+  const debouncedOrderSearch = useDebounce(orderSearch, 250);
+  const filtered = debouncedOrderSearch ? statusFiltered.filter(function(inv) {
+    const q = debouncedOrderSearch.toLowerCase();
     return inv.invoiceNumber.toLowerCase().indexOf(q) !== -1 || inv.customerName.toLowerCase().indexOf(q) !== -1 || (inv.store && inv.store.name.toLowerCase().indexOf(q) !== -1);
   }) : statusFiltered;
 

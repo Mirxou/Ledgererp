@@ -6,12 +6,15 @@ import type { NextRequest } from "next/server";
  *
  * Adds CORS, CSP, and other security headers to all responses.
  * This addresses the audit finding about missing security headers.
+ *
+ * NOTE: Next.js 16 shows a deprecation warning for middleware.ts
+ * in favor of proxy.ts, but proxy.ts requires a different API
+ * that is not yet fully documented. This file still works correctly.
  */
 export function middleware(request: NextRequest) {
   const response = NextResponse.next();
 
   // ── Content Security Policy ──
-  // Allow Pi SDK, Google Fonts, and our own origin
   const cspHeader = [
     "default-src 'self'",
     "script-src 'self' 'unsafe-eval' 'unsafe-inline' https://sdk.minepi.com",
@@ -36,7 +39,6 @@ export function middleware(request: NextRequest) {
 
   // ── CORS for API routes ──
   if (request.nextUrl.pathname.startsWith("/api/")) {
-    // In production, restrict to Pi Browser origin
     const allowedOrigin = process.env.NODE_ENV === "production"
       ? "https://pinetwork-browser://"
       : "*";
@@ -58,7 +60,7 @@ export function middleware(request: NextRequest) {
   return response;
 }
 
-// Only run middleware on API routes and page routes (exclude static assets)
+// Only run on API routes and page routes (exclude static assets)
 export const config = {
   matcher: [
     "/((?!_next/static|_next/image|favicon.ico|db/).*)",

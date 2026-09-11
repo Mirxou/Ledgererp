@@ -16,6 +16,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
+import { useDebounce } from "@/hooks/use-debounce";
 import { api } from "@/lib/api-client";
 import { formatPi } from "@/lib/pi-amount";
 import { StatusBadge, STATUS_MAP, fmtDate, fmtTime, copyText } from "@/lib/helpers";
@@ -66,8 +67,9 @@ export function InvoicesView({ store, products, piUid }: { store: StoreData; pro
     staleTime: 30_000,
   });
   const invoiceList = ((invRes.data as Record<string, unknown>)?.data || []) as InvoiceData[];
-  const filteredInvoices = invoiceSearch ? invoiceList.filter(function(inv) {
-    const q = invoiceSearch.toLowerCase();
+  const debouncedInvoiceSearch = useDebounce(invoiceSearch, 250);
+  const filteredInvoices = debouncedInvoiceSearch ? invoiceList.filter(function(inv) {
+    const q = debouncedInvoiceSearch.toLowerCase();
     return inv.invoiceNumber.toLowerCase().indexOf(q) !== -1 || inv.customerName.toLowerCase().indexOf(q) !== -1 || inv.customerPiUid.toLowerCase().indexOf(q) !== -1;
   }) : invoiceList;
 

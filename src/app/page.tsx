@@ -15,6 +15,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { useTheme } from "next-themes";
 import { copyText } from "@/lib/helpers";
+import { roundPi } from "@/lib/pi-amount";
 import { DEMO_MODE, DEMO_USER } from "@/lib/constants";
 import type { StoreData, ProductData, InvoiceData } from "@/lib/types";
 
@@ -180,8 +181,8 @@ function AuthenticatedApp({ piUid, username }: { piUid: string; username: string
     return {
       totalInvoices: mi.length,
       totalProducts: ((productsRes.data as Record<string, unknown>)?.data || [] as unknown[]).length,
-      escrowedPi: escrowed.reduce(function(s, inv) { return s + inv.total; }, 0),
-      completedPi: mi.filter(function(inv) { return inv.status === "completed"; }).reduce(function(s, inv) { return s + inv.subtotal; }, 0),
+      escrowedPi: roundPi(escrowed.reduce(function(s, inv) { return s + inv.total; }, 0)),
+      completedPi: roundPi(mi.filter(function(inv) { return inv.status === "completed"; }).reduce(function(s, inv) { return s + inv.subtotal; }, 0)),
       myOrders: ci.length,
       disputedCount: disputed.length,
       cancelledCount: cancelled.length,
@@ -281,7 +282,7 @@ function AuthenticatedApp({ piUid, username }: { piUid: string; username: string
               const Ic = t[1] as React.ElementType;
                 return (
                   <TabsTrigger key={t[0] as string} value={t[0] as string} className="text-[11px] py-2 data-[state=active]:bg-emerald-600 data-[state=active]:text-white gap-1">
-                    <Ic className="h-3.5 w-3.5" /><span className="hidden xs:inline">{t[2] as string}</span>
+                    <Ic className="h-3.5 w-3.5" /><span className="hidden sm:inline">{t[2] as string}</span>
                   </TabsTrigger>
                 );
               })}

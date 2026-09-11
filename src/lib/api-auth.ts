@@ -189,7 +189,25 @@ const rateLimitMap = new Map<string, { count: number; resetTime: number }>();
 const RATE_LIMIT_WINDOW = 60_000; // 1 minute
 const RATE_LIMIT_MAX = 60; // 60 requests per minute
 
+/** Periodic cleanup of expired rate limit entries to prevent memory leak */
+let cleanupScheduled = false;
+function scheduleCleanup() {
+  if (cleanupScheduled) return;
+  cleanupScheduled = true;
+  setInterval(function() {
+    const now = Date.now();
+    for (const [ip, entry] of rateLimitMap) {
+      if (now > entry.resetTime) {
+        rateLimitMap.delete(ip);
+      }
+    }
+  }, 120_000).unref(); // Clean every 2 min, don't keep process alive
+}
+
 export function checkRateLimit(req: NextRequest): NextResponse | null {
+  // Schedule periodic cleanup on first call
+  if (!cleanupScheduled) scheduleCleanup();
+
   // Get client IP (from headers or connection)
   const forwarded = req.headers.get("x-forwarded-for");
   const ip = forwarded ? forwarded.split(",")[0].trim() : "unknown";

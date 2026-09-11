@@ -20,6 +20,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
+import { useDebounce } from "@/hooks/use-debounce";
 import { api } from "@/lib/api-client";
 import type { ProductData } from "@/lib/types";
 
@@ -70,7 +71,8 @@ export function ProductsView({ products, storeId, piUid }: { products: ProductDa
     }).catch(function() { toast({ title: "خطأ في الاتصال", variant: "destructive" }); });
   };
 
-  const filtered = search ? products.filter(function(p) { return p.name.indexOf(search) !== -1; }) : products;
+  const debouncedSearch = useDebounce(search, 250);
+  const filtered = debouncedSearch ? products.filter(function(p) { return p.name.indexOf(debouncedSearch) !== -1; }) : products;
 
   return (
     <div className="space-y-4">

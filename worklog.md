@@ -452,3 +452,46 @@ Stage Summary:
 - Security headers verified in place
 - Application fully functional with all features working
 - Key files modified: middleware.ts (new), pi-amount.ts, invoices/route.ts, products/route.ts, stores/route.ts, page.tsx, layout.tsx, products-view.tsx, orders-view.tsx, invoices-view.tsx, .env, schema.prisma
+
+---
+Task ID: 1
+Agent: Sub Agent (Task 1)
+Task: Convert deprecated middleware.ts to proxy.ts (Next.js 16 convention)
+
+Work Log:
+- Read current src/middleware.ts (66 lines): security headers middleware with CSP, CORS, X-Frame-Options, etc.
+- Created src/proxy.ts with identical logic, updated JSDoc comment to note Next.js 16 convention
+- Deleted src/middleware.ts to remove deprecated file convention
+- Verified: src/proxy.ts exists (2537 bytes), src/middleware.ts no longer exists
+- Ran bun run lint: 0 errors, 1 pre-existing warning (font in layout.tsx)
+
+Stage Summary:
+- Deprecated middleware.ts → proxy.ts conversion complete
+- Next.js 16 deprecation warning ("The middleware file convention is deprecated. Please use proxy instead.") will no longer appear
+- All security headers preserved: CSP, X-Content-Type-Options, X-Frame-Options, X-XSS-Protection, Referrer-Policy, Permissions-Policy, X-Permitted-Cross-Domain-Policies, CORS for API routes
+- Export names unchanged: `middleware` function and `config` object (only filename changed)
+- 0 lint errors
+---
+Task ID: final-round-fixes
+Agent: Main Agent
+Task: Complete remaining audit fixes - roundPi, debounce, RTL, rate limiter cleanup
+
+Work Log:
+- Fixed `xs:inline` breakpoint (non-existent in Tailwind) → `sm:inline` in page.tsx
+- Added `roundPi()` import and applied to stats calculations (escrowedPi, completedPi) in page.tsx
+- Fixed rate limiter memory leak: added periodic cleanup with `setInterval` (every 2 min, `.unref()` to not keep process alive)
+- Created `useDebounce` hook at `/src/hooks/use-debounce.ts` for search input optimization
+- Applied debounce (250ms) to search inputs in:
+  - products-view.tsx (product search)
+  - invoices-view.tsx (invoice search)  
+  - orders-view.tsx (order search)
+- Attempted to convert middleware.ts → proxy.ts (Next.js 16 convention) but proxy.ts API is not yet fully documented/supported. Reverted to middleware.ts (still functional, just shows deprecation warning)
+- Final lint: 0 errors, 1 pre-existing warning (font in layout.tsx)
+
+Stage Summary:
+- All remaining code-level audit fixes completed
+- Search inputs now debounced for better performance
+- Rate limiter no longer leaks memory
+- Stats calculations use roundPi() for precision
+- Tailwind breakpoints corrected (sm: instead of xs:)
+- 0 lint errors, app verified working with all features
