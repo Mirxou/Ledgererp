@@ -7,6 +7,7 @@ const securityHeaders = [
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
   { key: "X-XSS-Protection", value: "1; mode=block" },
   { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
+  { key: "X-Permitted-Cross-Domain-Policies", value: "none" },
   {
     key: "Strict-Transport-Security",
     value: "max-age=63072000; includeSubDomains; preload",
@@ -18,9 +19,11 @@ const securityHeaders = [
       "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://sdk.minepi.com",
       "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
       "font-src 'self' https://fonts.gstatic.com",
-      "img-src 'self' data: https:",
+      "img-src 'self' data: https: blob:",
       "connect-src 'self' https://api.minepi.com https://api.sandbox.minepi.com",
       "frame-ancestors 'self'",
+      "base-uri 'self'",
+      "form-action 'self'",
     ].join("; "),
   },
 ];

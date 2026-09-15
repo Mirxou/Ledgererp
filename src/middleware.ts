@@ -2,43 +2,23 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 /**
- * Security Headers Middleware
+ * CORS & Preflight Middleware
  *
- * Adds CORS, CSP, and other security headers to all responses.
- * This addresses the audit finding about missing security headers.
+ * Handles dynamic CORS headers and OPTIONS preflight for API routes.
  *
- * NOTE: Next.js 16 shows a deprecation warning for middleware.ts
- * in favor of proxy.ts, but proxy.ts requires a different API
- * that is not yet fully documented. This file still works correctly.
+ * Security headers are configured in next.config.ts (headers section) to avoid
+ * conflicts. This file ONLY handles:
+ * 1. Dynamic CORS origin (wildcard in dev, specific in production)
+ * 2. OPTIONS preflight responses (204 No Content)
+ *
+ * NOTE: Next.js 16 shows a deprecation warning for middleware.ts in favor of
+ * proxy.ts, but this file still functions correctly.
  */
 export function middleware(request: NextRequest) {
-  const response = NextResponse.next();
-
-  // ── Content Security Policy ──
-  const cspHeader = [
-    "default-src 'self'",
-    "script-src 'self' 'unsafe-eval' 'unsafe-inline' https://sdk.minepi.com",
-    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-    "font-src 'self' https://fonts.gstatic.com",
-    "img-src 'self' data: https: blob:",
-    "connect-src 'self' https://api.minepi.com https://api.sandbox.minepi.com",
-    "frame-ancestors 'none'",
-    "base-uri 'self'",
-    "form-action 'self'",
-  ].join("; ");
-
-  response.headers.set("Content-Security-Policy", cspHeader);
-
-  // ── Other Security Headers ──
-  response.headers.set("X-Content-Type-Options", "nosniff");
-  response.headers.set("X-Frame-Options", "DENY");
-  response.headers.set("X-XSS-Protection", "1; mode=block");
-  response.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
-  response.headers.set("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
-  response.headers.set("X-Permitted-Cross-Domain-Policies", "none");
-
   // ── CORS for API routes ──
   if (request.nextUrl.pathname.startsWith("/api/")) {
+    const response = NextResponse.next();
+
     const allowedOrigin = process.env.NODE_ENV === "production"
       ? "https://pinetwork-browser://"
       : "*";
@@ -55,9 +35,11 @@ export function middleware(request: NextRequest) {
         headers: response.headers,
       });
     }
+
+    return response;
   }
 
-  return response;
+  return NextResponse.next();
 }
 
 // Only run on API routes and page routes (exclude static assets)

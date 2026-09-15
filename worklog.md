@@ -495,3 +495,42 @@ Stage Summary:
 - Stats calculations use roundPi() for precision
 - Tailwind breakpoints corrected (sm: instead of xs:)
 - 0 lint errors, app verified working with all features
+
+---
+Task ID: 12
+Agent: Main Agent
+Task: Final audit fixes - resolve security header conflicts, restore Pi env vars, enhance next.config.ts
+
+Work Log:
+- Identified X-Frame-Options conflict: middleware.ts set DENY while next.config.ts set SAMEORIGIN (needed for Pi Browser iframe)
+- Simplified middleware.ts: removed all duplicate security headers, kept only CORS/preflight logic
+  - Middleware now only handles: dynamic CORS origin (wildcard in dev, Pi Browser in prod) and OPTIONS preflight (204)
+  - All static security headers consolidated in next.config.ts (single source of truth)
+- Restored Pi Network environment variables in .env:
+  - PI_API_KEY=wuyj6m0njyn1rtqnogs3yyg0rekr28evza1bhbj1anj7emhlclifhbq5qopwrmuy
+  - PI_WALLET_ADDRESS=GDU525A3XNGZKTTHSKVAEFFYONRKITRFQZUTPZANO5V27N4TSL3A5CPS
+  - PI_WALLET_SEED=SDYCCJ6STSWXIKP4A3ZVH7JL6FWMDTEDG472QRHVJ6ZDDMOCGRT3XMDA
+  - PI_CLIENT_ID=2hLhGkUUVFhu64ln3khC2TPLt_s2Q3OK4pZeB-7BoAU
+- Enhanced next.config.ts security headers:
+  - Added X-Permitted-Cross-Domain-Policies: none
+  - Added blob: to img-src CSP (for QR codes etc.)
+  - Added base-uri 'self' and form-action 'self' to CSP
+  - HSTS already present: max-age=63072000; includeSubDomains; preload
+- Comprehensive E2E browser testing via agent-browser: ALL 9 TESTS PASSED
+  - Page loads correctly with Arabic RTL ✅
+  - Store creation works ✅
+  - All 6 tabs navigate correctly ✅
+  - Product CRUD works ✅
+  - Search filtering works ✅
+  - Dark/light theme toggle works ✅
+  - Health endpoint healthy (DB, Pi API key, Pi wallet all connected) ✅
+  - 0 browser errors ✅
+- Lint: 0 errors, 1 pre-existing warning (font in layout.tsx)
+
+Stage Summary:
+- Security header conflict resolved: middleware.ts only handles CORS/preflight, next.config.ts is single source for static headers
+- Pi environment variables fully restored in .env
+- CSP enhanced with blob:, base-uri, form-action directives
+- ALL audit fixes from all sessions are now complete and verified
+- Application is fully functional with no known issues
+- 0 lint errors, all features working
