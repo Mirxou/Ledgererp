@@ -3,6 +3,24 @@ import { db } from "@/lib/db";
 import { verifyPiAuth, verifyStoreOwnership, sanitizeString, validateNonNegativeNumber, isValidInvoiceStatus, checkRateLimit } from "@/lib/api-auth";
 import { roundPi } from "@/lib/pi-amount";
 
+/** Invoice status transition rules — enforces the escrow flow */
+const VALID_TRANSITIONS: Record<string, string[]> = {
+  pending:      ["paid_escrow", "cancelled"],
+  paid_escrow:  ["shipped", "disputed", "cancelled"],
+  shipped:      ["delivered", "disputed"],
+  delivered:    ["completed"],
+  completed:    [],
+  disputed:    [],
+  cancelled:   [],
+  releasing:   ["completed", "cancelled"], // A2U intermediate
+};
+
+function isValidTransition(current: string, next: string): boolean {
+  const allowed = VALID_TRANSITIONS[current];
+  if (!allowed) return false;
+  return allowed.includes(next);
+}
+
 function genInvoiceNumber(): string {
   const d = new Date();
   const prefix = "INV";
@@ -139,10 +157,10 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: "Invalid status value" }, { status: 400 });
     }
 
-    // Get invoice to check ownership
+    // Get invoice to check ownership and current status
     const invoice = await db.invoice.findUnique({
       where: { id },
-      select: { storeId: true },
+      select: { storeId: true, status: true },
     });
     if (!invoice) {
       return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
@@ -150,6 +168,14 @@ export async function PATCH(req: NextRequest) {
 
     const ownership = await verifyStoreOwnership(req, invoice.storeId, auth.user.uid);
     if (!ownership.ok) return ownership.response!;
+
+    // Validate status transition (enforce escrow flow)
+    if (status && !isValidTransition(invoice.status, status)) {
+      return NextResponse.json(
+        { error: `Cannot transition from '${invoice.status}' to '${status}'. Allowed: ${VALID_TRANSITIONS[invoice.status]?.join(", ") || "none"}` },
+        { status: 400 }
+      );
+    }
 
     const data: Record<string, unknown> = {};
     if (status) data.status = status;

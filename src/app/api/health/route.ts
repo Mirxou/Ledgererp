@@ -1,6 +1,11 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { checkRateLimit } from "@/lib/api-auth";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  // H5: Add rate limiting to health endpoint
+  const rateLimitErr = checkRateLimit(req);
+  if (rateLimitErr) return rateLimitErr;
+
   const start = Date.now();
 
   try {
@@ -9,6 +14,7 @@ export async function GET() {
 
     const latency = Date.now() - start;
 
+    // H5: Don't expose whether API keys are set to unauthenticated users
     return NextResponse.json({
       status: "healthy",
       timestamp: new Date().toISOString(),
@@ -16,8 +22,7 @@ export async function GET() {
       version: "2.0",
       services: {
         database: "connected",
-        pi_api_key: !!process.env.PI_API_KEY,
-        pi_wallet: !!process.env.PI_WALLET_ADDRESS,
+        pi_integration: !!(process.env.PI_API_KEY && process.env.PI_WALLET_ADDRESS),
       },
     });
   } catch (error) {

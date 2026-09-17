@@ -1,3 +1,6 @@
+/** Valid invoice statuses — L7: Union type for type safety */
+export type InvoiceStatus = "pending" | "paid_escrow" | "shipped" | "delivered" | "completed" | "disputed" | "cancelled" | "releasing";
+
 export interface StoreData {
   id: string;
   piUid: string;
@@ -37,7 +40,7 @@ export interface InvoiceData {
   subtotal: number;
   escrowFee: number;
   total: number;
-  status: string;
+  status: InvoiceStatus;
   notes: string;
   paymentTxId: string;
   releaseTxId: string;

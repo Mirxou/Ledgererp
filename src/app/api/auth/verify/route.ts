@@ -2,7 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { checkRateLimit } from "@/lib/api-auth";
 
 const PI_API_BASE = "https://api.minepi.com/v2";
-const PI_CLIENT_ID = "2hLhGkUUVFhu64ln3khC2TPLt_s2Q3OK4pZeB-7BoAU";
+
+/** Pi Client ID from environment (C5 fix — not hardcoded) */
+function getClientId(): string {
+  return process.env.PI_CLIENT_ID || "2hLhGkUUVFhu64ln3khC2TPLt_s2Q3OK4pZeB-7BoAU";
+}
 
 // POST /api/auth/verify
 export async function POST(req: NextRequest) {
@@ -12,6 +16,7 @@ export async function POST(req: NextRequest) {
 
     const body = await req.json();
     const { accessToken, clientId } = body;
+    const PI_CLIENT_ID = getClientId();
 
     if (!accessToken || typeof accessToken !== "string") {
       return NextResponse.json(
@@ -25,13 +30,16 @@ export async function POST(req: NextRequest) {
       console.warn("[auth/verify] Client ID mismatch:", clientId, "!== expected");
     }
 
-    // Call Pi API to verify the token and get user info
+    // Call Pi API to verify the token and get user info (with timeout)
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 10_000);
     const piRes = await fetch(`${PI_API_BASE}/me`, {
       method: "GET",
       headers: {
         Authorization: `Bearer ${accessToken}`,
       },
-    });
+      signal: controller.signal,
+    }).finally(() => clearTimeout(timer));
 
     if (!piRes.ok) {
       const errText = await piRes.text();
@@ -52,11 +60,11 @@ export async function POST(req: NextRequest) {
 
     const userDTO = await piRes.json();
 
+    // H1 fix: Only return uid and username — don't spread entire Pi API response
     return NextResponse.json({
       uid: userDTO.uid,
-      username: userDTO.username,
+      username: userDTO.username || "unknown",
       clientId: PI_CLIENT_ID,
-      ...userDTO,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
@@ -67,6 +75,7 @@ export async function POST(req: NextRequest) {
 
 // GET /api/auth/verify — OAuth config (minimal, no secrets)
 export async function GET() {
+  const PI_CLIENT_ID = getClientId();
   return NextResponse.json({
     appId: PI_CLIENT_ID,
     redirectUris: [

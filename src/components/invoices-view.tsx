@@ -18,7 +18,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { useDebounce } from "@/hooks/use-debounce";
 import { api } from "@/lib/api-client";
-import { formatPi } from "@/lib/pi-amount";
+import { formatPi, roundPi } from "@/lib/pi-amount";
 import { StatusBadge, STATUS_MAP, fmtDate, fmtTime, copyText } from "@/lib/helpers";
 import { ESCROW_FEE_RATE } from "@/lib/constants";
 import type { StoreData, ProductData, InvoiceData } from "@/lib/types";
@@ -43,9 +43,10 @@ export function InvoicesView({ store, products, piUid }: { store: StoreData; pro
     setItems(u);
   };
 
-  const subtotal = items.reduce(function(s, i) { return s + i.unitPrice * i.quantity; }, 0);
-  const escrowFee = subtotal * ESCROW_FEE_RATE;
-  const total = subtotal + escrowFee;
+  // M1 fix: Use roundPi() for client-side price calculations to prevent float artifacts
+  const subtotal = roundPi(items.reduce(function(s, i) { return s + i.unitPrice * i.quantity; }, 0));
+  const escrowFee = roundPi(subtotal * ESCROW_FEE_RATE);
+  const total = roundPi(subtotal + escrowFee);
   const canCreate = customerUid.trim() !== "" && items.some(function(i) { return i.productName && i.unitPrice > 0; });
 
   const handleCreate = function() {
@@ -73,11 +74,19 @@ export function InvoicesView({ store, products, piUid }: { store: StoreData; pro
     return inv.invoiceNumber.toLowerCase().indexOf(q) !== -1 || inv.customerName.toLowerCase().indexOf(q) !== -1 || inv.customerPiUid.toLowerCase().indexOf(q) !== -1;
   }) : invoiceList;
 
+  /** M3 fix: CSV escape helper (RFC 4180) */
+  function csvEscape(v: string): string {
+    if (v.indexOf(",") !== -1 || v.indexOf('"') !== -1 || v.indexOf("\n") !== -1) {
+      return '"' + v.replace(/"/g, '""') + '"';
+    }
+    return v;
+  }
+
   const handleExport = useCallback(function() {
     const csv = [
       ["\u200F\u0631\u0642\u0645 \u0627\u0644\u0641\u0627\u062A\u0648\u0631\u0629", "\u0627\u0644\u0632\u0628\u0648\u0646", "\u0627\u0644\u0645\u062C\u0645\u0648\u0639", "\u0627\u0644\u062D\u0627\u0644\u0629", "\u0627\u0644\u062A\u0627\u0631\u064A\u062E"].join(","),
       ...filteredInvoices.map(function(inv) {
-        return [inv.invoiceNumber, inv.customerName, formatPi(inv.total), STATUS_MAP[inv.status]?.label || inv.status, fmtDate(inv.createdAt)].join(",");
+        return [csvEscape(inv.invoiceNumber), csvEscape(inv.customerName), formatPi(inv.total), STATUS_MAP[inv.status]?.label || inv.status, fmtDate(inv.createdAt)].join(",");
       })
     ].join("\n");
     const blob = new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8" });
@@ -106,8 +115,7 @@ export function InvoicesView({ store, products, piUid }: { store: StoreData; pro
               <div className="space-y-2">
                 <div className="flex items-center justify-between"><Label className="text-xs">المنتجات</Label>{items.length < 10 && <Button variant="ghost" size="sm" onClick={addItem} className="h-7 text-xs text-emerald-600"><Plus className="h-3 w-3 ml-1" />إضافة</Button>}</div>
                 <div className="space-y-2">
-                  {items.map(function(item, idx) {
-                    const activeProducts = products.filter(function(p) { return p.isActive; });
+                  {(() => { const activeProducts = products.filter(function(p) { return p.isActive; }); return items.map(function(item, idx) {
                     return (
                       <div key={idx} className="grid grid-cols-[1fr_48px_68px_28px] gap-1.5 items-end">
                         <div>
@@ -115,9 +123,9 @@ export function InvoicesView({ store, products, piUid }: { store: StoreData; pro
                           {idx === 0 ? (
                             <Input value={item.productName} onChange={function(e) { updateItem(idx, "productName", e.target.value); }} placeholder="اسم المنتج" className="text-xs h-8" />
                           ) : (
-                            <select value={item.productName} onChange={function(e) { updateItem(idx, "productName", e.target.value); let found: ProductData | null = null; for (let k = 0; k < activeProducts.length; k++) { if (activeProducts[k].name === e.target.value) { found = activeProducts[k]; break; } } if (found) updateItem(idx, "unitPrice", found.price); }} className="w-full h-8 rounded-md border border-input bg-background px-2 text-xs">
+                            <select value={item.productName} onChange={function(e) { const found = activeProducts.find(function(p) { return p.id === e.target.value; }); updateItem(idx, "productName", found ? found.name : e.target.value); if (found) updateItem(idx, "unitPrice", found.price); }} className="w-full h-8 rounded-md border border-input bg-background px-2 text-xs">
                               <option value="">اختر</option>
-                              {activeProducts.map(function(p) { return <option key={p.id} value={p.name}>{p.name} — {p.price}π</option>; })}
+                              {activeProducts.map(function(p) { return <option key={p.id} value={p.id}>{p.name} — {p.price}π</option>; })}
                             </select>
                           )}
                         </div>
@@ -126,7 +134,7 @@ export function InvoicesView({ store, products, piUid }: { store: StoreData; pro
                         <Button variant="ghost" size="sm" onClick={function() { removeItem(idx); }} className="h-8 w-8 p-0 text-destructive" disabled={items.length <= 1}><XCircle className="h-3.5 w-3.5" /></Button>
                       </div>
                     );
-                  })}
+                  }); })()}
                 </div>
               </div>
               <div className="space-y-1.5"><Label className="text-xs">ملاحظات</Label><Textarea value={notes} onChange={function(e) { setNotes(e.target.value); }} placeholder="اختياري..." className="text-sm min-h-[56px]" /></div>

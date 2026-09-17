@@ -72,7 +72,7 @@ export function ProductsView({ products, storeId, piUid }: { products: ProductDa
   };
 
   const debouncedSearch = useDebounce(search, 250);
-  const filtered = debouncedSearch ? products.filter(function(p) { return p.name.indexOf(debouncedSearch) !== -1; }) : products;
+  const filtered = debouncedSearch ? products.filter(function(p) { return p.name.toLowerCase().indexOf(debouncedSearch.toLowerCase()) !== -1; }) : products;
 
   return (
     <div className="space-y-4">

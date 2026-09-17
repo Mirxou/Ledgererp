@@ -58,13 +58,14 @@ declare global {
 /* ─── Config ──────────────────────────────────────────────── */
 
 /**
- * OAuth Client ID from Pi Developer Portal.
+ * OAuth Client ID from Pi Developer Portal (C5 fix — reads from env with fallback).
  * This is configured in: Pi Network → Develop → Ledger ERP → Pi Sign-In
  * IMPORTANT: Also configure Redirect URIs in the developer portal:
  *   - Production: https://ledgererp.online/
  *   - Development: http://localhost:3000/
  */
-export const PI_CLIENT_ID = "2hLhGkUUVFhu64ln3khC2TPLt_s2Q3OK4pZeB-7BoAU";
+export const PI_CLIENT_ID = (typeof process !== "undefined" && process.env?.NEXT_PUBLIC_PI_CLIENT_ID) ||
+  "2hLhGkUUVFhu64ln3khC2TPLt_s2Q3OK4pZeB-7BoAU";
 
 /**
  * Redirect URIs for OAuth (must match Pi Developer Portal configuration)

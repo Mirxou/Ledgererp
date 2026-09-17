@@ -55,15 +55,18 @@ export async function verifyPiAuth(req: NextRequest): Promise<AuthResult> {
 
   const accessToken = authHeader.substring(7);
 
-  // ── Verify token with Pi API ──
+  // ── Verify token with Pi API (with 10s timeout) ──
   // Use sandbox API in development, mainnet in production
   const apiBase = process.env.NODE_ENV === "development" ? PI_SANDBOX_API_BASE : PI_API_BASE;
 
   try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 10_000);
     const piRes = await fetch(`${apiBase}/me`, {
       method: "GET",
       headers: { Authorization: `Bearer ${accessToken}` },
-    });
+      signal: controller.signal,
+    }).finally(() => clearTimeout(timer));
 
     if (!piRes.ok) {
       return {
@@ -178,6 +181,7 @@ const VALID_INVOICE_STATUSES = [
   "completed",
   "disputed",
   "cancelled",
+  "releasing", // A2U payment in progress
 ] as const;
 
 export function isValidInvoiceStatus(status: string): boolean {

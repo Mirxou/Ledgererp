@@ -4,6 +4,13 @@ import { verifyPiAuth, verifyStoreOwnership, sanitizeString, validatePositiveNum
 
 const PI_API_BASE = "https://api.minepi.com/v2";
 
+/** Pi API fetch with 10s timeout */
+function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutMs: number = 10_000): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  return fetch(url, { ...options, signal: controller.signal }).finally(() => clearTimeout(timer));
+}
+
 function getApiKey(): string {
   const key = process.env.PI_API_KEY;
   if (!key) {
@@ -116,7 +123,7 @@ export async function POST(req: NextRequest) {
     console.log(`[pi/a2u] Creating A2U payment: ${amount}π to ${uid}, from wallet ${walletAddress.substring(0, 8)}...`);
 
     // Call Pi API to create an A2U payment
-    const piRes = await fetch(`${PI_API_BASE}/payments`, {
+    const piRes = await fetchWithTimeout(`${PI_API_BASE}/payments`, {
       method: "POST",
       headers: piHeaders(),
       body: JSON.stringify(paymentBody),
@@ -140,16 +147,17 @@ export async function POST(req: NextRequest) {
         paymentDTO?.txid ||
         "";
 
+      // C3 fix: Use intermediate 'releasing' status instead of 'completed'
+      // The invoice will be marked 'completed' after Pi confirms the payment settled
       await db.invoice.update({
         where: { id: invoiceId },
         data: {
           releaseTxId: txid,
-          status: "completed",
-          completedAt: new Date(),
+          status: "releasing",
         },
       });
 
-      console.log(`[pi/a2u] Invoice ${invoiceId} updated: completed, txid=${txid}`);
+      console.log(`[pi/a2u] Invoice ${invoiceId} updated: releasing, txid=${txid}`);
     }
 
     return NextResponse.json({

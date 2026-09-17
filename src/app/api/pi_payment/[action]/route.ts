@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { verifyPiAuth, sanitizeString, checkRateLimit } from "@/lib/api-auth";
+import { verifyPiAuth, verifyStoreOwnership, sanitizeString, checkRateLimit } from "@/lib/api-auth";
 
 const PI_API_BASE = "https://api.minepi.com/v2";
 
@@ -17,6 +17,13 @@ function piHeaders(): HeadersInit {
     "Authorization": `Key ${getApiKey()}`,
     "Content-Type": "application/json",
   };
+}
+
+/** Pi API fetch with 10s timeout (H3 fix) */
+function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutMs: number = 10_000): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  return fetch(url, { ...options, signal: controller.signal }).finally(() => clearTimeout(timer));
 }
 
 type RouteContext = { params: Promise<{ action: string }> };
@@ -53,13 +60,13 @@ export async function POST(
   try {
     switch (action) {
       case "approve":
-        return handleApprove(body, auth.user.uid);
+        return handleApprove(body, auth.user.uid, req);
       case "complete":
-        return handleComplete(body, auth.user.uid);
+        return handleComplete(body, auth.user.uid, req);
       case "cancel":
-        return handleCancel(body, auth.user.uid);
+        return handleCancel(body, auth.user.uid, req);
       case "error":
-        return handleError(body, auth.user.uid);
+        return handleError(body, auth.user.uid, req);
       case "incomplete":
         return handleIncomplete(body);
       default:
@@ -90,8 +97,24 @@ export async function POST(
   }
 }
 
+/** Verify that the user owns the store associated with the invoice (C1 fix) */
+async function verifyInvoiceOwnership(invoiceId: string, userUid: string, req: NextRequest) {
+  const invoice = await db.invoice.findUnique({
+    where: { id: invoiceId },
+    select: { storeId: true, total: true, status: true },
+  });
+  if (!invoice) {
+    return { ok: false as const, error: NextResponse.json({ error: "Invoice not found" }, { status: 404 }) };
+  }
+  const ownership = await verifyStoreOwnership(req, invoice.storeId, userUid);
+  if (!ownership.ok) {
+    return { ok: false as const, error: ownership.response! };
+  }
+  return { ok: true as const, invoice };
+}
+
 // ─── APPROVE ───────────────────────────────────────────────────────────────────
-async function handleApprove(body: { paymentId?: string; invoiceId?: string }, _userUid: string) {
+async function handleApprove(body: { paymentId?: string; invoiceId?: string }, userUid: string, req: NextRequest) {
   const { paymentId, invoiceId } = body;
 
   if (!paymentId) {
@@ -101,7 +124,37 @@ async function handleApprove(body: { paymentId?: string; invoiceId?: string }, _
     );
   }
 
-  const piRes = await fetch(
+  // C1: Verify ownership if invoiceId provided
+  if (invoiceId) {
+    const ownResult = await verifyInvoiceOwnership(invoiceId, userUid, req);
+    if (!ownResult.ok) return ownResult.error;
+
+    // H8: Verify payment amount matches invoice total
+    try {
+      const piPaymentRes = await fetchWithTimeout(
+        `${PI_API_BASE}/payments/${sanitizeString(paymentId, 200)}`,
+        { method: "GET", headers: piHeaders() },
+      );
+      if (piPaymentRes.ok) {
+        const piPayment = await piPaymentRes.json();
+        const paymentAmount = Number(piPayment.amount);
+        const invoiceTotal = ownResult.invoice.total;
+        // Allow 1% tolerance for rounding
+        if (paymentAmount > 0 && Math.abs(paymentAmount - invoiceTotal) > invoiceTotal * 0.01) {
+          console.error(`[pi_payment/approve] Amount mismatch: payment=${paymentAmount}, invoice=${invoiceTotal}`);
+          return NextResponse.json(
+            { error: `Payment amount ${paymentAmount}π does not match invoice total ${invoiceTotal}π` },
+            { status: 400 },
+          );
+        }
+      }
+    } catch {
+      // If we can't fetch payment details, log warning but proceed (Pi may be temporarily unavailable)
+      console.warn("[pi_payment/approve] Could not verify payment amount — proceeding with approval");
+    }
+  }
+
+  const piRes = await fetchWithTimeout(
     `${PI_API_BASE}/payments/${sanitizeString(paymentId, 200)}/approve`,
     {
       method: "POST",
@@ -146,7 +199,7 @@ async function handleComplete(body: {
   paymentId?: string;
   txid?: string;
   invoiceId?: string;
-}, _userUid: string) {
+}, userUid: string, req: NextRequest) {
   const { paymentId, txid, invoiceId } = body;
 
   if (!paymentId || !txid) {
@@ -156,7 +209,13 @@ async function handleComplete(body: {
     );
   }
 
-  const piRes = await fetch(
+  // C1: Verify ownership if invoiceId provided
+  if (invoiceId) {
+    const ownResult = await verifyInvoiceOwnership(invoiceId, userUid, req);
+    if (!ownResult.ok) return ownResult.error;
+  }
+
+  const piRes = await fetchWithTimeout(
     `${PI_API_BASE}/payments/${sanitizeString(paymentId, 200)}/complete`,
     {
       method: "POST",
@@ -203,7 +262,7 @@ async function handleComplete(body: {
 }
 
 // ─── CANCEL ────────────────────────────────────────────────────────────────────
-async function handleCancel(body: { paymentId?: string; invoiceId?: string }, _userUid: string) {
+async function handleCancel(body: { paymentId?: string; invoiceId?: string }, userUid: string, req: NextRequest) {
   const { paymentId, invoiceId } = body;
 
   if (!paymentId) {
@@ -211,6 +270,33 @@ async function handleCancel(body: { paymentId?: string; invoiceId?: string }, _u
       { error: "paymentId is required" },
       { status: 400 },
     );
+  }
+
+  // C1: Verify ownership if invoiceId provided
+  if (invoiceId) {
+    const ownResult = await verifyInvoiceOwnership(invoiceId, userUid, req);
+    if (!ownResult.ok) return ownResult.error;
+  }
+
+  // H2: Call Pi API to cancel the payment on Pi's side
+  try {
+    const piRes = await fetchWithTimeout(
+      `${PI_API_BASE}/payments/${sanitizeString(paymentId, 200)}/cancel`,
+      {
+        method: "POST",
+        headers: piHeaders(),
+      },
+    );
+    if (!piRes.ok) {
+      const errText = await piRes.text();
+      console.error(`[pi_payment/cancel] Pi API error ${piRes.status}:`, errText);
+      // Continue to cancel locally even if Pi cancel fails
+    } else {
+      console.log(`[pi_payment/cancel] Pi payment ${paymentId} cancelled on Pi side`);
+    }
+  } catch (err) {
+    console.error("[pi_payment/cancel] Failed to call Pi cancel API:", err);
+    // Continue to cancel locally even if Pi cancel fails
   }
 
   if (invoiceId) {
@@ -232,7 +318,7 @@ async function handleError(body: {
   paymentId?: string;
   error?: string;
   invoiceId?: string;
-}, _userUid: string) {
+}, userUid: string, req: NextRequest) {
   const { paymentId, error: errorMessage, invoiceId } = body;
 
   console.error(`[pi_payment/error] Payment error for ${paymentId}:`, errorMessage);
@@ -242,6 +328,12 @@ async function handleError(body: {
       { error: "paymentId is required" },
       { status: 400 },
     );
+  }
+
+  // C1: Verify ownership if invoiceId provided
+  if (invoiceId) {
+    const ownResult = await verifyInvoiceOwnership(invoiceId, userUid, req);
+    if (!ownResult.ok) return ownResult.error;
   }
 
   if (invoiceId) {
