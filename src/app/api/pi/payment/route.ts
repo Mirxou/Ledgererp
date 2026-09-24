@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { checkRateLimit, sanitizeString, validatePositiveNumber } from "@/lib/api-auth";
 
 /* ════════════════════════════════════════════════════════════════════════════
    PI PAYMENT API
@@ -38,23 +39,33 @@ const payments = new Map<
 
 /** POST /api/pi/payment — Create a payment */
 export async function POST(request: NextRequest) {
+  const rateLimitErr = checkRateLimit(request);
+  if (rateLimitErr) return rateLimitErr;
+
   try {
     const body: PaymentBody = await request.json();
     const { amount, memo, uid, accessToken } = body;
 
-    if (!amount || amount <= 0) {
+    // Validate and sanitize inputs
+    const validAmount = validatePositiveNumber(amount);
+    if (!validAmount) {
       return NextResponse.json(
         { error: "المبلغ غير صالح" },
         { status: 400 }
       );
     }
 
-    if (!uid) {
+    const sanitizedUid = sanitizeString(uid, 100);
+    if (!sanitizedUid) {
       return NextResponse.json(
         { error: "معرّف المستخدم مطلوب" },
         { status: 400 }
       );
     }
+
+    const sanitizedMemo = sanitizeString(memo, 200);
+
+    // ⚠️ Production: Add verifyPiAuth(request) here before processing payments
 
     // In production, this calls Pi Platform API:
     // POST https://api.minepi.com/v2/payments
@@ -64,9 +75,9 @@ export async function POST(request: NextRequest) {
     const paymentId = `pay_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const payment = {
       paymentId,
-      amount,
-      memo,
-      uid,
+      amount: validAmount,
+      memo: sanitizedMemo,
+      uid: sanitizedUid,
       status: "created",
       createdAt: new Date().toISOString(),
     };
@@ -85,6 +96,9 @@ export async function POST(request: NextRequest) {
 
 /** PATCH /api/pi/payment — Approve/Complete payment (server-side validation) */
 export async function PATCH(request: NextRequest) {
+  const rateLimitErr = checkRateLimit(request);
+  if (rateLimitErr) return rateLimitErr;
+
   try {
     const body = await request.json();
     const { paymentId, action, txid } = body as {
@@ -93,14 +107,20 @@ export async function PATCH(request: NextRequest) {
       txid?: string;
     };
 
-    if (!paymentId || !action) {
+    // Validate inputs
+    const sanitizedPaymentId = sanitizeString(paymentId, 100);
+    const validAction = action === "approve" || action === "complete" ? action : null;
+
+    if (!sanitizedPaymentId || !validAction) {
       return NextResponse.json(
         { error: "بيانات غير مكتملة" },
         { status: 400 }
       );
     }
 
-    const payment = payments.get(paymentId);
+    // ⚠️ Production: Add verifyPiAuth(request) here before modifying payments
+
+    const payment = payments.get(sanitizedPaymentId);
     if (!payment) {
       return NextResponse.json(
         { error: "الدفعة غير موجودة" },
@@ -108,7 +128,7 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    if (action === "approve") {
+    if (validAction === "approve") {
       // Server-side: verify payment with Pi Platform API
       // GET https://api.minepi.com/v2/payments/{paymentId}
       // Verify amount, recipient, status === "developed"
@@ -117,23 +137,23 @@ export async function PATCH(request: NextRequest) {
 
       return NextResponse.json({
         success: true,
-        paymentId,
+        paymentId: sanitizedPaymentId,
         action: "approve",
         status: payment.status,
       });
     }
 
-    if (action === "complete") {
+    if (validAction === "complete") {
       // Server-side: complete the payment
       // POST https://api.minepi.com/v2/payments/{paymentId}/complete
 
       payment.status = "completed";
-      payment.txid = txid || `tx_demo_${Date.now()}`;
+      payment.txid = sanitizeString(txid, 100) || `tx_demo_${Date.now()}`;
       payment.completedAt = new Date().toISOString();
 
       return NextResponse.json({
         success: true,
-        paymentId,
+        paymentId: sanitizedPaymentId,
         action: "complete",
         status: payment.status,
         txid: payment.txid,

@@ -1,5 +1,6 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { checkRateLimit } from "@/lib/api-auth";
 import {
   XP_PER_SEVERITY,
   calculateLevel,
@@ -9,7 +10,10 @@ import {
   type AchievementProgress,
 } from "@/lib/gamification";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const rateLimitErr = checkRateLimit(req);
+  if (rateLimitErr) return rateLimitErr;
+
   try {
     /* ── Fetch fixed issues from DB ──────────────────────────────── */
     const fixedIssues = await db.auditIssue.findMany({

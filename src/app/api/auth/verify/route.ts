@@ -3,9 +3,14 @@ import { checkRateLimit } from "@/lib/api-auth";
 
 const PI_API_BASE = "https://api.minepi.com/v2";
 
-/** Pi Client ID from environment (C5 fix — not hardcoded) */
+/** Pi Client ID from environment — MUST be set in .env (no hardcoded fallback for security) */
 function getClientId(): string {
-  return process.env.PI_CLIENT_ID || "2hLhGkUUVFhu64ln3khC2TPLt_s2Q3OK4pZeB-7BoAU";
+  const clientId = process.env.PI_CLIENT_ID;
+  if (!clientId) {
+    console.error("[auth/verify] PI_CLIENT_ID is not set in environment!");
+    throw new Error("Server configuration error: PI_CLIENT_ID not set");
+  }
+  return clientId;
 }
 
 // POST /api/auth/verify
@@ -74,8 +79,16 @@ export async function POST(req: NextRequest) {
 }
 
 // GET /api/auth/verify — OAuth config (minimal, no secrets)
-export async function GET() {
-  const PI_CLIENT_ID = getClientId();
+export async function GET(req: NextRequest) {
+  const rateLimitErr = checkRateLimit(req);
+  if (rateLimitErr) return rateLimitErr;
+
+  let PI_CLIENT_ID: string;
+  try {
+    PI_CLIENT_ID = getClientId();
+  } catch {
+    return NextResponse.json({ error: "Server not configured" }, { status: 500 });
+  }
   return NextResponse.json({
     appId: PI_CLIENT_ID,
     redirectUris: [

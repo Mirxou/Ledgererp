@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import ZAI from "z-ai-web-dev-sdk";
 import { db } from "@/lib/db";
+import { checkRateLimit } from "@/lib/api-auth";
 
 export async function POST(req: NextRequest) {
+  const rateLimitErr = checkRateLimit(req);
+  if (rateLimitErr) return rateLimitErr;
+
   try {
     const body = await req.json();
     const { message, context } = body;

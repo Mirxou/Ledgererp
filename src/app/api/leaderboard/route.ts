@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { checkRateLimit } from "@/lib/api-auth";
 
 /* ── Types ─────────────────────────────────────────────────────────── */
 
@@ -62,6 +63,9 @@ const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 /* ── GET ───────────────────────────────────────────────────────────── */
 
 export async function GET(req: NextRequest) {
+  const rateLimitErr = checkRateLimit(req);
+  if (rateLimitErr) return rateLimitErr;
+
   try {
     const { searchParams } = new URL(req.url);
     const period = searchParams.get("period") || "alltime";

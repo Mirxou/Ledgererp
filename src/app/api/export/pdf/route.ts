@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { checkRateLimit } from "@/lib/api-auth";
 
 /* ════════════════════════════════════════════════════════════════════════════
    PDF/HTML EXPORT API
@@ -23,6 +24,9 @@ const STATUS_MAP: Record<string, { label: string; color: string }> = {
 };
 
 export async function POST(request: NextRequest) {
+  const rateLimitErr = checkRateLimit(request);
+  if (rateLimitErr) return rateLimitErr;
+
   try {
     const body = await request.json();
     const { filters } = body as { filters?: Record<string, string> };

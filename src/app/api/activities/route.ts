@@ -1,5 +1,6 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { checkRateLimit } from "@/lib/api-auth";
 
 /* ── Types ─────────────────────────────────────────────────────────────── */
 
@@ -14,7 +15,10 @@ interface Activity {
 
 /* ── GET Handler ───────────────────────────────────────────────────────── */
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const rateLimitErr = checkRateLimit(req);
+  if (rateLimitErr) return rateLimitErr;
+
   try {
     /* ── Fetch recent audit logs ────────────────────────────────── */
     const recentLogs = await db.auditLog.findMany({

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { checkRateLimit } from "@/lib/api-auth";
 
 /* ── Types ─────────────────────────────────────────────────────────── */
 
@@ -170,7 +171,10 @@ for (const n of MOCK_NOTIFICATIONS) {
 
 /* ── GET ───────────────────────────────────────────────────────────── */
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const rateLimitErr = checkRateLimit(req);
+  if (rateLimitErr) return rateLimitErr;
+
   try {
     const notifications = MOCK_NOTIFICATIONS.map((n) => ({
       ...n,
@@ -197,6 +201,9 @@ export async function GET() {
 /* ── POST ──────────────────────────────────────────────────────────── */
 
 export async function POST(req: NextRequest) {
+  const rateLimitErr = checkRateLimit(req);
+  if (rateLimitErr) return rateLimitErr;
+
   try {
     const body = await req.json();
     const { id } = body as { id?: string };

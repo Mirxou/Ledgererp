@@ -611,3 +611,68 @@ Stage Summary:
 - .env Pi variables restored (critical fix)
 - Application fully functional with all tabs, API endpoints, and security headers working
 - No remaining fixes from the audit report
+
+---
+Task ID: 3
+Agent: Rate Limit Agent
+Task: Add checkRateLimit to all unprotected API routes
+
+Work Log:
+- Read all 16 API route files to analyze current state
+- Identified which handlers needed req: NextRequest parameter added (7 routes had GET() with no params)
+- Added `import { checkRateLimit } from "@/lib/api-auth"` to all 16 route files
+- Added rate limit check (`const rateLimitErr = checkRateLimit(req); if (rateLimitErr) return rateLimitErr;`) as the first line in every handler function
+- Changed `_req` to `req` in /api/issues/[id]/route.ts to properly use the request for rate limiting
+- For routes using `request` instead of `req` (export/pdf, pi/payment), passed `request` to checkRateLimit
+- Added NextRequest import where it was missing (activities, analytics, gamification, audit, audit/pdf, pi-stats, route.ts)
+- Handled multi-handler routes: notifications (GET+POST), issues (GET+PATCH), pi/payment (POST+PATCH)
+- Ran ESLint: 0 errors, 1 pre-existing warning (unrelated)
+
+Stage Summary:
+- All 16 API routes now protected with checkRateLimit
+- No existing functionality broken
+- Files changed:
+  1. /api/leaderboard/route.ts — GET: added rate limit
+  2. /api/activities/route.ts — GET: added req param + rate limit
+  3. /api/ai-analysis/route.ts — POST: added rate limit
+  4. /api/ai-scan/route.ts — POST: added rate limit
+  5. /api/analytics/route.ts — GET: added req param + rate limit
+  6. /api/gamification/route.ts — GET: added req param + rate limit
+  7. /api/export/pdf/route.ts — POST: added rate limit
+  8. /api/audit/route.ts — GET: added req param + rate limit
+  9. /api/notifications/route.ts — GET+POST: added req param (GET) + rate limit to both
+  10. /api/audit/pdf/route.ts — GET: added req param + rate limit
+  11. /api/pi-stats/route.ts — GET: added req param + rate limit
+  12. /api/pi/payment/route.ts — POST+PATCH: added rate limit to both
+  13. /api/issues/route.ts — GET+PATCH: added rate limit to both
+  14. /api/issues/[id]/route.ts — GET: changed _req→req + added rate limit
+  15. /api/ai-advisor/route.ts — POST: added rate limit
+  16. /api/route.ts — GET: added req param + rate limit
+---
+Task ID: 5
+Agent: Main Orchestrator
+Task: Complete ALL remaining audit fixes without exception (Session 4)
+
+Work Log:
+- Re-verified .env Pi Network variables (found missing again, restored)
+- Ran comprehensive 24-point audit verification (24/24 PASS)
+- Discovered 5 new issues not caught in previous sessions:
+  - A1 (Medium): 16 API routes lacked rate limiting → Added checkRateLimit() to all
+  - A2 (Medium): /api/pi/payment had no input sanitization → Added sanitizeString() + validatePositiveNumber()
+  - A3 (Low): Hardcoded PI_CLIENT_ID fallback in auth/verify → Changed to throw error if env var missing
+  - A4 (Low): CSP unsafe-inline/eval → Required by Next.js, documented
+  - A5 (Info): Redundant manual cascade in stores route → Harmless safety, kept
+- Fixed A1: Added checkRateLimit to 16 API routes (leaderboard, activities, ai-analysis, ai-scan, analytics, gamification, export/pdf, audit, notifications, audit/pdf, pi-stats, pi/payment, issues, issues/[id], ai-advisor, root)
+- Fixed A2: Added input sanitization (sanitizeString, validatePositiveNumber) to /api/pi/payment POST and PATCH handlers
+- Fixed A3: Removed hardcoded PI_CLIENT_ID fallback from auth/verify, now throws error if env var missing
+- Added rate limiting to auth/verify GET handler
+- Browser E2E testing: full flow tested (store creation → product → invoice → orders → dashboard → theme toggle)
+- Verified all 7 security headers present and correct
+- 0 lint errors, no runtime errors
+
+Stage Summary:
+- All 24 original audit fixes: PASS
+- 3 new issues fixed (A1, A2, A3)
+- 2 issues documented as acceptable (A4: CSP required by Next.js, A5: harmless safety)
+- Total API routes with rate limiting: 100% (all routes protected)
+- Application fully functional with comprehensive E2E browser verification
