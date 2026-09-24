@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useMemo, useCallback, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import { usePiAuth } from "@/hooks/use-pi-auth";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { createPiPayment, type PiPaymentData, type PiPaymentCallbacks } from "@/lib/pi-sdk";
@@ -28,9 +29,37 @@ import { InvoicesView } from "@/components/invoices-view";
 import { OrdersView } from "@/components/orders-view";
 import { SettingsView } from "@/components/settings-view";
 import { PiSetupView } from "@/components/pi-setup-view";
+import { BuyerInvoiceView } from "@/components/buyer-invoice-view";
+import { StoreDirectoryView } from "@/components/store-directory-view";
+import { StoreBuyerView } from "@/components/store-buyer-view";
 
 /* ═══ App Entry ═══ */
 export default function LedgererpApp() {
+  const searchParams = useSearchParams();
+  const invoiceParam = searchParams.get("invoice");
+  const storeParam = searchParams.get("store");
+  const storesParam = searchParams.has("stores");
+
+  // ?invoice=INV-xxx → Buyer invoice view (no auth required)
+  if (invoiceParam) {
+    return <BuyerInvoiceView invoiceNumber={invoiceParam} />;
+  }
+
+  // ?store=storeId → Store buyer view (no auth required)
+  if (storeParam) {
+    return <StoreBuyerView storeId={storeParam} />;
+  }
+
+  // ?stores → Store directory (no auth required)
+  if (storesParam) {
+    return <StoreDirectoryView />;
+  }
+
+  return <SellerApp />;
+}
+
+/* ═══ Seller App (authenticated) ═══ */
+function SellerApp() {
   const auth = usePiAuth();
 
   // Store Pi access token for API auth

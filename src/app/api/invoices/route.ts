@@ -29,7 +29,8 @@ function genInvoiceNumber(): string {
   return `${prefix}-${date}-${rand}`;
 }
 
-// GET /api/invoices?storeId=xxx&customerPiUid=xxx&status=xxx
+// GET /api/invoices?storeId=xxx&customerPiUid=xxx&status=xxx&invoiceNumber=INV-xxx
+// invoiceNumber is a PUBLIC endpoint for buyers — no auth required
 export async function GET(req: NextRequest) {
   try {
     const rateLimitErr = checkRateLimit(req);
@@ -39,6 +40,22 @@ export async function GET(req: NextRequest) {
     const storeId = searchParams.get("storeId");
     const customerPiUid = searchParams.get("customerPiUid");
     const status = searchParams.get("status");
+    const invoiceNumber = searchParams.get("invoiceNumber");
+
+    // Public buyer endpoint: fetch single invoice by invoiceNumber (no auth required)
+    if (invoiceNumber) {
+      const invoice = await db.invoice.findUnique({
+        where: { invoiceNumber: sanitizeString(invoiceNumber, 50) },
+        include: {
+          items: true,
+          store: { select: { name: true, piUid: true, description: true, avatar: true } },
+        },
+      });
+      if (!invoice) {
+        return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
+      }
+      return NextResponse.json({ data: [invoice], total: 1, page: 1, limit: 1, totalPages: 1 });
+    }
 
     // Validate status if provided
     if (status && !isValidInvoiceStatus(status)) {
