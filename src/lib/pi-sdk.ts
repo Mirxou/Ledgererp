@@ -102,8 +102,19 @@ let initError: string | null = null;
 
 /* ─── Helpers ─────────────────────────────────────────────── */
 
+/**
+ * Detect Pi Browser environment.
+ * The Pi SDK script loads in any browser but only works inside Pi Browser.
+ * Pi Browser's user agent contains "PiBrowser" or "PiNetwork".
+ */
 export function isPiBrowser(): boolean {
-  return typeof window !== "undefined" && window.Pi != null;
+  if (typeof window === "undefined" || !window.Pi) return false;
+  // Pi Browser on Android includes "PiBrowser" in the UA string
+  const ua = navigator.userAgent || "";
+  const isPiUA = ua.includes("PiBrowser") || ua.includes("PiNetwork");
+  // Also detect Pi Browser by checking if Pi.init is functional
+  // (in non-Pi browsers, Pi.init exists but throws or is a no-op)
+  return isPiUA;
 }
 
 export function getP(): PiSDK | null {

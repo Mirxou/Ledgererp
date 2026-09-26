@@ -1,10 +1,10 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   Shield, Copy, Share2, CheckCircle2, Clock,
   Truck, Wallet, FileCheck, AlertTriangle, Ban,
-  Package, ChevronLeft, ExternalLink,
+  Package, ChevronLeft, ExternalLink, Loader2,
 } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -12,7 +12,15 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
-import { createPiPayment, type PiPaymentData, type PiPaymentCallbacks } from "@/lib/pi-sdk";
+import {
+  isPiBrowser,
+  initPi,
+  authenticatePi,
+  createPiPayment,
+  type PiPaymentData,
+  type PiPaymentCallbacks,
+  type PiUser,
+} from "@/lib/pi-sdk";
 import { api } from "@/lib/api-client";
 import { formatPi } from "@/lib/pi-amount";
 import { StatusBadge, STATUS_MAP, fmtDate, copyText } from "@/lib/helpers";
@@ -54,6 +62,44 @@ export function BuyerInvoiceView({ invoiceNumber }: BuyerInvoiceViewProps) {
   const [error, setError] = useState<string | null>(null);
   const [paying, setPaying] = useState(false);
   const [confirming, setConfirming] = useState(false);
+
+  /* ── Pi SDK State (buyer must be authenticated to pay) ── */
+  const [piReady, setPiReady] = useState(false);
+  const [piUser, setPiUser] = useState<PiUser | null>(null);
+  const [piAuthLoading, setPiAuthLoading] = useState(true);
+  const authAttempted = useRef(false);
+
+  // Initialize Pi SDK and authenticate buyer
+  useEffect(() => {
+    if (!isPiBrowser()) {
+      setPiAuthLoading(false);
+      return;
+    }
+    initPi();
+    if (authAttempted.current) return;
+    authAttempted.current = true;
+
+    authenticatePi(function onIncompletePaymentFound(payment: unknown) {
+      const p = payment as { identifier?: string };
+      console.warn("[BuyerInvoice] Incomplete payment found:", p?.identifier);
+      // Cancel incomplete payments from previous sessions to prevent stuck state
+      if (p?.identifier) {
+        fetch("/api/pi_payment/cancel", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ paymentId: p.identifier }),
+        }).catch(() => {});
+      }
+    })
+      .then(function(user) {
+        setPiUser(user);
+        setPiReady(true);
+        setPiAuthLoading(false);
+      })
+      .catch(function() {
+        setPiAuthLoading(false);
+      });
+  }, []);
 
   /* ── Fetch invoice data ── */
   const fetchInvoice = useCallback(async () => {
@@ -391,27 +437,54 @@ export function BuyerInvoiceView({ invoiceNumber }: BuyerInvoiceViewProps) {
           <CardContent className="pt-6">
             {invoice.status === "pending" && (
               <div className="space-y-3">
-                <Button
-                  className="w-full h-12 text-base font-bold bg-emerald-600 hover:bg-emerald-700 text-white gap-2 shadow-lg shadow-emerald-600/20"
-                  onClick={handlePayWithPi}
-                  disabled={paying}
-                  size="lg"
-                >
-                  {paying ? (
-                    <>
-                      <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                      جارٍ الدفع...
-                    </>
-                  ) : (
-                    <>
-                      <Wallet className="h-5 w-5" />
-                      ادفع بالـ Pi
-                    </>
-                  )}
-                </Button>
-                <p className="text-xs text-center text-muted-foreground">
-                  سيتم تحويل المبلغ إلى حساب ضمان آمن
-                </p>
+                {piAuthLoading ? (
+                  <div className="flex flex-col items-center gap-2 py-2">
+                    <Loader2 className="h-5 w-5 animate-spin text-emerald-500" />
+                    <p className="text-xs text-muted-foreground">جارٍ الاتصال بـ Pi...</p>
+                  </div>
+                ) : !isPiBrowser() ? (
+                  <div className="space-y-2">
+                    <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-3 text-sm text-amber-600 text-center">
+                      لسداد الفاتورة، افتح هذا الرابط داخل متصفح Pi
+                    </div>
+                    <Button
+                      variant="outline"
+                      className="w-full gap-2"
+                      onClick={handleShare}
+                    >
+                      <Share2 className="h-4 w-4" />
+                      نسخ الرابط لمتصفح Pi
+                    </Button>
+                  </div>
+                ) : !piReady ? (
+                  <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-3 text-sm text-amber-600 text-center">
+                    لم يتم التحقق من هويتك في Pi — يُرجى إعادة تحميل الصفحة
+                  </div>
+                ) : (
+                  <>
+                    <Button
+                      className="w-full h-12 text-base font-bold bg-emerald-600 hover:bg-emerald-700 text-white gap-2 shadow-lg shadow-emerald-600/20"
+                      onClick={handlePayWithPi}
+                      disabled={paying}
+                      size="lg"
+                    >
+                      {paying ? (
+                        <>
+                          <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                          جارٍ الدفع...
+                        </>
+                      ) : (
+                        <>
+                          <Wallet className="h-5 w-5" />
+                          ادفع بالـ Pi
+                        </>
+                      )}
+                    </Button>
+                    <p className="text-xs text-center text-muted-foreground">
+                      سيتم تحويل المبلغ إلى حساب ضمان آمن
+                    </p>
+                  </>
+                )}
               </div>
             )}
 
