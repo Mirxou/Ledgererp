@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import {
   Shield, Search, Store, Package, ChevronLeft,
-  CheckCircle2, MapPin,
+  CheckCircle2, MapPin, Link2,
 } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -181,6 +181,11 @@ export function StoreDirectoryView({ onBack }: StoreDirectoryViewProps) {
                         </CardTitle>
                         {store.isVerified && (
                           <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 flex-shrink-0" />
+                        )}
+                        {store.source === "pi_connected" && (
+                          <Badge className="text-[8px] px-1 py-0 h-3.5 bg-teal-500/15 text-teal-600 border-teal-500/20 border">
+                            <Link2 className="h-2.5 w-2.5 ml-0.5" />Pi
+                          </Badge>
                         )}
                       </div>
                       <div className="flex items-center gap-2 mt-0.5">

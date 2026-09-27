@@ -809,3 +809,37 @@ Stage Summary:
 - 3 critical auth gaps fixed
 - Pi Browser detection now accurate (user agent based)
 - Buyer payment flow protected: only works in Pi Browser with real Pi auth
+---
+Task ID: 1-6
+Agent: Main Agent
+Task: Fix all deficiencies in merchant path — existing Pi store connection, webhook, dispute resolution, buyer-action auth
+
+Work Log:
+- Audited entire merchant path (28 files): schema, API routes, components, auth flow
+- Identified 6 critical deficiencies in merchant path
+- Added 3 new fields to Store model: `source` (ledgererp/pi_connected), `piAppUrl` (existing Pi App URL), `slug` (human-readable URL)
+- Built complete "Connect Existing Pi Store" flow in StoreSetup component with 2-step form (store info + product import)
+- Created Pi webhook endpoint (/api/pi/webhook) for server-to-server callbacks handling releasing→completed transition
+- Created dispute resolution endpoint (/api/invoices/resolve-dispute) with 3 merchant actions: refund, fulfill, reject
+- Fixed buyer-action auth: confirmDelivery, dispute, and cancelDispute now all verify the caller is the actual buyer
+- Added buyer cancelDispute action (buyer can withdraw their own dispute)
+- Updated OrdersView with dispute dialog (reason field) and resolve dispute dialog (3 options)
+- Updated DashboardView to show Pi Connected badge and piAppUrl link
+- Updated SettingsView to show Pi Connection info card and store type
+- Updated StoreDirectoryView to show Pi Connected badge on store cards
+- Updated stores API to support source, piAppUrl, slug, and batch product creation
+- Added slug generation from Arabic/English store names
+- 0 lint errors after all changes
+
+Stage Summary:
+- ✅ Existing Pi Store Connection: Full 2-step flow with product import (verified in browser)
+- ✅ Pi Webhook: /api/pi/webhook handles A2U completion and payment cancellation
+- ✅ Dispute Resolution: Merchant can refund, fulfill, or reject disputes
+- ✅ Buyer Auth: confirmDelivery/dispute/cancelDispute verify caller is the buyer
+- ✅ Batch Product Import: Products imported during store connection
+- ✅ Store Slug: Auto-generated from store name for human-readable URLs
+- ✅ Pi Connected Badge: Shows on dashboard, settings, and store directory
+- Key API test results:
+  - Store creation: returns source, piAppUrl, slug, _importedProducts correctly
+  - Webhook: returns correct response for completed/cancelled events
+  - Buyer-action: now requires auth (401 without proper credentials)

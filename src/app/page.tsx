@@ -22,7 +22,7 @@ import type { StoreData, ProductData, InvoiceData } from "@/lib/types";
 
 /* ═══ Extracted Components ═══ */
 import { FullPageLoader, PiBrowserRequired, LoginScreen } from "@/components/auth-screens";
-import { StoreSetup } from "@/components/store-setup";
+import { StoreSetup, type ConnectStoreData } from "@/components/store-setup";
 import { DashboardView } from "@/components/dashboard-view";
 import { ProductsView } from "@/components/products-view";
 import { InvoicesView } from "@/components/invoices-view";
@@ -171,12 +171,25 @@ function AuthenticatedApp({ piUid, username }: { piUid: string; username: string
 
   /* Mutations */
   const createStoreMut = useMutation({
-    mutationFn: function(data: { piUid: string; name: string; description: string; avatar?: string }) {
+    mutationFn: function(data: { piUid: string; name: string; description: string; avatar?: string; source?: string; piAppUrl?: string; products?: { name: string; price: number; description: string }[] }) {
       return api.post("/api/stores", data, piUid).then(function(r) { return r.json(); });
     },
-    onSuccess: function(data) { setCreatedStore(data); qc.invalidateQueries({ queryKey: ["stores"] }); toast({ title: "تم إنشاء المتجر بنجاح" }); try { localStorage.setItem("ledgererp_store", JSON.stringify(data)); } catch {} },
+    onSuccess: function(data) { setCreatedStore(data); qc.invalidateQueries({ queryKey: ["stores"] }); const imported = (data as Record<string, unknown>)._importedProducts as number || 0; toast({ title: imported > 0 ? "تم إنشاء المتجر واستيراد " + imported + " منتج" : "تم إنشاء المتجر بنجاح" }); try { localStorage.setItem("ledgererp_store", JSON.stringify(data)); } catch {} },
     onError: function() { toast({ title: "فشل إنشاء المتجر", variant: "destructive" }); },
   });
+
+  /* Connect existing Pi store */
+  const handleConnectStore = useCallback(function(data: ConnectStoreData) {
+    createStoreMut.mutate({
+      piUid: piUid,
+      name: data.name,
+      description: data.description,
+      avatar: data.avatar,
+      source: "pi_connected",
+      piAppUrl: data.piAppUrl,
+      products: data.products,
+    });
+  }, [createStoreMut, piUid]);
 
   const updateStoreMut = useMutation({
     mutationFn: function(data: { id: string; name?: string; description?: string; avatar?: string }) {
@@ -321,7 +334,12 @@ function AuthenticatedApp({ piUid, username }: { piUid: string; username: string
         {storesRes.isLoading && !myStore ? (
           <div className="space-y-3"><Skeleton className="h-6 w-32" /><Skeleton className="h-40 w-full rounded-xl" /></div>
         ) : !myStore ? (
-          <StoreSetup onCreate={function(n, d, a) { createStoreMut.mutate({ piUid: piUid, name: n, description: d, avatar: a }); }} loading={createStoreMut.isPending} />
+          <StoreSetup
+            onCreate={function(n, d, a) { createStoreMut.mutate({ piUid: piUid, name: n, description: d, avatar: a, source: "ledgererp" }); }}
+            onConnect={handleConnectStore}
+            loading={createStoreMut.isPending}
+            username={username}
+          />
         ) : (
           <Tabs value={tab} onValueChange={setTab} className="space-y-5">
             <TabsList className="grid grid-cols-6 w-full h-auto p-1 bg-muted/50">
@@ -345,6 +363,7 @@ function AuthenticatedApp({ piUid, username }: { piUid: string; username: string
                 onPay={payWithPi} onShip={handleShip}
                 onConfirmDelivery={handleConfirm} onRelease={handleRelease}
                 onDispute={handleDispute} onCancel={handleCancel}
+                onRefresh={function() { qc.invalidateQueries({ queryKey: ["invoices"] }); }}
               />
             </TabsContent>
             <TabsContent value="settings">

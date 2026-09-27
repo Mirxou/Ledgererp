@@ -22,6 +22,12 @@ model Store {
   description String   @default("")
   avatar      String   @default("")
   isVerified  Boolean  @default(false)
+  /// Source: 'ledgererp' = created here, 'pi_connected' = connected from existing Pi store
+  source      String   @default("ledgererp")
+  /// URL of existing Pi App if connected from Pi Browser
+  piAppUrl    String   @default("")
+  /// Human-readable slug for store URLs (?store=my-store)
+  slug        String?  @unique
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 

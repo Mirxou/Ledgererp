@@ -5,6 +5,7 @@ import {
   ShoppingCart, Store, Search, Receipt, Package,
   CreditCard, Truck, CheckCircle2, Wallet, AlertTriangle,
   Ban, ChevronDown, ChevronUp, Loader2, Copy, Share2,
+  Scale, RotateCcw, XCircle, CheckCheck,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -13,19 +14,26 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
+} from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 import { formatPi } from "@/lib/pi-amount";
 import { useDebounce } from "@/hooks/use-debounce";
 import { StatusBadge, fmtDate, fmtTime, copyText } from "@/lib/helpers";
 import { useToast } from "@/hooks/use-toast";
+import { api } from "@/lib/api-client";
 import type { StoreData, InvoiceData } from "@/lib/types";
 
 /* ═══ Orders ═══ */
-export function OrdersView({ merchantInvoices, customerInvoices, store, customerUid, onPay, onShip, onConfirmDelivery, onRelease, onDispute, onCancel }: {
+export function OrdersView({ merchantInvoices, customerInvoices, store, customerUid, onPay, onShip, onConfirmDelivery, onRelease, onDispute, onCancel, onRefresh }: {
   merchantInvoices: InvoiceData[]; customerInvoices: InvoiceData[];
   store: StoreData; customerUid: string;
   onPay: (i: InvoiceData) => void; onShip: (i: InvoiceData) => void;
   onConfirmDelivery: (i: InvoiceData) => void; onRelease: (i: InvoiceData) => void;
   onDispute: (i: InvoiceData) => void; onCancel: (i: InvoiceData) => void;
+  onRefresh?: () => void;
 }) {
   const [view, setView] = useState<string>("merchant");
   const [filter, setFilter] = useState("");
@@ -74,15 +82,22 @@ export function OrdersView({ merchantInvoices, customerInvoices, store, customer
   );
 }
 
-function OrderCard({ invoice: inv, view, store, onPay, onShip, onConfirmDelivery, onRelease, onDispute, onCancel }: {
+function OrderCard({ invoice: inv, view, store, onPay, onShip, onConfirmDelivery, onRelease, onDispute, onCancel, onRefresh }: {
   invoice: InvoiceData; view: string; store: StoreData;
   onPay: (i: InvoiceData) => void; onShip: (i: InvoiceData) => void;
   onConfirmDelivery: (i: InvoiceData) => void; onRelease: (i: InvoiceData) => void;
   onDispute: (i: InvoiceData) => void; onCancel: (i: InvoiceData) => void;
+  onRefresh?: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [disputeOpen, setDisputeOpen] = useState(false);
+  const [disputeReason, setDisputeReason] = useState("");
+  const [resolveOpen, setResolveOpen] = useState(false);
+  const [resolveAction, setResolveAction] = useState<"refund" | "fulfill" | "reject">("refund");
+  const [resolveReason, setResolveReason] = useState("");
   const toast = useToast().toast;
+  const qc = React.useRef<ReturnType<typeof import("@tanstack/react-query").useQueryClient> | null>(null);
 
   const invoiceLink = typeof window !== "undefined" ? window.location.origin + "?invoice=" + inv.invoiceNumber : "";
 
@@ -92,6 +107,36 @@ function OrderCard({ invoice: inv, view, store, onPay, onShip, onConfirmDelivery
   const canRelease = view === "merchant" && inv.status === "delivered";
   const canDispute = view === "customer" && (inv.status === "paid_escrow" || inv.status === "shipped");
   const canCancel = inv.status === "pending";
+  const canResolve = view === "merchant" && inv.status === "disputed";
+  const canCancelDispute = view === "customer" && inv.status === "disputed";
+
+  const handleResolveDispute = function() {
+    setLoading(true);
+    api.post("/api/invoices/resolve-dispute", {
+      invoiceId: inv.id,
+      action: resolveAction,
+      reason: resolveReason.trim(),
+    }, store.piUid).then(function(res) {
+      if (res.ok) {
+        toast({ title: resolveAction === "refund" ? "تم الموافقة على الاسترجاع" : resolveAction === "fulfill" ? "تم تأكيد التسليم" : "تم رفض النزاع" });
+        if (onRefresh) onRefresh();
+      } else {
+        res.json().catch(function() { return {}; }).then(function(err) { toast({ title: "فشل حل النزاع", description: err.error || "", variant: "destructive" }); });
+      }
+    }).catch(function() { toast({ title: "خطأ في الاتصال", variant: "destructive" }); }).finally(function() { setLoading(false); setResolveOpen(false); });
+  };
+
+  const handleCancelDispute = function() {
+    setLoading(true);
+    api.post("/api/invoices/buyer-action", { invoiceId: inv.id, action: "cancelDispute" }, store.piUid).then(function(res) {
+      if (res.ok) {
+        toast({ title: "تم سحب النزاع" });
+        if (onRefresh) onRefresh();
+      } else {
+        res.json().catch(function() { return {}; }).then(function(err) { toast({ title: "فشل سحب النزاع", description: err.error || "", variant: "destructive" }); });
+      }
+    }).catch(function() { toast({ title: "خطأ في الاتصال", variant: "destructive" }); }).finally(function() { setLoading(false); });
+  };
 
   return (
     <Card className="border-0 shadow-sm hover:shadow-md transition-shadow">
@@ -118,7 +163,9 @@ function OrderCard({ invoice: inv, view, store, onPay, onShip, onConfirmDelivery
           {canShip && <ActionBtn icon={<Truck className="h-3 w-3 ml-1" />} label="شحن" onClick={function() { onShip(inv); }} outline="border-blue-500/30 text-blue-600" />}
           {canConfirm && <ActionBtn icon={<CheckCircle2 className="h-3 w-3 ml-1" />} label="تأكيد التسليم" onClick={function() { onConfirmDelivery(inv); }} outline="border-teal-500/30 text-teal-600" />}
           {canRelease && <ActionBtn icon={<Wallet className="h-3 w-3 ml-1" />} label="إطلاق Pi" onClick={function() { setLoading(true); onRelease(inv); setLoading(false); }} primary loading={loading} />}
-          {canDispute && <ActionBtn icon={<AlertTriangle className="h-3 w-3 ml-1" />} label="فتح نزاع" onClick={function() { onDispute(inv); }} outline="border-red-500/30 text-red-500" />}
+          {canDispute && <ActionBtn icon={<AlertTriangle className="h-3 w-3 ml-1" />} label="فتح نزاع" onClick={function() { setDisputeOpen(true); }} outline="border-red-500/30 text-red-500" />}
+          {canResolve && <ActionBtn icon={<Scale className="h-3 w-3 ml-1" />} label="حل النزاع" onClick={function() { setResolveOpen(true); }} outline="border-amber-500/30 text-amber-600" />}
+          {canCancelDispute && <ActionBtn icon={<RotateCcw className="h-3 w-3 ml-1" />} label="سحب النزاع" onClick={handleCancelDispute} outline="border-teal-500/30 text-teal-600" loading={loading} />}
           {canCancel && (
             <AlertDialog><AlertDialogTrigger asChild><ActionBtn icon={<Ban className="h-3 w-3 ml-1" />} label="إلغاء" outline="border-red-500/30 text-red-500" /></AlertDialogTrigger>
               <AlertDialogContent><AlertDialogHeader><AlertDialogTitle className="text-sm">إلغاء الطلب</AlertDialogTitle><AlertDialogDescription className="text-xs">هل تريد إلغاء هذا الطلب؟</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel className="text-xs">لا</AlertDialogCancel><AlertDialogAction onClick={function() { onCancel(inv); }} className="text-xs bg-red-600 hover:bg-red-700">نعم، إلغاء</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
@@ -156,6 +203,72 @@ function OrderCard({ invoice: inv, view, store, onPay, onShip, onConfirmDelivery
           </div>
         )}
       </CardContent>
+
+      {/* Dispute Dialog */}
+      <Dialog open={disputeOpen} onOpenChange={setDisputeOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="text-sm flex items-center gap-2"><AlertTriangle className="h-4 w-4 text-red-500" />فتح نزاع</DialogTitle>
+            <DialogDescription className="text-xs">أخبرنا سبب النزاع على هذا الطلب</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs">سبب النزاع</Label>
+              <Textarea value={disputeReason} onChange={function(e) { setDisputeReason(e.target.value); }} placeholder="مثال: المنتج لم يصل، المنتج مختلف عن الوصف..." className="text-sm min-h-[80px]" />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={function() { setDisputeOpen(false); }} className="text-xs">إلغاء</Button>
+            <Button size="sm" onClick={function() { onDispute(inv); setDisputeOpen(false); }} className="bg-red-600 hover:bg-red-700 text-white text-xs">
+              <AlertTriangle className="h-3.5 w-3.5 ml-1.5" />فتح نزاع
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Resolve Dispute Dialog */}
+      <Dialog open={resolveOpen} onOpenChange={setResolveOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="text-sm flex items-center gap-2"><Scale className="h-4 w-4 text-amber-500" />حل النزاع</DialogTitle>
+            <DialogDescription className="text-xs">اختر كيف تريد حل النزاع على هذا الطلب</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-2">
+              {[
+                { action: "refund" as const, icon: <XCircle className="h-4 w-4 text-red-500" />, label: "موافقة الاسترجاع", desc: "أوافق على إرجاع الأموال للمشتري" },
+                { action: "fulfill" as const, icon: <CheckCheck className="h-4 w-4 text-teal-500" />, label: "تأكيد التسليم", desc: "المنتج وصل فعلاً، أؤكد التسليم" },
+                { action: "reject" as const, icon: <RotateCcw className="h-4 w-4 text-amber-500" />, label: "رفض النزاع", desc: "النزاع غير مبرر، أستأنف الطلب" },
+              ].map(function(opt) {
+                return (
+                  <button
+                    key={opt.action}
+                    onClick={function() { setResolveAction(opt.action); }}
+                    className={"w-full text-right p-3 rounded-lg border-2 transition-all " + (resolveAction === opt.action ? "border-emerald-500/50 bg-emerald-50/50 dark:bg-emerald-950/20" : "border-border hover:border-emerald-500/20")}
+                  >
+                    <div className="flex items-center gap-2">
+                      {opt.icon}
+                      <span className="font-medium text-sm">{opt.label}</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1 mr-6">{opt.desc}</p>
+                  </button>
+                );
+              })}
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">ملاحظة (اختياري)</Label>
+              <Textarea value={resolveReason} onChange={function(e) { setResolveReason(e.target.value); }} placeholder="سبب قرارك..." className="text-sm min-h-[60px]" />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={function() { setResolveOpen(false); }} className="text-xs">إلغاء</Button>
+            <Button size="sm" onClick={handleResolveDispute} disabled={loading} className="bg-amber-600 hover:bg-amber-700 text-white text-xs">
+              {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin ml-1.5" /> : <Scale className="h-3.5 w-3.5 ml-1.5" />}
+              حل النزاع
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }

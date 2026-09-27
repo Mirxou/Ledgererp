@@ -4,7 +4,7 @@ import React, { useCallback } from "react";
 import {
   FileText, Package, Shield, CheckCircle2, Store as StoreIcon,
   ArrowRightLeft, CreditCard, Truck, Wallet, Clock, ChevronDown, Receipt,
-  Share2, Link, Copy,
+  Share2, Link, Copy, Link2, Globe,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -40,10 +40,24 @@ export function DashboardView({ stats, store }: { stats: Record<string, unknown>
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="font-bold text-lg">{store.name}</h2>
+          <h2 className="font-bold text-lg flex items-center gap-2">
+            {store.name}
+            {store.source === "pi_connected" && (
+              <Badge className="text-[9px] px-1.5 py-0 h-4 bg-teal-500/15 text-teal-600 border-teal-500/20 border">
+                <Link2 className="h-2.5 w-2.5 ml-0.5" />متجر Pi مربوط
+              </Badge>
+            )}
+          </h2>
           <p className="text-xs text-muted-foreground">{store.description || "متجرك على Ledgererp"}</p>
+          {store.piAppUrl && (
+            <a href={store.piAppUrl} target="_blank" rel="noopener noreferrer" className="text-[10px] text-teal-500 hover:text-teal-600 flex items-center gap-1 mt-0.5">
+              <Globe className="h-3 w-3" />{store.piAppUrl}
+            </a>
+          )}
         </div>
-        <Badge variant="outline" className="text-xs bg-emerald-500/10 text-emerald-600 border-emerald-500/20"><StoreIcon className="h-3 w-3 ml-1" />نشط</Badge>
+        <div className="flex items-center gap-2">
+          <Badge variant="outline" className="text-xs bg-emerald-500/10 text-emerald-600 border-emerald-500/20"><StoreIcon className="h-3 w-3 ml-1" />نشط</Badge>
+        </div>
       </div>
 
       {/* Store Link Sharing — CORE: How merchant tells buyers to find them */}

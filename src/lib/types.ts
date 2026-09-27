@@ -8,6 +8,9 @@ export interface StoreData {
   description: string;
   avatar: string;
   isVerified: boolean;
+  source: string; // "ledgererp" | "pi_connected"
+  piAppUrl: string;
+  slug: string | null;
   _count?: { products: number; invoices: number };
 }
 
