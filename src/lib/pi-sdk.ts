@@ -64,8 +64,11 @@ declare global {
  *   - Production: https://ledgererp.online/
  *   - Development: http://localhost:3000/
  */
-export const PI_CLIENT_ID = (typeof process !== "undefined" && process.env?.NEXT_PUBLIC_PI_CLIENT_ID) ||
-  "2hLhGkUUVFhu64ln3khC2TPLt_s2Q3OK4pZeB-7BoAU";
+export const PI_CLIENT_ID = (typeof process !== "undefined" && process.env?.NEXT_PUBLIC_PI_CLIENT_ID) || "";
+
+if (!PI_CLIENT_ID && typeof window !== "undefined") {
+  console.warn("[Pi SDK] NEXT_PUBLIC_PI_CLIENT_ID is not set. Pi Sign-In will not work. Configure it in .env");
+}
 
 /**
  * Redirect URIs for OAuth (must match Pi Developer Portal configuration)

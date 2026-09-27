@@ -2,7 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { verifyPiAuth, verifyStoreOwnership, sanitizeString, validatePositiveNumber, checkRateLimit } from "@/lib/api-auth";
 
-const PI_API_BASE = "https://api.minepi.com/v2";
+// Switch between sandbox and mainnet based on NODE_ENV
+const PI_API_BASE = process.env.NODE_ENV === "development"
+  ? "https://api.sandbox.minepi.com/v2"
+  : "https://api.minepi.com/v2";
 
 /** Pi API fetch with 10s timeout */
 function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutMs: number = 10_000): Promise<Response> {

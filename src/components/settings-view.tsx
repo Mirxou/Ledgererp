@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from "react";
 import {
   Store, Shield, AlertTriangle, Loader2, CheckCircle2,
-  Pencil, Trash2, Copy,
+  Pencil, Trash2, Copy, Link, Share2,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -46,6 +46,23 @@ export function SettingsView({ store, onUpdate, onDelete, updating, deleting, pi
   return (
     <div className="space-y-4 max-w-lg mx-auto">
       <h2 className="font-bold text-base">الإعدادات</h2>
+      <Card className="border-0 shadow-sm">
+        <CardHeader className="pb-3 pt-4 px-4"><CardTitle className="text-xs font-bold flex items-center gap-2"><Share2 className="h-3.5 w-3.5 text-emerald-500" />رابط المتجر للمشترين</CardTitle></CardHeader>
+        <CardContent className="px-4 pb-4 space-y-2.5">
+          <p className="text-[11px] text-muted-foreground leading-relaxed">
+            شارك هذا الرابط مع المشترين ليتمكنوا من تصفح منتجاتك وطلبها مع ضمان الدفع
+          </p>
+          <div className="flex items-center gap-2">
+            <div className="flex-1 bg-muted/50 rounded-lg px-3 py-2 text-[11px] font-mono truncate border border-border/50" dir="ltr">
+              {typeof window !== "undefined" ? window.location.origin + "?store=" + store.id : ""}
+            </div>
+            <Button variant="outline" size="sm" className="shrink-0 h-8 text-xs gap-1.5" onClick={function() { copyText(typeof window !== "undefined" ? window.location.origin + "?store=" + store.id : "", toast, "تم نسخ رابط المتجر"); }}>
+              <Copy className="h-3 w-3" />نسخ
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
       <Card className="border-0 shadow-sm">
         <CardHeader className="pb-3 pt-4 px-4"><CardTitle className="text-xs font-bold flex items-center gap-2"><Store className="h-3.5 w-3.5 text-emerald-500" />معلومات المتجر</CardTitle></CardHeader>
         <CardContent className="px-4 pb-4 space-y-3">

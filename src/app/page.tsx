@@ -8,7 +8,7 @@ import { createPiPayment, type PiPaymentData, type PiPaymentCallbacks } from "@/
 import { api, setAccessToken } from "@/lib/api-client";
 import {
   Shield, BarChart3, Package, FileText, ShoppingCart,
-  Settings, Zap, CircleDot, Sun, Moon, Copy,
+  Settings, Zap, CircleDot, Sun, Moon, Copy, Bell,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -32,6 +32,7 @@ import { PiSetupView } from "@/components/pi-setup-view";
 import { BuyerInvoiceView } from "@/components/buyer-invoice-view";
 import { StoreDirectoryView } from "@/components/store-directory-view";
 import { StoreBuyerView } from "@/components/store-buyer-view";
+import { ErrorBoundary } from "@/components/error-boundary";
 
 /* ═══ App Entry ═══ */
 export default function LedgererpApp() {
@@ -55,7 +56,7 @@ export default function LedgererpApp() {
     return <StoreDirectoryView />;
   }
 
-  return <SellerApp />;
+  return <ErrorBoundary><SellerApp /></ErrorBoundary>;
 }
 
 /* ═══ Seller App (authenticated) ═══ */
@@ -144,18 +145,18 @@ function AuthenticatedApp({ piUid, username }: { piUid: string; username: string
     staleTime: 30_000,
   });
 
-  /* Payment status polling — refresh every 30s when there are active invoices */
+  /* Payment status polling — refresh every 15s when there are active invoices, every 60s otherwise */
   useEffect(function() {
     const merchantInvoices = ((merchantInvRes.data as Record<string, unknown>)?.data || []) as InvoiceData[];
     const hasActiveInvoices = merchantInvoices.some(function(inv) {
-      return inv.status === "pending" || inv.status === "paid_escrow";
+      return inv.status === "pending" || inv.status === "paid_escrow" || inv.status === "shipped" || inv.status === "delivered";
     });
 
-    if (!hasActiveInvoices) return;
+    const intervalMs = hasActiveInvoices ? 15_000 : 60_000;
 
     const interval = setInterval(function() {
       qc.invalidateQueries({ queryKey: ["invoices"] });
-    }, 30000);
+    }, intervalMs);
 
     return function() { clearInterval(interval); };
   }, [merchantInvRes.data, qc]);
@@ -265,7 +266,13 @@ function AuthenticatedApp({ piUid, username }: { piUid: string; username: string
   }, [myStore, qc, toast, piUid]);
 
   const handleShip = useCallback(function(inv: InvoiceData) { updateInvoiceMut.mutate({ id: inv.id, status: "shipped" }); toast({ title: "تم تحديث الحالة: تم الشحن" }); }, [updateInvoiceMut, toast]);
-  const handleConfirm = useCallback(function(inv: InvoiceData) { updateInvoiceMut.mutate({ id: inv.id, status: "delivered" }); toast({ title: "تم تأكيد التسليم" }); }, [updateInvoiceMut, toast]);
+  // Buyer confirms delivery — uses public buyer-action endpoint (no store ownership required)
+  const handleConfirm = useCallback(function(inv: InvoiceData) {
+    api.post("/api/invoices/buyer-action", { invoiceId: inv.id, action: "confirmDelivery" }, piUid).then(function(res) {
+      if (res.ok) { qc.invalidateQueries({ queryKey: ["invoices"] }); toast({ title: "تم تأكيد التسليم ✅" }); }
+      else { res.json().catch(function() { return {}; }).then(function(err) { toast({ title: "فشل تأكيد التسليم", description: err.error || "خطأ غير معروف", variant: "destructive" }); }); }
+    }).catch(function() { toast({ title: "خطأ في الاتصال", variant: "destructive" }); });
+  }, [qc, toast, piUid]);
   const handleDispute = useCallback(function(inv: InvoiceData) { updateInvoiceMut.mutate({ id: inv.id, status: "disputed" }); toast({ title: "تم فتح نزاع" }); }, [updateInvoiceMut, toast]);
   const handleCancel = useCallback(function(inv: InvoiceData) { updateInvoiceMut.mutate({ id: inv.id, status: "cancelled" }); toast({ title: "تم إلغاء الطلب" }); }, [updateInvoiceMut, toast]);
 
@@ -285,6 +292,17 @@ function AuthenticatedApp({ piUid, username }: { piUid: string; username: string
             <h1 className="font-bold text-base tracking-tight">Ledgererp</h1>
           </div>
           <div className="flex items-center gap-2">
+            {/* Active invoices notification bell */}
+            {function() {
+              const mi = ((merchantInvRes.data as Record<string, unknown>)?.data || []) as InvoiceData[];
+              const activeCount = mi.filter(function(inv) { return inv.status === "paid_escrow" || inv.status === "shipped" || inv.status === "delivered"; }).length;
+              return activeCount > 0 ? (
+                <button className="relative p-1.5 rounded-md hover:bg-muted" onClick={function() { setTab("orders"); }} aria-label={activeCount + " طلبات نشطة"}>
+                  <Bell className="h-3.5 w-3.5 text-emerald-500" />
+                  <span className="absolute -top-0.5 -left-0.5 w-4 h-4 rounded-full bg-emerald-500 text-[9px] text-white flex items-center justify-center font-bold">{activeCount > 9 ? "9+" : activeCount}</span>
+                </button>
+              ) : null;
+            }()}
             <Badge variant="outline" className="text-xs gap-1.5 bg-emerald-500/10 text-emerald-600 border-emerald-500/20">
               <CircleDot className="h-3 w-3" />{username}
             </Badge>

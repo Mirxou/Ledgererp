@@ -55,6 +55,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const name = sanitizeString(body.name, 100);
     const description = sanitizeString(body.description, 500);
+    const avatar = sanitizeString(body.avatar, 500);
 
     if (!name) {
       return NextResponse.json({ error: "Store name is required" }, { status: 400 });
@@ -63,8 +64,8 @@ export async function POST(req: NextRequest) {
     // Use authenticated user's UID (ignore any piUid in body for security)
     const store = await db.store.upsert({
       where: { piUid: auth.user.uid },
-      update: { name, description },
-      create: { piUid: auth.user.uid, name, description },
+      update: { name, description, avatar: avatar || undefined },
+      create: { piUid: auth.user.uid, name, description, avatar: avatar || "" },
     });
     return NextResponse.json(store);
   } catch (error) {
@@ -94,10 +95,12 @@ export async function PATCH(req: NextRequest) {
 
     const name = body.name !== undefined ? sanitizeString(body.name, 100) : undefined;
     const description = body.description !== undefined ? sanitizeString(body.description, 500) : undefined;
+    const avatar = body.avatar !== undefined ? sanitizeString(body.avatar, 500) : undefined;
 
     const data: Record<string, unknown> = {};
     if (name) data.name = name;
     if (description !== undefined) data.description = description;
+    if (avatar !== undefined) data.avatar = avatar;
 
     const store = await db.store.update({ where: { id }, data });
     return NextResponse.json(store);

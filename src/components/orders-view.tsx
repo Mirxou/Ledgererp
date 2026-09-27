@@ -4,7 +4,7 @@ import React, { useState } from "react";
 import {
   ShoppingCart, Store, Search, Receipt, Package,
   CreditCard, Truck, CheckCircle2, Wallet, AlertTriangle,
-  Ban, ChevronDown, ChevronUp, Loader2,
+  Ban, ChevronDown, ChevronUp, Loader2, Copy, Share2,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -15,7 +15,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { formatPi } from "@/lib/pi-amount";
 import { useDebounce } from "@/hooks/use-debounce";
-import { StatusBadge, fmtDate, fmtTime } from "@/lib/helpers";
+import { StatusBadge, fmtDate, fmtTime, copyText } from "@/lib/helpers";
+import { useToast } from "@/hooks/use-toast";
 import type { StoreData, InvoiceData } from "@/lib/types";
 
 /* ═══ Orders ═══ */
@@ -81,6 +82,9 @@ function OrderCard({ invoice: inv, view, store, onPay, onShip, onConfirmDelivery
 }) {
   const [expanded, setExpanded] = useState(false);
   const [loading, setLoading] = useState(false);
+  const toast = useToast().toast;
+
+  const invoiceLink = typeof window !== "undefined" ? window.location.origin + "?invoice=" + inv.invoiceNumber : "";
 
   const canPay = view === "customer" && inv.status === "pending";
   const canShip = view === "merchant" && inv.status === "paid_escrow";
@@ -122,6 +126,9 @@ function OrderCard({ invoice: inv, view, store, onPay, onShip, onConfirmDelivery
           )}
           <button onClick={function() { setExpanded(!expanded); }} className="h-7 px-2 text-[11px] text-muted-foreground mr-auto rounded-md hover:bg-muted transition-colors">
             {expanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}التفاصيل
+          </button>
+          <button onClick={function() { copyText(invoiceLink, toast, "تم نسخ رابط الفاتورة"); }} className="h-7 px-2 text-[11px] text-emerald-600 rounded-md hover:bg-emerald-50 dark:hover:bg-emerald-950/20 transition-colors" title="نسخ رابط الفاتورة للمشتري">
+            <Share2 className="h-3 w-3" />
           </button>
         </div>
 

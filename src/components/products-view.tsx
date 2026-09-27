@@ -30,7 +30,7 @@ export function ProductsView({ products, storeId, piUid }: { products: ProductDa
   const toast = useToast().toast;
   const [open, setOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
-  const [form, setForm] = useState({ name: "", description: "", price: "" });
+  const [form, setForm] = useState({ name: "", description: "", price: "", image: "" });
   const [editForm, setEditForm] = useState<ProductData | null>(null);
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState("");
@@ -41,8 +41,8 @@ export function ProductsView({ products, storeId, piUid }: { products: ProductDa
     const priceVal = parseFloat(form.price);
     if (isNaN(priceVal) || priceVal <= 0) { toast({ title: "السعر يجب أن يكون رقماً أكبر من صفر", variant: "destructive" }); return; }
     setSaving(true);
-    api.post("/api/products", { storeId: storeId, name: form.name.trim(), description: form.description.trim(), price: priceVal }, piUid).then(function(res) {
-      if (res.ok) { qc.invalidateQueries({ queryKey: ["products", storeId] }); setOpen(false); setForm({ name: "", description: "", price: "" }); toast({ title: "تم إضافة المنتج" }); }
+    api.post("/api/products", { storeId: storeId, name: form.name.trim(), description: form.description.trim(), price: priceVal, image: form.image.trim() }, piUid).then(function(res) {
+      if (res.ok) { qc.invalidateQueries({ queryKey: ["products", storeId] }); setOpen(false); setForm({ name: "", description: "", price: "", image: "" }); toast({ title: "تم إضافة المنتج" }); }
       else { res.json().catch(function() { return {}; }).then(function(err) { toast({ title: "فشل الإضافة", description: err.error || "خطأ غير معروف", variant: "destructive" }); }); }
     }).catch(function() { toast({ title: "خطأ في الاتصال", variant: "destructive" }); }).finally(function() { setSaving(false); });
   };
@@ -85,6 +85,7 @@ export function ProductsView({ products, storeId, piUid }: { products: ProductDa
               <div className="space-y-1.5"><Label className="text-xs">الاسم</Label><Input value={form.name} onChange={function(e) { setForm(Object.assign({}, form, { name: e.target.value })); }} placeholder="اسم المنتج" className="text-sm" /></div>
               <div className="space-y-1.5"><Label className="text-xs">الوصف</Label><Textarea value={form.description} onChange={function(e) { setForm(Object.assign({}, form, { description: e.target.value })); }} placeholder="وصف مختصر" className="text-sm" /></div>
               <div className="space-y-1.5"><Label className="text-xs">السعر (Pi)</Label><Input type="number" step="0.01" inputMode="decimal" value={form.price} onChange={function(e) { setForm(Object.assign({}, form, { price: e.target.value })); }} placeholder="0.00" className="text-sm" dir="ltr" /></div>
+              <div className="space-y-1.5"><Label className="text-xs">رابط الصورة (اختياري)</Label><Input value={form.image} onChange={function(e) { setForm(Object.assign({}, form, { image: e.target.value })); }} placeholder="https://..." className="text-sm" dir="ltr" /></div>
             </div>
             <DialogFooter><Button onClick={handleAdd} disabled={!form.name.trim() || !form.price || saving} size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs">{saving ? <Loader2 className="h-3.5 w-3.5 animate-spin ml-1.5" /> : <Plus className="h-3.5 w-3.5 ml-1.5" />}إضافة</Button></DialogFooter>
           </DialogContent>
@@ -111,6 +112,11 @@ export function ProductsView({ products, storeId, piUid }: { products: ProductDa
             return (
               <Card key={p.id} className="border-0 shadow-sm hover:shadow-md transition-shadow">
                 <CardContent className="p-4 space-y-2.5">
+                  {p.image && (
+                    <div className="w-full h-28 rounded-lg overflow-hidden bg-muted/30 mb-1">
+                      <img src={p.image} alt={p.name} className="w-full h-full object-cover" onError={function(e) { (e.target as HTMLImageElement).style.display = "none"; }} />
+                    </div>
+                  )}
                   <div className="flex items-start justify-between">
                     <div className="min-w-0 flex-1 cursor-pointer" onClick={function() { setEditForm(Object.assign({}, p)); setEditOpen(true); }}>
                       <h3 className="font-semibold text-sm truncate">{p.name}</h3>
@@ -147,6 +153,7 @@ export function ProductsView({ products, storeId, piUid }: { products: ProductDa
               <div className="space-y-1.5"><Label className="text-xs">الاسم</Label><Input value={editForm.name} onChange={function(e) { setEditForm(Object.assign({}, editForm, { name: e.target.value })); }} className="text-sm" /></div>
               <div className="space-y-1.5"><Label className="text-xs">الوصف</Label><Textarea value={editForm.description} onChange={function(e) { setEditForm(Object.assign({}, editForm, { description: e.target.value })); }} className="text-sm" /></div>
               <div className="space-y-1.5"><Label className="text-xs">السعر (Pi)</Label><Input type="number" step="0.01" value={editForm.price} onChange={function(e) { setEditForm(Object.assign({}, editForm, { price: parseFloat(e.target.value) || 0 })); }} className="text-sm" dir="ltr" /></div>
+              <div className="space-y-1.5"><Label className="text-xs">رابط الصورة</Label><Input value={editForm.image} onChange={function(e) { setEditForm(Object.assign({}, editForm, { image: e.target.value })); }} className="text-sm" dir="ltr" /></div>
               <div className="flex items-center justify-between"><Label className="text-xs">حالة النشر</Label><Switch checked={editForm.isActive} onCheckedChange={function(v) { setEditForm(Object.assign({}, editForm, { isActive: v })); }} /></div>
             </div>
           )}

@@ -32,15 +32,19 @@ export function InvoicesView({ store, products, piUid }: { store: StoreData; pro
   const [customerUid, setCustomerUid] = useState("");
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
-  const [items, setItems] = useState([{ productName: "", quantity: 1, unitPrice: 0 }]);
+  const [items, setItems] = useState([{ productName: "", quantity: 1, unitPrice: 0, _selectedProductId: "" }]);
   const [detail, setDetail] = useState<InvoiceData | null>(null);
   const [invoiceSearch, setInvoiceSearch] = useState("");
 
-  const addItem = function() { setItems(items.concat([{ productName: "", quantity: 1, unitPrice: 0 }])); };
+  const addItem = function() { setItems(items.concat([{ productName: "", quantity: 1, unitPrice: 0, _selectedProductId: "" }])); };
   const removeItem = function(idx: number) { setItems(items.filter(function(_, i) { return i !== idx; })); };
   const updateItem = function(idx: number, field: string, value: string | number) {
-    const u = items.map(function(item, i) { if (i === idx) { const copy = Object.assign({}, item); (copy as Record<string, unknown>)[field] = value; return copy; } return item; });
-    setItems(u);
+    setItems(function(prev) {
+      return prev.map(function(item, i) {
+        if (i === idx) { const copy = Object.assign({}, item); (copy as Record<string, unknown>)[field] = value; return copy; }
+        return item;
+      });
+    });
   };
 
   // M1 fix: Use roundPi() for client-side price calculations to prevent float artifacts
@@ -56,7 +60,7 @@ export function InvoicesView({ store, products, piUid }: { store: StoreData; pro
       if (res.ok) {
         qc.invalidateQueries({ queryKey: ["invoices"] });
         setOpen(false); setCustomerName(""); setCustomerUid(""); setNotes("");
-        setItems([{ productName: "", quantity: 1, unitPrice: 0 }]);
+        setItems([{ productName: "", quantity: 1, unitPrice: 0, _selectedProductId: "" }]);
         toast({ title: "تم إنشاء الفاتورة" });
       } else { res.json().catch(function() { return {}; }).then(function(err) { toast({ title: "فشل إنشاء الفاتورة", description: err.error || "خطأ غير معروف", variant: "destructive" }); }); }
     }).catch(function() { toast({ title: "خطأ في الاتصال", variant: "destructive" }); }).finally(function() { setSaving(false); });
@@ -116,18 +120,15 @@ export function InvoicesView({ store, products, piUid }: { store: StoreData; pro
                 <div className="flex items-center justify-between"><Label className="text-xs">المنتجات</Label>{items.length < 10 && <Button variant="ghost" size="sm" onClick={addItem} className="h-7 text-xs text-emerald-600"><Plus className="h-3 w-3 ml-1" />إضافة</Button>}</div>
                 <div className="space-y-2">
                   {(() => { const activeProducts = products.filter(function(p) { return p.isActive; }); return items.map(function(item, idx) {
+                    const selectedProductId = (item as Record<string, unknown>)._selectedProductId as string || "";
                     return (
                       <div key={idx} className="grid grid-cols-[1fr_48px_68px_28px] gap-1.5 items-end">
                         <div>
                           {idx === 0 && <span className="text-[10px] text-muted-foreground">المنتج</span>}
-                          {idx === 0 ? (
-                            <Input value={item.productName} onChange={function(e) { updateItem(idx, "productName", e.target.value); }} placeholder="اسم المنتج" className="text-xs h-8" />
-                          ) : (
-                            <select value={item.productName} onChange={function(e) { const found = activeProducts.find(function(p) { return p.id === e.target.value; }); updateItem(idx, "productName", found ? found.name : e.target.value); if (found) updateItem(idx, "unitPrice", found.price); }} className="w-full h-8 rounded-md border border-input bg-background px-2 text-xs">
-                              <option value="">اختر</option>
-                              {activeProducts.map(function(p) { return <option key={p.id} value={p.id}>{p.name} — {p.price}π</option>; })}
-                            </select>
-                          )}
+                          <select value={selectedProductId} onChange={function(e) { const found = activeProducts.find(function(p) { return p.id === e.target.value; }); setItems(function(prev) { return prev.map(function(item, i) { if (i === idx) { return Object.assign({}, item, { _selectedProductId: e.target.value, productName: found ? found.name : "", unitPrice: found ? found.price : 0 }); } return item; }); }); }} className="w-full h-8 rounded-md border border-input bg-background px-2 text-xs">
+                            <option value="">{activeProducts.length > 0 ? "اختر منتج" : "لا توجد منتجات نشطة"}</option>
+                            {activeProducts.map(function(p) { return <option key={p.id} value={p.id}>{p.name} — {p.price}π</option>; })}
+                          </select>
                         </div>
                         <div>{idx === 0 && <span className="text-[10px] text-muted-foreground">الكمية</span>}<Input type="number" min="1" inputMode="numeric" value={item.quantity} onChange={function(e) { updateItem(idx, "quantity", parseInt(e.target.value) || 1); }} className="text-xs h-8 text-center" /></div>
                         <div>{idx === 0 && <span className="text-[10px] text-muted-foreground">السعر</span>}<Input type="number" step="0.01" value={item.unitPrice} onChange={function(e) { updateItem(idx, "unitPrice", parseFloat(e.target.value) || 0); }} className="text-xs h-8" dir="ltr" /></div>
@@ -228,7 +229,8 @@ export function InvoicesView({ store, products, piUid }: { store: StoreData; pro
                 </div>
               </div>
               <div className="flex gap-2 pt-2">
-                <Button variant="outline" size="sm" className="text-xs" onClick={function() { copyText(detail!.invoiceNumber, toast, "تم نسخ رقم الفاتورة"); }}><Copy className="h-3 w-3 ml-1" />نسخ الرقم</Button>
+                <Button variant="outline" size="sm" className="text-xs gap-1.5" onClick={function() { copyText(typeof window !== "undefined" ? window.location.origin + "?invoice=" + detail!.invoiceNumber : detail!.invoiceNumber, toast, "تم نسخ رابط الفاتورة للمشتري"); }}><Copy className="h-3 w-3 ml-1" />نسخ رابط المشتري</Button>
+                <Button variant="ghost" size="sm" className="text-xs gap-1.5" onClick={function() { copyText(detail!.invoiceNumber, toast, "تم نسخ رقم الفاتورة"); }}><Receipt className="h-3 w-3 ml-1" />نسخ الرقم</Button>
               </div>
             </div>
           )}

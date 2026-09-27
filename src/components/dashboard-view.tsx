@@ -1,18 +1,34 @@
 "use client";
 
-import React from "react";
+import React, { useCallback } from "react";
 import {
   FileText, Package, Shield, CheckCircle2, Store as StoreIcon,
   ArrowRightLeft, CreditCard, Truck, Wallet, Clock, ChevronDown, Receipt,
+  Share2, Link, Copy,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { formatPi } from "@/lib/pi-amount";
-import { StatusBadge } from "@/lib/helpers";
+import { StatusBadge, copyText } from "@/lib/helpers";
+import { useToast } from "@/hooks/use-toast";
 import type { StoreData, InvoiceData } from "@/lib/types";
 
 /* ═══ Dashboard ═══ */
 export function DashboardView({ stats, store }: { stats: Record<string, unknown>; store: StoreData }) {
+  const toast = useToast().toast;
+
+  const storeLink = typeof window !== "undefined" ? window.location.origin + "?store=" + store.id : "";
+  const storesDirLink = typeof window !== "undefined" ? window.location.origin + "?stores" : "";
+
+  const handleCopyStoreLink = useCallback(function() {
+    copyText(storeLink, toast, "تم نسخ رابط المتجر");
+  }, [storeLink, toast]);
+
+  const handleCopyStoresDir = useCallback(function() {
+    copyText(storesDirLink, toast, "تم نسخ رابط الدليل");
+  }, [storesDirLink, toast]);
+
   const cards = [
     { label: "إجمالي الفواتير", value: String(stats.totalInvoices), icon: FileText, color: "text-blue-500", bg: "bg-blue-500/10" },
     { label: "المنتجات", value: String(stats.totalProducts), icon: Package, color: "text-violet-500", bg: "bg-violet-500/10" },
@@ -29,6 +45,41 @@ export function DashboardView({ stats, store }: { stats: Record<string, unknown>
         </div>
         <Badge variant="outline" className="text-xs bg-emerald-500/10 text-emerald-600 border-emerald-500/20"><StoreIcon className="h-3 w-3 ml-1" />نشط</Badge>
       </div>
+
+      {/* Store Link Sharing — CORE: How merchant tells buyers to find them */}
+      <Card className="border-0 shadow-sm border-l-4 border-l-emerald-500/40">
+        <CardHeader className="pb-2 pt-3.5 px-4">
+          <CardTitle className="text-xs font-bold flex items-center gap-2">
+            <Share2 className="h-3.5 w-3.5 text-emerald-500" />
+            شارك رابط متجرك
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="pb-3.5 px-4 space-y-2.5">
+          <p className="text-[11px] text-muted-foreground leading-relaxed">
+            أرسل هذا الرابط للمشترين ليتمكنوا من تصفح منتجاتك وطلبها مع ضمان الدفع بالـ Pi
+          </p>
+          <div className="flex items-center gap-2">
+            <div className="flex-1 bg-muted/50 rounded-lg px-3 py-2 text-[11px] font-mono truncate border border-border/50" dir="ltr">
+              {storeLink}
+            </div>
+            <Button variant="outline" size="sm" className="shrink-0 h-8 text-xs gap-1.5" onClick={handleCopyStoreLink}>
+              <Copy className="h-3 w-3" />نسخ
+            </Button>
+          </div>
+          <div className="flex items-center gap-3 pt-1">
+            <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+              <Link className="h-3 w-3" />
+              <span>رابط الدليل:</span>
+            </div>
+            <div className="flex-1 bg-muted/30 rounded px-2 py-1 text-[10px] font-mono truncate" dir="ltr">
+              {storesDirLink}
+            </div>
+            <Button variant="ghost" size="sm" className="shrink-0 h-6 text-[10px] gap-1 px-2" onClick={handleCopyStoresDir}>
+              <Copy className="h-2.5 w-2.5" />نسخ
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
 
       <div className="grid grid-cols-2 gap-3">
         {cards.map(function(c) {
