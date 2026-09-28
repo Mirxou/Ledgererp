@@ -9,6 +9,7 @@ import { api, setAccessToken } from "@/lib/api-client";
 import {
   Shield, BarChart3, Package, FileText, ShoppingCart,
   Settings, Zap, CircleDot, Sun, Moon, Copy, Bell,
+  ShoppingBag,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -33,6 +34,7 @@ import { BuyerInvoiceView } from "@/components/buyer-invoice-view";
 import { StoreDirectoryView } from "@/components/store-directory-view";
 import { StoreBuyerView } from "@/components/store-buyer-view";
 import { ErrorBoundary } from "@/components/error-boundary";
+import { MerchantBuyerView } from "@/components/merchant-buyer-view";
 
 /* ═══ App Entry ═══ */
 export default function LedgererpApp() {
@@ -342,8 +344,8 @@ function AuthenticatedApp({ piUid, username }: { piUid: string; username: string
           />
         ) : (
           <Tabs value={tab} onValueChange={setTab} className="space-y-5">
-            <TabsList className="grid grid-cols-6 w-full h-auto p-1 bg-muted/50">
-              {[["dashboard", BarChart3, "الرئيسية"], ["products", Package, "المنتجات"], ["invoices", FileText, "الفواتير"], ["orders", ShoppingCart, "الطلبات"], ["settings", Settings, "الإعدادات"], ["pisetup", Zap, "إعداد Pi"]].map(function(t) {
+            <TabsList className="grid grid-cols-7 w-full h-auto p-1 bg-muted/50">
+              {[["dashboard", BarChart3, "الرئيسية"], ["products", Package, "المنتجات"], ["invoices", FileText, "الفواتير"], ["orders", ShoppingCart, "الطلبات"], ["shop", ShoppingBag, "تسوق"], ["settings", Settings, "الإعدادات"], ["pisetup", Zap, "إعداد Pi"]].map(function(t) {
               const Ic = t[1] as React.ElementType;
                 return (
                   <TabsTrigger key={t[0] as string} value={t[0] as string} className="text-[11px] py-2 data-[state=active]:bg-emerald-600 data-[state=active]:text-white gap-1">
@@ -364,6 +366,15 @@ function AuthenticatedApp({ piUid, username }: { piUid: string; username: string
                 onConfirmDelivery={handleConfirm} onRelease={handleRelease}
                 onDispute={handleDispute} onCancel={handleCancel}
                 onRefresh={function() { qc.invalidateQueries({ queryKey: ["invoices"] }); }}
+              />
+            </TabsContent>
+            <TabsContent value="shop">
+              <MerchantBuyerView
+                buyerPiUid={piUid}
+                buyerName={username}
+                ownStoreId={myStore.id}
+                onPay={payWithPi}
+                onViewOrders={function() { setTab("orders"); }}
               />
             </TabsContent>
             <TabsContent value="settings">

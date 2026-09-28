@@ -843,3 +843,59 @@ Stage Summary:
   - Store creation: returns source, piAppUrl, slug, _importedProducts correctly
   - Webhook: returns correct response for completed/cancelled events
   - Buyer-action: now requires auth (401 without proper credentials)
+
+---
+Task ID: 1
+Agent: Component Developer
+Task: Create the MerchantBuyerView component
+
+Work Log:
+- Read worklog.md and existing project context
+- Studied existing components: store-directory-view.tsx, store-buyer-view.tsx for style reference
+- Reviewed lib/types.ts (StoreData, ProductData, InvoiceData, InvoiceItemData), lib/pi-amount.ts (formatPi, calcEscrowFee, calcTotal), lib/helpers.tsx, hooks/use-debounce.ts
+- Reviewed buyer-create API route to understand request/response format
+- Created /home/z/my-project/src/components/merchant-buyer-view.tsx with:
+  - Two modes: "directory" and "store" (state-based, no URL navigation)
+  - Store Directory mode: fetches /api/stores?limit=200, search bar with debounce, grid layout, ownStoreId marks merchant's store with "متجرك" badge
+  - Store Detail mode: fetches store + products, store header with avatar/name/verified badge, product grid with active products
+  - Order Dialog: pre-filled with buyerPiUid and buyerName (read-only), quantity selector, escrow fee 2% via calcEscrowFee, calls /api/invoices/buyer-create
+  - Success Dialog: shows invoice number, offers "ادفع الآن" (onPay callback) and "عرض طلباتي" (onViewOrders callback)
+  - RTL direction, emerald/teal color scheme, shadcn/ui components, responsive grid 1/2/3 cols
+  - All Arabic text, formatPi() for all Pi amounts
+- ESLint: 0 errors (1 pre-existing warning)
+- Dev server running fine
+
+Stage Summary:
+- MerchantBuyerView component created and fully functional
+- Self-contained component with props: buyerPiUid, buyerName, ownStoreId, onPay, onViewOrders
+- Matches existing app style (emerald/teal, RTL, shadcn/ui, Arabic)
+---
+Task ID: 1
+Agent: main
+Task: Implement dual-role capability — merchant can act as buyer at another store
+
+Work Log:
+- Created `/home/z/my-project/src/components/merchant-buyer-view.tsx` — full inline store directory + store browsing component
+- Component has two modes: "directory" (browse all stores) and "store" (view specific store + products)
+- Store directory shows search bar, responsive grid, merchant's own store marked with "متجرك" badge
+- Store detail shows products with "اطلب الآن" buttons, back button to directory
+- Order dialog pre-fills buyer's Pi UID and username from authenticated session (read-only)
+- Success dialog after creating invoice shows: invoice number, total, "ادفع الآن" and "عرض طلباتي" buttons
+- Integrated MerchantBuyerView into page.tsx as 7th tab "تسوق" with ShoppingBag icon
+- Changed TabsList from grid-cols-6 to grid-cols-7
+- Tested full E2E flow with agent-browser:
+  1. Created merchant store "متجر الاختبار"
+  2. Created second store "متجر الأزياء" with 3 products
+  3. Clicked "تسوق" tab → saw both stores (own store marked "متجرك")
+  4. Visited "متجر الأزياء" → saw 3 products
+  5. Ordered "فستان سهرة" → dialog pre-filled with demo_user/demo_uid_12345
+  6. Created invoice INV-20260928-0P6HU (1.53π total)
+  7. Clicked "عرض طلباتي" → switched to Orders tab → مشتري view
+  8. Saw the order with "دفع بالـ Pi" button
+
+Stage Summary:
+- **Dual-role capability fully implemented**: merchant can browse stores, shop, and place orders within the same authenticated session
+- Key design decision: merchant's own store is shown in directory with "متجرك" badge (not hidden) so they can still see it
+- Buyer identity pre-filled from authenticated Pi session (read-only fields)
+- Orders tab "مشتري" view shows the merchant's buyer orders with full escrow actions
+- 0 lint errors, all API calls 200 OK
