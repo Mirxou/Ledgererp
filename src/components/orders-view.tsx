@@ -5,7 +5,7 @@ import {
   ShoppingCart, Store, Search, Receipt, Package,
   CreditCard, Truck, CheckCircle2, Wallet, AlertTriangle,
   Ban, ChevronDown, ChevronUp, Loader2, Copy, Share2,
-  Scale, RotateCcw, XCircle, CheckCheck,
+  Scale, RotateCcw, XCircle, CheckCheck, MapPin,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -35,6 +35,7 @@ export function OrdersView({ merchantInvoices, customerInvoices, store, customer
   onDispute: (i: InvoiceData) => void; onCancel: (i: InvoiceData) => void;
   onRefresh?: () => void;
 }) {
+  /* Pass customerUid down to OrderCard for buyer-action API calls */
   const [view, setView] = useState<string>("merchant");
   const [filter, setFilter] = useState("");
   const [orderSearch, setOrderSearch] = useState("");
@@ -73,7 +74,7 @@ export function OrdersView({ merchantInvoices, customerInvoices, store, customer
         <div className="space-y-2.5 max-h-[70vh] overflow-y-auto">
           {filtered.map(function(inv) {
             return (
-              <OrderCard key={inv.id} invoice={inv} view={view} store={store} onPay={onPay} onShip={onShip} onConfirmDelivery={onConfirmDelivery} onRelease={onRelease} onDispute={onDispute} onCancel={onCancel} />
+              <OrderCard key={inv.id} invoice={inv} view={view} store={store} customerUid={customerUid} onPay={onPay} onShip={onShip} onConfirmDelivery={onConfirmDelivery} onRelease={onRelease} onDispute={onDispute} onCancel={onCancel} />
             );
           })}
         </div>
@@ -82,8 +83,8 @@ export function OrdersView({ merchantInvoices, customerInvoices, store, customer
   );
 }
 
-function OrderCard({ invoice: inv, view, store, onPay, onShip, onConfirmDelivery, onRelease, onDispute, onCancel, onRefresh }: {
-  invoice: InvoiceData; view: string; store: StoreData;
+function OrderCard({ invoice: inv, view, store, customerUid, onPay, onShip, onConfirmDelivery, onRelease, onDispute, onCancel, onRefresh }: {
+  invoice: InvoiceData; view: string; store: StoreData; customerUid: string;
   onPay: (i: InvoiceData) => void; onShip: (i: InvoiceData) => void;
   onConfirmDelivery: (i: InvoiceData) => void; onRelease: (i: InvoiceData) => void;
   onDispute: (i: InvoiceData) => void; onCancel: (i: InvoiceData) => void;
@@ -96,6 +97,9 @@ function OrderCard({ invoice: inv, view, store, onPay, onShip, onConfirmDelivery
   const [resolveOpen, setResolveOpen] = useState(false);
   const [resolveAction, setResolveAction] = useState<"refund" | "fulfill" | "reject">("refund");
   const [resolveReason, setResolveReason] = useState("");
+  const [shipOpen, setShipOpen] = useState(false);
+  const [trackingNumber, setTrackingNumber] = useState("");
+  const [carrier, setCarrier] = useState("");
   const toast = useToast().toast;
   const qc = React.useRef<ReturnType<typeof import("@tanstack/react-query").useQueryClient> | null>(null);
 
@@ -116,7 +120,7 @@ function OrderCard({ invoice: inv, view, store, onPay, onShip, onConfirmDelivery
       invoiceId: inv.id,
       action: resolveAction,
       reason: resolveReason.trim(),
-    }, store.piUid).then(function(res) {
+    }, view === "merchant" ? store.piUid : customerUid).then(function(res) {
       if (res.ok) {
         toast({ title: resolveAction === "refund" ? "تم الموافقة على الاسترجاع" : resolveAction === "fulfill" ? "تم تأكيد التسليم" : "تم رفض النزاع" });
         if (onRefresh) onRefresh();
@@ -128,7 +132,7 @@ function OrderCard({ invoice: inv, view, store, onPay, onShip, onConfirmDelivery
 
   const handleCancelDispute = function() {
     setLoading(true);
-    api.post("/api/invoices/buyer-action", { invoiceId: inv.id, action: "cancelDispute" }, store.piUid).then(function(res) {
+    api.post("/api/invoices/buyer-action", { invoiceId: inv.id, action: "cancelDispute" }, customerUid).then(function(res) {
       if (res.ok) {
         toast({ title: "تم سحب النزاع" });
         if (onRefresh) onRefresh();
@@ -160,7 +164,7 @@ function OrderCard({ invoice: inv, view, store, onPay, onShip, onConfirmDelivery
         {/* Actions */}
         <div className="flex items-center gap-1.5 flex-wrap">
           {canPay && <ActionBtn icon={<CreditCard className="h-3 w-3 ml-1" />} label="دفع بالـ Pi" onClick={function() { onPay(inv); }} primary />}
-          {canShip && <ActionBtn icon={<Truck className="h-3 w-3 ml-1" />} label="شحن" onClick={function() { onShip(inv); }} outline="border-blue-500/30 text-blue-600" />}
+          {canShip && <ActionBtn icon={<Truck className="h-3 w-3 ml-1" />} label="شحن" onClick={function() { setShipOpen(true); }} outline="border-blue-500/30 text-blue-600" />}
           {canConfirm && <ActionBtn icon={<CheckCircle2 className="h-3 w-3 ml-1" />} label="تأكيد التسليم" onClick={function() { onConfirmDelivery(inv); }} outline="border-teal-500/30 text-teal-600" />}
           {canRelease && <ActionBtn icon={<Wallet className="h-3 w-3 ml-1" />} label="إطلاق Pi" onClick={function() { setLoading(true); onRelease(inv); setLoading(false); }} primary loading={loading} />}
           {canDispute && <ActionBtn icon={<AlertTriangle className="h-3 w-3 ml-1" />} label="فتح نزاع" onClick={function() { setDisputeOpen(true); }} outline="border-red-500/30 text-red-500" />}
@@ -265,6 +269,47 @@ function OrderCard({ invoice: inv, view, store, onPay, onShip, onConfirmDelivery
             <Button size="sm" onClick={handleResolveDispute} disabled={loading} className="bg-amber-600 hover:bg-amber-700 text-white text-xs">
               {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin ml-1.5" /> : <Scale className="h-3.5 w-3.5 ml-1.5" />}
               حل النزاع
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Ship Dialog — Tracking Details */}
+      <Dialog open={shipOpen} onOpenChange={setShipOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="text-sm flex items-center gap-2"><Truck className="h-4 w-4 text-blue-500" />شحن الطلب</DialogTitle>
+            <DialogDescription className="text-xs">أضف تفاصيل الشحن ليتمكن المشتري من تتبع طلبه</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs flex items-center gap-1"><MapPin className="h-3 w-3" />رقم التتبع (اختياري)</Label>
+              <Input value={trackingNumber} onChange={function(e) { setTrackingNumber(e.target.value); }} placeholder="مثال: TRK-123456789" className="text-sm" dir="ltr" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">شركة الشحن (اختياري)</Label>
+              <Input value={carrier} onChange={function(e) { setCarrier(e.target.value); }} placeholder="مثال: DHL, Aramex, البريد الوطني" className="text-sm" />
+            </div>
+            <div className="flex items-start gap-2 p-2.5 rounded-lg bg-blue-50/50 dark:bg-blue-950/20 border border-blue-500/10">
+              <Truck className="h-3.5 w-3.5 text-blue-500 shrink-0 mt-0.5" />
+              <p className="text-[10px] text-blue-600 dark:text-blue-400 leading-relaxed">
+                سيتم إعلام المشتري بتحديث الحالة وتفاصيل الشحن
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={function() { setShipOpen(false); setTrackingNumber(""); setCarrier(""); }} className="text-xs">إلغاء</Button>
+            <Button size="sm" onClick={function() {
+              const trackingNote = (trackingNumber.trim() || carrier.trim()) ? "شحن: " + carrier.trim() + (trackingNumber.trim() ? " — تتبع: " + trackingNumber.trim() : "") : "";
+              onShip(inv);
+              if (trackingNote) {
+                api.patch("/api/invoices", { id: inv.id, notes: (inv.notes ? inv.notes + " | " : "") + trackingNote }, store.piUid).catch(function() {});
+              }
+              setShipOpen(false);
+              setTrackingNumber("");
+              setCarrier("");
+            }} className="bg-blue-600 hover:bg-blue-700 text-white text-xs gap-1.5">
+              <Truck className="h-3.5 w-3.5" />تأكيد الشحن
             </Button>
           </DialogFooter>
         </DialogContent>

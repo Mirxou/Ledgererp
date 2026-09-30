@@ -899,3 +899,26 @@ Stage Summary:
 - Buyer identity pre-filled from authenticated Pi session (read-only fields)
 - Orders tab "مشتري" view shows the merchant's buyer orders with full escrow actions
 - 0 lint errors, all API calls 200 OK
+---
+Task ID: 2
+Agent: main
+Task: Fix all merchant path deficiencies identified in audit
+
+Work Log:
+- Fixed handleDispute in page.tsx: now uses /api/invoices/buyer-action endpoint with buyer's piUid instead of merchant's updateInvoiceMut
+- Fixed orders-view.tsx: passed customerUid to OrderCard, used customerUid for buyer-action calls (cancelDispute, resolveDispute in buyer view)
+- Added LogOut button in header: clears localStorage and reloads page
+- Added shipping details dialog: when merchant clicks "شحن", dialog asks for tracking number + carrier
+- Tracking details saved to invoice notes field via PATCH /api/invoices with notes support
+- Added notes field support to PATCH /api/invoices endpoint
+- Tested shipping dialog E2E: entered "Aramex" carrier + "TRK-987654321" tracking → status changed to "تم الشحن" → notes saved as "شحن: Aramex — تتبع: TRK-987654321"
+- Verified notification bell shows "1 طلبات نشطة" for active escrow invoices
+- All fixes: 0 lint errors, all API calls 200 OK
+
+Stage Summary:
+- **handleDispute** now correctly uses buyer-action endpoint (only buyers can open disputes)
+- **customerUid** correctly passed and used for all buyer-side API calls
+- **Logout button** added to header
+- **Shipping dialog** with tracking number + carrier, saved to invoice notes
+- **PATCH /api/invoices** now supports notes updates
+- Status "releasing" already handled in StatusBadge (Wallet icon, amber color)

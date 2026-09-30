@@ -9,7 +9,7 @@ import { api, setAccessToken } from "@/lib/api-client";
 import {
   Shield, BarChart3, Package, FileText, ShoppingCart,
   Settings, Zap, CircleDot, Sun, Moon, Copy, Bell,
-  ShoppingBag,
+  ShoppingBag, LogOut,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -288,7 +288,12 @@ function AuthenticatedApp({ piUid, username }: { piUid: string; username: string
       else { res.json().catch(function() { return {}; }).then(function(err) { toast({ title: "فشل تأكيد التسليم", description: err.error || "خطأ غير معروف", variant: "destructive" }); }); }
     }).catch(function() { toast({ title: "خطأ في الاتصال", variant: "destructive" }); });
   }, [qc, toast, piUid]);
-  const handleDispute = useCallback(function(inv: InvoiceData) { updateInvoiceMut.mutate({ id: inv.id, status: "disputed" }); toast({ title: "تم فتح نزاع" }); }, [updateInvoiceMut, toast]);
+  const handleDispute = useCallback(function(inv: InvoiceData) {
+    api.post("/api/invoices/buyer-action", { invoiceId: inv.id, action: "dispute", reason: "" }, piUid).then(function(res) {
+      if (res.ok) { qc.invalidateQueries({ queryKey: ["invoices"] }); toast({ title: "تم فتح نزاع" }); }
+      else { res.json().catch(function() { return {}; }).then(function(err) { toast({ title: "فشل فتح النزاع", description: err.error || "", variant: "destructive" }); }); }
+    }).catch(function() { toast({ title: "خطأ في الاتصال", variant: "destructive" }); });
+  }, [qc, toast, piUid]);
   const handleCancel = useCallback(function(inv: InvoiceData) { updateInvoiceMut.mutate({ id: inv.id, status: "cancelled" }); toast({ title: "تم إلغاء الطلب" }); }, [updateInvoiceMut, toast]);
 
   /* ── Render ────────────────────────────────────────── */
@@ -326,6 +331,9 @@ function AuthenticatedApp({ piUid, username }: { piUid: string; username: string
             </button>
             <button className="p-1.5 rounded-md hover:bg-muted" onClick={function() { copyText(piUid, toast, "تم نسخ المعرف"); }} aria-label="نسخ المعرف">
               <Copy className="h-3.5 w-3.5 text-muted-foreground" />
+            </button>
+            <button className="p-1.5 rounded-md hover:bg-muted" onClick={function() { try { localStorage.removeItem("ledgererp_store"); } catch {} window.location.reload(); }} aria-label="تسجيل الخروج">
+              <LogOut className="h-3.5 w-3.5 text-muted-foreground" />
             </button>
           </div>
         </div>

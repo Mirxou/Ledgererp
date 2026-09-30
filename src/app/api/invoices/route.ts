@@ -164,7 +164,7 @@ export async function PATCH(req: NextRequest) {
     if (!auth.ok) return auth.response;
 
     const body = await req.json();
-    const { id, status, paymentTxId, releaseTxId } = body;
+    const { id, status, paymentTxId, releaseTxId, notes } = body;
     if (!id || typeof id !== "string") {
       return NextResponse.json({ error: "id required" }, { status: 400 });
     }
@@ -198,6 +198,7 @@ export async function PATCH(req: NextRequest) {
     if (status) data.status = status;
     if (paymentTxId) data.paymentTxId = sanitizeString(paymentTxId, 200);
     if (releaseTxId) data.releaseTxId = sanitizeString(releaseTxId, 200);
+    if (notes !== undefined) data.notes = sanitizeString(notes, 500);
 
     // Auto-set timestamps based on status
     if (status === "paid_escrow") data.paidAt = new Date();
