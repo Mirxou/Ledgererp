@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { db } from "@/lib/db";
 import { checkRateLimit } from "@/lib/api-auth";
 
 const PI_API_BASE = "https://api.minepi.com/v2";
@@ -64,12 +65,40 @@ export async function POST(req: NextRequest) {
     }
 
     const userDTO = await piRes.json();
+    const uid = userDTO.uid as string;
+    const username = (userDTO.username || "unknown") as string;
 
-    // H1 fix: Only return uid and username — don't spread entire Pi API response
+    // Upsert user in DB — persist authentication for notifications, settings, audit
+    const user = await db.user.upsert({
+      where: { piUid: uid },
+      update: {
+        username,
+        accessToken,
+        lastLoginAt: new Date(),
+      },
+      create: {
+        piUid: uid,
+        username,
+        accessToken,
+      },
+    });
+
+    // Create audit log for login
+    await db.auditLog.create({
+      data: {
+        action: "login",
+        userId: uid,
+        entity: "user",
+        entityId: user.id,
+        details: `تسجيل دخول: ${username}`,
+      },
+    });
+
     return NextResponse.json({
-      uid: userDTO.uid,
-      username: userDTO.username || "unknown",
+      uid,
+      username,
       clientId: PI_CLIENT_ID,
+      userId: user.id,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";

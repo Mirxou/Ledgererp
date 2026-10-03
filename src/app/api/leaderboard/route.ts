@@ -1,66 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
+import { db } from "@/lib/db";
 import { checkRateLimit } from "@/lib/api-auth";
 
-/* ── Types ─────────────────────────────────────────────────────────── */
+/**
+ * GET /api/leaderboard
+ * Returns REAL store/merchant leaderboard from the database.
+ * Ranked by: completed transaction volume → number of completed invoices → trust score.
+ * No mock data — everything is computed from actual stores and invoices.
+ */
 
-interface LeaderboardEntry {
-  rank: number;
-  username: string;
-  avatar: string;
-  issuesFixed: number;
-  xp: number;
-  level: number;
-  streak: number;
-  change: "up" | "down" | "same";
-  changeAmount: number;
-}
-
-interface CurrentUser {
-  rank: number;
-  username: string;
-  issuesFixed: number;
-  xp: number;
-  level: number;
-}
-
-/* ── Mock Researchers ──────────────────────────────────────────────── */
-
-const BASE_RESEARCHERS = [
-  { username: "pi_pioneer",    baseFixed: 47, baseXp: 12500, baseLevel: 12, baseStreak: 15, change: "up" as const, changeAmt: 2 },
-  { username: "node_guardian", baseFixed: 42, baseXp: 11200, baseLevel: 11, baseStreak: 12, change: "up" as const, changeAmt: 1 },
-  { username: "crypto_sentinel", baseFixed: 38, baseXp: 9800, baseLevel: 10, baseStreak: 20, change: "same" as const, changeAmt: 0 },
-  { username: "pi_explorer",   baseFixed: 35, baseXp: 9100, baseLevel: 10, baseStreak: 8,  change: "down" as const, changeAmt: 1 },
-  { username: "mirxou_dev",    baseFixed: 23, baseXp: 6800,  baseLevel: 8,  baseStreak: 5,  change: "up" as const, changeAmt: 3 },
-  { username: "blockchain_shield", baseFixed: 28, baseXp: 7400, baseLevel: 9,  baseStreak: 7,  change: "same" as const, changeAmt: 0 },
-  { username: "secure_node",   baseFixed: 25, baseXp: 6200,  baseLevel: 8,  baseStreak: 10, change: "up" as const, changeAmt: 1 },
-  { username: "pi_auditor",    baseFixed: 20, baseXp: 5100,  baseLevel: 7,  baseStreak: 3,  change: "down" as const, changeAmt: 2 },
-  { username: "kyc_hunter",    baseFixed: 18, baseXp: 4500,  baseLevel: 6,  baseStreak: 14, change: "up" as const, changeAmt: 4 },
-  { username: "auth_protector", baseFixed: 15, baseXp: 3800,  baseLevel: 5,  baseStreak: 6,  change: "same" as const, changeAmt: 0 },
-];
-
-/* ── Period multipliers ────────────────────────────────────────────── */
-
-const PERIOD_MULTIPLIERS: Record<string, { fixed: number; xp: number }> = {
-  week:   { fixed: 0.2, xp: 0.15 },
-  month:  { fixed: 0.6, xp: 0.55 },
-  alltime: { fixed: 1.0, xp: 1.0 },
-};
-
-/* ── Category severity filter ──────────────────────────────────────── */
-
-const CATEGORY_SEVERITY_MAP: Record<string, string[]> = {
-  all:      ["CRITICAL", "HIGH", "MEDIUM", "LOW"],
-  critical: ["CRITICAL"],
-  high:     ["CRITICAL", "HIGH"],
-  medium:   ["CRITICAL", "HIGH", "MEDIUM"],
-};
-
-/* ── Cache ─────────────────────────────────────────────────────────── */
-
+// Local cache (5 min TTL)
 const cache = new Map<string, { data: unknown; timestamp: number }>();
-const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
-
-/* ── GET ───────────────────────────────────────────────────────────── */
+const CACHE_TTL = 5 * 60 * 1000;
 
 export async function GET(req: NextRequest) {
   const rateLimitErr = checkRateLimit(req);
@@ -69,79 +20,109 @@ export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     const period = searchParams.get("period") || "alltime";
-    const category = searchParams.get("category") || "all";
 
-    const cacheKey = `leaderboard:${period}:${category}`;
+    const cacheKey = `leaderboard:${period}`;
     const cached = cache.get(cacheKey);
     if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
       return NextResponse.json(cached.data);
     }
 
-    const mult = PERIOD_MULTIPLIERS[period] || PERIOD_MULTIPLIERS.alltime;
-    const severities = CATEGORY_SEVERITY_MAP[category] || CATEGORY_SEVERITY_MAP.all;
+    // ── Date filter based on period ───────────────────────────────────
+    let dateFilter: Date | undefined;
+    if (period === "week") {
+      dateFilter = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    } else if (period === "month") {
+      dateFilter = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    }
 
-    // Category severity affects the "weight" of issues
-    const severityWeight = severities.length / 4;
+    // ── Fetch stores with their invoices ──────────────────────────────
+    const stores = await db.store.findMany({
+      include: {
+        invoices: {
+          where: dateFilter ? { createdAt: { gte: dateFilter } } : undefined,
+          select: {
+            id: true,
+            status: true,
+            total: true,
+            subtotal: true,
+            createdAt: true,
+          },
+        },
+        _count: { select: { products: true } },
+      },
+    });
 
-    const leaderboard: LeaderboardEntry[] = BASE_RESEARCHERS
-      .map((r, idx) => {
-        const seed = r.username + period + category;
-        const hash = hashString(seed);
-        const variance = (hash % 20 - 10) / 100; // -10% to +10%
+    // ── Compute leaderboard entries ──────────────────────────────────
+    const leaderboard = stores
+      .map((store) => {
+        const completedInvoices = store.invoices.filter((inv) => inv.status === "completed");
+        const activeInvoices = store.invoices.filter((inv) =>
+          ["paid_escrow", "shipped", "delivered"].includes(inv.status)
+        );
+        const disputedInvoices = store.invoices.filter((inv) => inv.status === "disputed");
 
-        const issuesFixed = Math.round(r.baseFixed * mult.fixed * (1 + variance));
-        const xp = Math.round(r.baseXp * mult.xp * severityWeight * (1 + variance * 0.5));
-        const level = Math.max(1, Math.round(r.baseLevel * (mult.fixed === 1 ? 1 : 0.7) * (1 + variance * 0.3)));
-        const streak = period === "week" ? Math.min(r.baseStreak, 7) : period === "month" ? Math.min(r.baseStreak, 30) : r.baseStreak;
+        const completedVolume = completedInvoices.reduce((sum, inv) => sum + inv.subtotal, 0);
+        const escrowedVolume = activeInvoices.reduce((sum, inv) => sum + inv.total, 0);
+        const totalVolume = store.invoices.reduce((sum, inv) => sum + inv.total, 0);
+
+        // Trust score: weighted combination of completion rate and volume
+        const completionRate = store.invoices.length > 0
+          ? completedInvoices.length / store.invoices.length
+          : 0;
+        const disputeRate = store.invoices.length > 0
+          ? disputedInvoices.length / store.invoices.length
+          : 0;
+        const trustScore = Math.max(0, Math.min(100, Math.round(
+          completionRate * 40 + (1 - disputeRate) * 30 + Math.min(totalVolume / 100, 1) * 20 + (store.isVerified ? 10 : 0)
+        )));
 
         return {
           rank: 0, // assigned after sort
-          username: r.username,
-          avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${r.username}`,
-          issuesFixed,
-          xp,
-          level,
-          streak,
-          change: r.change,
-          changeAmount: r.changeAmt,
+          storeId: store.id,
+          storeName: store.name,
+          piUid: store.piUid,
+          avatar: store.avatar,
+          isVerified: store.isVerified,
+          source: store.source,
+          totalProducts: store._count.products,
+          totalInvoices: store.invoices.length,
+          completedInvoices: completedInvoices.length,
+          activeInvoices: activeInvoices.length,
+          disputedInvoices: disputedInvoices.length,
+          completedVolume: Math.round(completedVolume * 100) / 100,
+          escrowedVolume: Math.round(escrowedVolume * 100) / 100,
+          totalVolume: Math.round(totalVolume * 100) / 100,
+          trustScore,
+          completionRate: Math.round(completionRate * 100),
+          disputeRate: Math.round(disputeRate * 100),
         };
       })
-      .sort((a, b) => b.xp - a.xp)
+      .sort((a, b) => {
+        // Primary: total volume desc, secondary: trust score desc
+        if (b.totalVolume !== a.totalVolume) return b.totalVolume - a.totalVolume;
+        return b.trustScore - a.trustScore;
+      })
       .map((entry, idx) => ({ ...entry, rank: idx + 1 }));
 
-    // Find current user
-    const currentUserEntry = leaderboard.find((r) => r.username === "mirxou_dev");
-    const currentUser: CurrentUser | null = currentUserEntry
-      ? {
-          rank: currentUserEntry.rank,
-          username: currentUserEntry.username,
-          issuesFixed: currentUserEntry.issuesFixed,
-          xp: currentUserEntry.xp,
-          level: currentUserEntry.level,
-        }
-      : null;
+    // ── Summary stats ────────────────────────────────────────────────
+    const summary = {
+      totalStores: stores.length,
+      totalVolume: Math.round(leaderboard.reduce((sum, e) => sum + e.totalVolume, 0) * 100) / 100,
+      totalCompleted: leaderboard.reduce((sum, e) => sum + e.completedInvoices, 0),
+      avgTrustScore: leaderboard.length > 0
+        ? Math.round(leaderboard.reduce((sum, e) => sum + e.trustScore, 0) / leaderboard.length)
+        : 0,
+    };
 
-    const response = { leaderboard, currentUser };
+    const response = { leaderboard, summary, period };
     cache.set(cacheKey, { data: response, timestamp: Date.now() });
 
     return NextResponse.json(response);
   } catch (error) {
     console.error("Leaderboard API error:", error);
     return NextResponse.json(
-      { error: "فشل في تحميل بيانات لوحة المتصدرين" },
+      { error: "فشل في تحميل بيانات لوحة المتصدرين", leaderboard: [], summary: {} },
       { status: 500 }
     );
   }
-}
-
-/* ── Simple hash helper ────────────────────────────────────────────── */
-
-function hashString(str: string): number {
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    const char = str.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
-    hash |= 0;
-  }
-  return Math.abs(hash);
 }

@@ -160,6 +160,42 @@ export async function POST(req: NextRequest) {
         },
       });
 
+      // Record A2U EscrowTransaction in DB
+      const invoice = await db.invoice.findUnique({
+        where: { id: invoiceId },
+        select: { subtotal: true, customerPiUid: true },
+      });
+
+      if (invoice) {
+        try {
+          await db.escrowTransaction.create({
+            data: {
+              type: "A2U",
+              invoiceId,
+              txid: txid || paymentDTO?.identifier || "",
+              amount: invoice.subtotal,
+              fromUid: auth.user.uid,
+              toUid: sanitizeString(uid, 100),
+              memo: sanitizeString(memo, 200) || `إطلاق ضمان فاتورة`,
+              status: "pending",
+            },
+          });
+        } catch (txErr) {
+          console.warn("[pi/a2u] Could not record EscrowTransaction:", txErr);
+        }
+      }
+
+      // Create audit log
+      await db.auditLog.create({
+        data: {
+          action: "escrow_release",
+          userId: auth.user.uid,
+          entity: "invoice",
+          entityId: invoiceId,
+          details: `إطلاق ضمان: ${invoice?.subtotal || amount}π — txid: ${txid}`,
+        },
+      });
+
       console.log(`[pi/a2u] Invoice ${invoiceId} updated: releasing, txid=${txid}`);
     }
 

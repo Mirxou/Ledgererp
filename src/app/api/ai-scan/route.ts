@@ -1,115 +1,92 @@
 import { NextRequest, NextResponse } from "next/server";
 import ZAI from "z-ai-web-dev-sdk";
 import { db } from "@/lib/db";
-import { checkRateLimit } from "@/lib/api-auth";
+import { verifyPiAuth, checkRateLimit } from "@/lib/api-auth";
 
-/* ── Types ─────────────────────────────────────────────────────────── */
-
-interface AiScanRequest {
-  scope?: "full" | "critical" | "high";
-}
-
-/* ── POST ──────────────────────────────────────────────────────────── */
-
+/**
+ * POST /api/ai-scan
+ * AI scan of your escrow platform — analyzes store health, invoice patterns,
+ * and provides actionable recommendations. Uses REAL data from the database.
+ */
 export async function POST(req: NextRequest) {
   const rateLimitErr = checkRateLimit(req);
   if (rateLimitErr) return rateLimitErr;
 
   try {
-    const body = (await req.json()) as AiScanRequest;
+    const auth = await verifyPiAuth(req);
+    if (!auth.ok) return auth.response;
+
+    const body = (await req.json()) as { scope?: "full" | "store" | "invoices" };
     const scope = body.scope || "full";
 
-    /* ── Fetch issues from DB ─────────────────────────────────────── */
-    let issues = await db.auditIssue.findMany();
+    /* ── Fetch real data from DB ─────────────────────────────────────── */
+    const store = await db.store.findUnique({ where: { piUid: auth.user.uid } });
 
-    // Filter by scope
-    if (scope === "critical") {
-      issues = issues.filter((i) => i.severity === "CRITICAL" && i.status !== "FIXED");
-    } else if (scope === "high") {
-      issues = issues.filter(
-        (i) => (i.severity === "CRITICAL" || i.severity === "HIGH") && i.status !== "FIXED"
-      );
-    } else {
-      issues = issues.filter((i) => i.status !== "FIXED");
+    if (!store) {
+      return NextResponse.json({
+        summary: "لم تنشئ متجراً بعد. أنشئ متجرك أولاً لتتمكن من الفحص.",
+        riskAssessment: "غير محدد",
+        priorityActions: [],
+        recommendations: "أنشئ متجراً وأضف منتجات لبدء استقبال الطلبات.",
+      });
     }
 
-    /* ── Group by severity ────────────────────────────────────────── */
-    const bySeverity: Record<string, typeof issues> = {};
-    for (const issue of issues) {
-      const sev = issue.severity || "UNKNOWN";
-      if (!bySeverity[sev]) bySeverity[sev] = [];
-      bySeverity[sev].push(issue);
-    }
+    const invoices = await db.invoice.findMany({ where: { storeId: store.id } });
+    const products = await db.product.findMany({ where: { storeId: store.id } });
+    const escrowTx = await db.escrowTransaction.findMany({
+      where: { fromUid: auth.user.uid },
+    });
 
-    /* ── Group by category ────────────────────────────────────────── */
-    const byCategory: Record<string, typeof issues> = {};
-    for (const issue of issues) {
-      const cat = issue.category || "أخرى";
-      if (!byCategory[cat]) byCategory[cat] = [];
-      byCategory[cat].push(issue);
-    }
+    // Compute stats
+    const completed = invoices.filter((i) => i.status === "completed");
+    const disputed = invoices.filter((i) => i.status === "disputed");
+    const pending = invoices.filter((i) => i.status === "pending");
+    const escrowed = invoices.filter((i) => ["paid_escrow", "shipped", "delivered"].includes(i.status));
+    const escrowVolume = escrowed.reduce((s, i) => s + i.total, 0);
+    const completedVolume = completed.reduce((s, i) => s + i.subtotal, 0);
+    const disputeRate = invoices.length > 0 ? disputed.length / invoices.length : 0;
+    const completionRate = invoices.length > 0 ? completed.length / invoices.length : 0;
+    const activeProducts = products.filter((p) => p.isActive).length;
 
-    /* ── Build summary for AI prompt ──────────────────────────────── */
-    const severitySummary = Object.entries(bySeverity)
-      .map(([sev, items]) => `  - ${sev}: ${items.length} مشكلة`)
-      .join("\n");
+    /* ── Build AI prompt ─────────────────────────────────────────── */
+    const systemPrompt = `أنت محلل أعمال متقدم متخصص في منصات التجارة الإلكترونية والضمان الآمن على شبكة Pi Network.
+تحلل بيانات المتجر والمعاملات وتقدم تقييم مفصل.
 
-    const categorySummary = Object.entries(byCategory)
-      .sort((a, b) => b[1].length - a[1].length)
-      .map(([cat, items]) => `  - ${cat}: ${items.length} مشكلة`)
-      .join("\n");
-
-    const topIssues = issues
-      .sort((a, b) => {
-        const sevOrder = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3, UNKNOWN: 4 };
-        return (sevOrder[a.severity] ?? 4) - (sevOrder[b.severity] ?? 4);
-      })
-      .slice(0, 15)
-      .map((i) => `  - [${i.issueId}] ${i.title} | الخطورة: ${i.severity} | الفئة: ${i.category} | الملف: ${i.file}:${i.line}`)
-      .join("\n");
-
-    /* ── Build AI prompt (Arabic) ─────────────────────────────────── */
-    const systemPrompt = `أنت محلل أمني متقدم متخصص في فحص تطبيقات Pi Network وشبكات البلوكتشين. تقوم بتحليل شامل لنتائج التدقيق الأمني وتقديم تقييم مفصل.
-
-يجب أن تُجيب دائماً باللغة العربية وبصيغة JSON صحيحة فقط، بدون أي نص إضافي قبل أو بعد JSON.
-
-أجب بالصيغة التالية بالضبط:
+أجب باللغة العربية وبصيغة JSON صحيحة فقط:
 {
-  "summary": "ملخص نصي شامل للمشروع الأمني",
+  "summary": "ملخص شامل لحالة المتجر",
   "riskAssessment": "منخفض|متوسط|مرتفع|حرج",
   "priorityActions": [
-    { "title": "عنوان الإجراء", "reason": "السبب التفصيلي", "effort": "منخفض|متوسط|مرتفع" }
+    { "title": "عنوان الإجراء", "reason": "السبب", "effort": "منخفض|متوسط|مرتفع" }
   ],
-  "codePatterns": [
-    { "pattern": "اسم النمط الخبيث", "count": عدد, "risk": "critical|high|medium|low" }
-  ],
-  "recommendations": "توصيات نصية شاملة ومفصلة"
+  "recommendations": "توصيات شاملة ومفصلة"
 }`;
 
-    const userPrompt = `قم بتحليل شامل لنتائج التدقيق الأمني التالية لنظام Ledgererp ERP المتكامل مع Pi Network:
+    const userPrompt = `حلل متجر "${store.name}" على منصة Ledgererp:
 
-## نطاق الفحص: ${scope === "full" ? "شامل" : scope === "critical" ? "حرج فقط" : "حرج ومرتفع"}
+## نطاق الفحص: ${scope === "full" ? "شامل" : scope === "store" ? "المتجر فقط" : "الفواتير فقط"}
 
-## إحصائيات عامة:
-- إجمالي المشاكل المفتوحة: ${issues.length}
+## بيانات المتجر:
+- المنتجات: ${products.length} (${activeProducts} نشط)
+- متجر موثق: ${store.isVerified ? "نعم" : "لا"}
+- مصدر: ${store.source}
 
-## التوزيع حسب الخطورة:
-${severitySummary}
-
-## التوزيع حسب الفئة:
-${categorySummary}
-
-## أعلى 15 مشكلة:
-${topIssues}
+## بيانات المعاملات:
+- إجمالي الفواتير: ${invoices.length}
+- مكتملة: ${completed.length}
+- في الضمان: ${escrowed.length} (${escrowVolume.toFixed(2)}π)
+- بانتظار الدفع: ${pending.length}
+- نزاعات: ${disputed.length}
+- نسبة الإكمال: ${(completionRate * 100).toFixed(1)}%
+- نسبة النزاعات: ${(disputeRate * 100).toFixed(1)}%
+- حجم المبيعات المكتملة: ${completedVolume.toFixed(2)}π
+- معاملات الضمان المسجلة: ${escrowTx.length}
 
 ## المطلوب:
-1. اكتب ملخصاً شاملاً لحالة الأمان
-2. قيّم مستوى الخطر (منخفض/متوسط/مرتفع/حرج)
-3. حدد 5 إجراءات أولوية مع الأسباب ومستوى الجهد
-4. استخرج 8 أنماط كود خبيثة متكررة مع العدد ومستوى الخطورة
-5. اكتب توصيات شاملة ومفصلة للتحسين
-
-تذكر: أجب بـ JSON صحيح فقط بدون أي نص إضافي.`;
+1. ملخص شامل لحالة المتجر
+2. تقييم مستوى الخطر
+3. 5 إجراءات أولوية مع الأسباب ومستوى الجهد
+4. توصيات شاملة للتحسين`;
 
     const messages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
       { role: "system", content: systemPrompt },
@@ -130,40 +107,46 @@ ${topIssues}
     /* ── Parse AI response ───────────────────────────────────────── */
     let parsedResponse;
     try {
-      // Try to extract JSON from the response (handle markdown code blocks)
       const jsonMatch = responseText.match(/```(?:json)?\s*([\s\S]*?)```/) || [null, responseText];
       const jsonStr = (jsonMatch[1] || responseText).trim();
       parsedResponse = JSON.parse(jsonStr);
     } catch {
-      // If parsing fails, return raw text as summary
       parsedResponse = {
-        summary: responseText || "لم يتم الحصول على تحليل من الذكاء الاصطناعي",
+        summary: responseText || "لم يتم الحصول على تحليل",
         riskAssessment: "غير محدد",
         priorityActions: [],
-        codePatterns: [],
         recommendations: "",
       };
     }
 
-    /* ── Enrich with DB stats ────────────────────────────────────── */
-    const totalIssues = await db.auditIssue.findMany();
-    const fixedIssues = totalIssues.filter((i) => i.status === "FIXED");
+    // Log the scan
+    await db.auditLog.create({
+      data: {
+        action: "ai_scan",
+        userId: auth.user.uid,
+        entity: "store",
+        entityId: store.id,
+        details: `فحص ${scope}: نسبة إكمال ${(completionRate * 100).toFixed(1)}%, نزاعات ${(disputeRate * 100).toFixed(1)}%`,
+      },
+    });
 
     return NextResponse.json({
       ...parsedResponse,
       scanMeta: {
         scope,
         scannedAt: new Date().toISOString(),
-        totalOpen: issues.length,
-        totalFixed: fixedIssues.length,
-        totalAll: totalIssues.length,
+        storeName: store.name,
+        totalInvoices: invoices.length,
+        totalProducts: products.length,
+        completionRate: Math.round(completionRate * 100),
+        disputeRate: Math.round(disputeRate * 100),
       },
     });
   } catch (error) {
     console.error("AI Scan API error:", error);
     return NextResponse.json(
       {
-        error: "فشل في إجراء الفحص الأمني بالذكاء الاصطناعي",
+        error: "فشل في إجراء الفحص بالذكاء الاصطناعي",
         details: "حدث خطأ أثناء معالجة الطلب. يرجى المحاولة لاحقاً.",
       },
       { status: 500 }

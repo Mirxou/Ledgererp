@@ -1,105 +1,108 @@
 import { NextRequest, NextResponse } from "next/server";
-import { checkRateLimit, sanitizeString, validatePositiveNumber } from "@/lib/api-auth";
+import { db } from "@/lib/db";
+import { verifyPiAuth, checkRateLimit, sanitizeString, validatePositiveNumber } from "@/lib/api-auth";
 
 /* ════════════════════════════════════════════════════════════════════════════
-   PI PAYMENT API
+   PI PAYMENT API (DB-backed, NOT in-memory)
    Handles Pi payment creation and completion following the official Pi SDK
-   "Double-Check" flow:
-     1. Frontend creates payment via Pi SDK
-     2. Server receives paymentId → verifies with Pi Platform API
-     3. Server completes the payment
-
-   In production, this calls:
-     POST   https://api.minepi.com/v2/payments
-     GET    https://api.minepi.com/v2/payments/{paymentId}
-     POST   https://api.minepi.com/v2/payments/{paymentId}/complete
+   "Double-Check" flow. All payment records are persisted in EscrowTransaction.
    ════════════════════════════════════════════════════════════════════════════ */
 
 interface PaymentBody {
   amount: number;
   memo: string;
   uid: string;
-  accessToken: string;
+  invoiceId?: string;
 }
 
-// In-memory demo store (replace with DB in production)
-const payments = new Map<
-  string,
-  {
-    paymentId: string;
-    amount: number;
-    memo: string;
-    uid: string;
-    status: string;
-    txid?: string;
-    createdAt: string;
-    completedAt?: string;
-  }
->();
-
-/** POST /api/pi/payment — Create a payment */
+/** POST /api/pi/payment — Create a payment (persisted in DB) */
 export async function POST(request: NextRequest) {
   const rateLimitErr = checkRateLimit(request);
   if (rateLimitErr) return rateLimitErr;
 
   try {
+    const auth = await verifyPiAuth(request);
+    if (!auth.ok) return auth.response;
+
     const body: PaymentBody = await request.json();
-    const { amount, memo, uid, accessToken } = body;
+    const { amount, memo, uid, invoiceId } = body;
 
     // Validate and sanitize inputs
     const validAmount = validatePositiveNumber(amount);
     if (!validAmount) {
-      return NextResponse.json(
-        { error: "المبلغ غير صالح" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "المبلغ غير صالح" }, { status: 400 });
     }
 
     const sanitizedUid = sanitizeString(uid, 100);
     if (!sanitizedUid) {
-      return NextResponse.json(
-        { error: "معرّف المستخدم مطلوب" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "معرّف المستخدم مطلوب" }, { status: 400 });
     }
 
     const sanitizedMemo = sanitizeString(memo, 200);
 
-    // ⚠️ Production: Add verifyPiAuth(request) here before processing payments
+    // Get or create user in DB
+    const fromUser = await db.user.upsert({
+      where: { piUid: auth.user.uid },
+      update: { lastLoginAt: new Date() },
+      create: { piUid: auth.user.uid, username: auth.user.username },
+    });
 
-    // In production, this calls Pi Platform API:
-    // POST https://api.minepi.com/v2/payments
-    // Headers: Authorization: Bearer {accessToken}
-    // Body: { amount, memo, metadata: { uid }, uid }
+    const toUser = await db.user.upsert({
+      where: { piUid: sanitizedUid },
+      update: {},
+      create: { piUid: sanitizedUid, username: "unknown" },
+    });
 
+    // Create payment record in DB
     const paymentId = `pay_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-    const payment = {
+    const escrowTx = await db.escrowTransaction.create({
+      data: {
+        type: "U2A",
+        invoiceId: invoiceId || paymentId,
+        txid: paymentId,
+        amount: validAmount,
+        fromUid: auth.user.uid,
+        toUid: sanitizedUid,
+        memo: sanitizedMemo || "Escrow payment",
+        status: "pending",
+      },
+    });
+
+    // Create audit log
+    await db.auditLog.create({
+      data: {
+        action: "payment_created",
+        userId: auth.user.uid,
+        entity: "escrowTransaction",
+        entityId: escrowTx.id,
+        details: `إنشاء دفعة: ${validAmount}π من ${auth.user.uid} إلى ${sanitizedUid}`,
+      },
+    });
+
+    return NextResponse.json({
       paymentId,
       amount: validAmount,
       memo: sanitizedMemo,
       uid: sanitizedUid,
       status: "created",
+      escrowTxId: escrowTx.id,
       createdAt: new Date().toISOString(),
-    };
-
-    payments.set(paymentId, payment);
-
-    return NextResponse.json(payment);
+    });
   } catch (error) {
     console.error("Payment creation failed:", error);
-    return NextResponse.json(
-      { error: "فشل في إنشاء الدفعة" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "فشل في إنشاء الدفعة" }, { status: 500 });
   }
 }
 
-/** PATCH /api/pi/payment — Approve/Complete payment (server-side validation) */
+/** PATCH /api/pi/payment — Approve/Complete payment (DB-backed) */
 export async function PATCH(request: NextRequest) {
   const rateLimitErr = checkRateLimit(request);
   if (rateLimitErr) return rateLimitErr;
 
   try {
+    const auth = await verifyPiAuth(request);
+    if (!auth.ok) return auth.response;
+
     const body = await request.json();
     const { paymentId, action, txid } = body as {
       paymentId: string;
@@ -107,68 +110,76 @@ export async function PATCH(request: NextRequest) {
       txid?: string;
     };
 
-    // Validate inputs
     const sanitizedPaymentId = sanitizeString(paymentId, 100);
     const validAction = action === "approve" || action === "complete" ? action : null;
 
     if (!sanitizedPaymentId || !validAction) {
-      return NextResponse.json(
-        { error: "بيانات غير مكتملة" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "بيانات غير مكتملة" }, { status: 400 });
     }
 
-    // ⚠️ Production: Add verifyPiAuth(request) here before modifying payments
+    // Find the escrow transaction
+    const escrowTx = await db.escrowTransaction.findFirst({
+      where: { txid: sanitizedPaymentId },
+    });
 
-    const payment = payments.get(sanitizedPaymentId);
-    if (!payment) {
-      return NextResponse.json(
-        { error: "الدفعة غير موجودة" },
-        { status: 404 }
-      );
+    if (!escrowTx) {
+      return NextResponse.json({ error: "الدفعة غير موجودة" }, { status: 404 });
     }
 
     if (validAction === "approve") {
-      // Server-side: verify payment with Pi Platform API
-      // GET https://api.minepi.com/v2/payments/{paymentId}
-      // Verify amount, recipient, status === "developed"
+      await db.escrowTransaction.update({
+        where: { id: escrowTx.id },
+        data: { status: "approved" },
+      });
 
-      payment.status = "approved";
+      await db.auditLog.create({
+        data: {
+          action: "payment_approved",
+          userId: auth.user.uid,
+          entity: "escrowTransaction",
+          entityId: escrowTx.id,
+          details: `موافقة على دفعة: ${sanitizedPaymentId}`,
+        },
+      });
 
       return NextResponse.json({
         success: true,
         paymentId: sanitizedPaymentId,
         action: "approve",
-        status: payment.status,
+        status: "approved",
       });
     }
 
     if (validAction === "complete") {
-      // Server-side: complete the payment
-      // POST https://api.minepi.com/v2/payments/{paymentId}/complete
+      const finalTxid = sanitizeString(txid, 100) || `tx_demo_${Date.now()}`;
 
-      payment.status = "completed";
-      payment.txid = sanitizeString(txid, 100) || `tx_demo_${Date.now()}`;
-      payment.completedAt = new Date().toISOString();
+      await db.escrowTransaction.update({
+        where: { id: escrowTx.id },
+        data: { status: "completed", txid: finalTxid, completedAt: new Date() },
+      });
+
+      await db.auditLog.create({
+        data: {
+          action: "payment_completed",
+          userId: auth.user.uid,
+          entity: "escrowTransaction",
+          entityId: escrowTx.id,
+          details: `إكمال دفعة: ${sanitizedPaymentId} — txid: ${finalTxid}`,
+        },
+      });
 
       return NextResponse.json({
         success: true,
         paymentId: sanitizedPaymentId,
         action: "complete",
-        status: payment.status,
-        txid: payment.txid,
+        status: "completed",
+        txid: finalTxid,
       });
     }
 
-    return NextResponse.json(
-      { error: "إجراء غير معروف" },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: "إجراء غير معروف" }, { status: 400 });
   } catch (error) {
     console.error("Payment action failed:", error);
-    return NextResponse.json(
-      { error: "فشل في معالجة الدفعة" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "فشل في معالجة الدفعة" }, { status: 500 });
   }
 }

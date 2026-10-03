@@ -1,113 +1,127 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { checkRateLimit } from "@/lib/api-auth";
+import { verifyPiAuth, checkRateLimit } from "@/lib/api-auth";
 
-/* ── Types ─────────────────────────────────────────────────────────────── */
-
-interface Activity {
-  id: string;
-  type: "issue_fixed" | "issue_status_changed" | "ai_analysis" | "login" | "export";
-  description: string;
-  timestamp: string;
-  issueId?: string;
-  severity?: string;
-}
-
-/* ── GET Handler ───────────────────────────────────────────────────────── */
-
+/**
+ * GET /api/activities
+ * Returns REAL activity log from the database.
+ * Uses the AuditLog model (general app activity, not security-only).
+ */
 export async function GET(req: NextRequest) {
   const rateLimitErr = checkRateLimit(req);
   if (rateLimitErr) return rateLimitErr;
 
   try {
-    /* ── Fetch recent audit logs ────────────────────────────────── */
+    const auth = await verifyPiAuth(req);
+    if (!auth.ok) return auth.response;
+
+    // Ensure user exists
+    const user = await db.user.upsert({
+      where: { piUid: auth.user.uid },
+      update: { lastLoginAt: new Date() },
+      create: { piUid: auth.user.uid, username: auth.user.username },
+    });
+
+    // Fetch recent audit logs for this user
     const recentLogs = await db.auditLog.findMany({
+      where: { userId: auth.user.uid },
       orderBy: { createdAt: "desc" },
       take: 50,
-      include: {
-        issue: {
-          select: {
-            severity: true,
-            title: true,
-          },
-        },
-      },
     });
 
-    /* ── Fetch recent fixed issues ──────────────────────────────── */
-    const recentFixed = await db.auditIssue.findMany({
-      where: { status: "FIXED", fixedAt: { not: null } },
-      orderBy: { fixedAt: "desc" },
-      take: 30,
-      select: {
-        issueId: true,
-        severity: true,
-        title: true,
-        category: true,
-        fixedAt: true,
-      },
-    });
+    // Also fetch invoice-related activity
+    const store = await db.store.findUnique({ where: { piUid: auth.user.uid } });
 
-    /* ── Map to activities ──────────────────────────────────────── */
+    type Activity = {
+      id: string;
+      type: "invoice" | "payment" | "store" | "escrow" | "dispute" | "system";
+      description: string;
+      timestamp: string;
+      entity?: string;
+      entityId?: string;
+      severity?: string;
+    };
+
     const activities: Activity[] = [];
 
-    // Fixed issues
-    for (const issue of recentFixed) {
-      if (issue.fixedAt) {
+    // From audit logs
+    for (const log of recentLogs) {
+      activities.push({
+        id: log.id,
+        type: (log.action.includes("invoice") ? "invoice" :
+               log.action.includes("payment") ? "payment" :
+               log.action.includes("store") ? "store" :
+               log.action.includes("escrow") ? "escrow" :
+               log.action.includes("dispute") ? "dispute" : "system") as Activity["type"],
+        description: log.details || log.action,
+        timestamp: log.createdAt.toISOString(),
+        entity: log.entity,
+        entityId: log.entityId,
+      });
+    }
+
+    // From recent invoices (merchant)
+    if (store) {
+      const recentInvoices = await db.invoice.findMany({
+        where: { storeId: store.id },
+        orderBy: { updatedAt: "desc" },
+        take: 15,
+        select: {
+          id: true,
+          invoiceNumber: true,
+          status: true,
+          total: true,
+          updatedAt: true,
+          customerName: true,
+        },
+      });
+
+      const statusLabels: Record<string, string> = {
+        pending: "بانتظار الدفع",
+        paid_escrow: "مدفوع في الضمان",
+        shipped: "تم الشحن",
+        delivered: "تم التسليم",
+        completed: "مكتمل ✅",
+        disputed: "نزاع ⚠",
+        cancelled: "ملغى",
+      };
+
+      for (const inv of recentInvoices) {
         activities.push({
-          id: `fixed-${issue.issueId}`,
-          type: "issue_fixed",
-          description: `تم إصلاح: ${issue.title}`,
-          timestamp: issue.fixedAt.toISOString(),
-          issueId: issue.issueId,
-          severity: issue.severity,
+          id: `inv-${inv.id}`,
+          type: inv.status === "disputed" ? "dispute" : inv.status === "completed" ? "escrow" : "invoice",
+          description: `فاتورة ${inv.invoiceNumber} — ${statusLabels[inv.status] || inv.status} — ${inv.total}π (${inv.customerName || "زبون"})`,
+          timestamp: inv.updatedAt.toISOString(),
+          entity: "invoice",
+          entityId: inv.id,
         });
       }
     }
 
-    // Audit logs
-    for (const log of recentLogs) {
-      const severity = log.issue?.severity || "";
+    // From recent invoices (buyer)
+    const buyerInvoices = await db.invoice.findMany({
+      where: { customerPiUid: auth.user.uid },
+      orderBy: { updatedAt: "desc" },
+      take: 10,
+      select: {
+        id: true,
+        invoiceNumber: true,
+        status: true,
+        total: true,
+        updatedAt: true,
+        store: { select: { name: true } },
+      },
+    });
 
-      if (log.action === "status_change" && log.newStatus === "FIXED") {
-        // Already covered by fixed issues query
-        continue;
-      }
-
-      if (log.action === "status_change") {
-        const statusLabels: Record<string, string> = {
-          open: "مفتوح",
-          in_progress: "قيد التنفيذ",
-          fixed: "تم الإصلاح",
-          wont_fix: "لن يُصلح",
-          accepted_risk: "مخاطر مقبولة",
-        };
-        const newLabel = statusLabels[log.newStatus || ""] || log.newStatus || "";
-        activities.push({
-          id: log.id,
-          type: "issue_status_changed",
-          description: `تم تغيير حالة [${log.issueId}] إلى "${newLabel}"`,
-          timestamp: log.createdAt.toISOString(),
-          issueId: log.issueId,
-          severity,
-        });
-      } else if (log.action === "ai_analysis") {
-        activities.push({
-          id: log.id,
-          type: "ai_analysis",
-          description: `تحليل ذكي لـ [${log.issueId}]: ${log.details}`,
-          timestamp: log.createdAt.toISOString(),
-          issueId: log.issueId,
-          severity,
-        });
-      } else if (log.action === "export") {
-        activities.push({
-          id: log.id,
-          type: "export",
-          description: log.details || "تم تصدير التقرير",
-          timestamp: log.createdAt.toISOString(),
-        });
-      }
+    for (const inv of buyerInvoices) {
+      activities.push({
+        id: `buy-${inv.id}`,
+        type: "invoice",
+        description: `طلب من ${inv.store?.name || "متجر"} — ${inv.invoiceNumber} — ${inv.status} — ${inv.total}π`,
+        timestamp: inv.updatedAt.toISOString(),
+        entity: "invoice",
+        entityId: inv.id,
+      });
     }
 
     // Sort by timestamp descending and deduplicate
@@ -118,7 +132,7 @@ export async function GET(req: NextRequest) {
     );
 
     for (const activity of sorted) {
-      const key = `${activity.type}-${activity.issueId || ""}-${activity.timestamp}`;
+      const key = `${activity.type}-${activity.entityId || ""}-${activity.timestamp}`;
       if (!seen.has(key)) {
         seen.add(key);
         unique.push(activity);

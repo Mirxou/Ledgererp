@@ -1,13 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
 import ZAI from "z-ai-web-dev-sdk";
 import { db } from "@/lib/db";
-import { checkRateLimit } from "@/lib/api-auth";
+import { verifyPiAuth, checkRateLimit } from "@/lib/api-auth";
 
+/**
+ * POST /api/ai-advisor
+ * AI advisor for the escrow platform — answers questions about your store,
+ * invoices, escrow status, and provides business advice.
+ * Uses REAL data from the database.
+ */
 export async function POST(req: NextRequest) {
   const rateLimitErr = checkRateLimit(req);
   if (rateLimitErr) return rateLimitErr;
 
   try {
+    const auth = await verifyPiAuth(req);
+    if (!auth.ok) return auth.response;
+
     const body = await req.json();
     const { message, context } = body;
 
@@ -15,34 +24,45 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "الرسالة مطلوبة" }, { status: 400 });
     }
 
-    /* ── Fetch audit context from DB ─────────────────────────────── */
-    const allIssues = await db.auditIssue.findMany();
-    const fixedIssues = allIssues.filter((i) => i.status === "FIXED");
-    const criticalOpen = allIssues.filter((i) => i.severity === "CRITICAL" && i.status !== "FIXED");
-    const highOpen = allIssues.filter((i) => i.severity === "HIGH" && i.status !== "FIXED");
+    /* ── Fetch real escrow context from DB ─────────────────────── */
+    const store = await db.store.findUnique({ where: { piUid: auth.user.uid } });
 
-    const contextSummary = `
-📊 ملخص التدقيق:
-- إجمالي المشاكل: ${allIssues.length}
-- تم إصلاح: ${fixedIssues.length}
-- حرج مفتوح: ${criticalOpen.length}
-- مرتفع مفتوح: ${highOpen.length}
+    let contextSummary = "";
 
-أعلى 5 مشاكل حرجة مفتوحة:
-${criticalOpen.slice(0, 5).map((i) => `• [${i.issueId}] ${i.title} (${i.category}) - ${i.file}`).join("\n")}
+    if (store) {
+      const invoices = await db.invoice.findMany({ where: { storeId: store.id } });
+      const products = await db.product.findMany({ where: { storeId: store.id } });
+      const completed = invoices.filter((i) => i.status === "completed");
+      const disputed = invoices.filter((i) => i.status === "disputed");
+      const escrowed = invoices.filter((i) => ["paid_escrow", "shipped", "delivered"].includes(i.status));
+      const escrowVolume = escrowed.reduce((s, i) => s + i.total, 0);
+      const completedVolume = completed.reduce((s, i) => s + i.subtotal, 0);
 
-أعلى 5 مشاكل مرتفعة مفتوحة:
-${highOpen.slice(0, 5).map((i) => `• [${i.issueId}] ${i.title} (${i.category}) - ${i.file}`).join("\n")}
+      contextSummary = `
+📊 ملخص متجرك:
+- اسم المتجر: ${store.name}
+- عدد المنتجات: ${products.length}
+- إجمالي الفواتير: ${invoices.length}
+- صفقات مكتملة: ${completed.length}
+- في الضمان: ${escrowed.length} فاتورة (${escrowVolume.toFixed(2)}π)
+- نزاعات: ${disputed.length}
+- حجم المبيعات المكتملة: ${completedVolume.toFixed(2)}π
+- متجر موثق: ${store.isVerified ? "نعم" : "لا"}
+- مصدر المتجر: ${store.source === "pi_connected" ? "متجر Pi مربوط" : "Ledgererp"}
 `.trim();
+    } else {
+      contextSummary = "لم تنشئ متجراً بعد.";
+    }
 
     /* ── Build messages ──────────────────────────────────────────── */
-    const systemPrompt = `أنت مستشار أمني ذكي متخصص في تطبيقات Pi Network (شبكة بي). أنت جزء من لوحة تدقيق أمني لـ Ledgererp ERP.
+    const systemPrompt = `أنت مستشار ذكي متخصص في منصة Ledgererp — منصة الفواتير والضمان الآمن لشبكة Pi Network.
 
-أنت تساعد المطورين على:
-1. فهم الثغرات الأمنية وتصنيفها
-2. تحديد أفضل أولويات للإصلاح
-3. تقديم توصيات عملية مفصلة
-4. شرح المفاهيم الأمنية بالعربية
+أنت تساعد التجار على:
+1. فهم حالة مبيعاتهم ومعاملاتهم
+2. تحسين أداء متجرهم وزيادة المبيعات
+3. إدارة الضمان والمعاملات الآمنة
+4. التعامل مع النزاعات وحلها
+5. تقديم نصائح حول التسعير والمنتجات
 
 سياق التطبيق الحالي:
 ${contextSummary}
@@ -51,15 +71,13 @@ ${contextSummary}
 - أجب دائماً باللغة العربية
 - كن مختصراً ومفيداً
 - استخدم تنسيق Markdown للنصوص
-- إذا سُئلت عن مشكلة محددة، قدم تحليلاً معمقاً
-- ركّز على الصورة الكلية للأمان
+- ركّز على تحسين الأعمال والمعاملات
 - اقترح خطوات عملية وواقعية`;
 
     const messages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
       { role: "system", content: systemPrompt },
     ];
 
-    // Add conversation context if provided
     if (context && Array.isArray(context)) {
       for (const msg of context) {
         if (msg.role === "user" || msg.role === "assistant") {
@@ -68,7 +86,6 @@ ${contextSummary}
       }
     }
 
-    // Add current message
     messages.push({ role: "user", content: message });
 
     /* ── Call AI ─────────────────────────────────────────────────── */

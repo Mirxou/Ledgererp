@@ -1,40 +1,52 @@
 import { NextRequest, NextResponse } from "next/server";
-import ZAI from "z-ai-web-dev-sdk";
 import { db } from "@/lib/db";
-import { checkRateLimit } from "@/lib/api-auth";
+import { verifyPiAuth, checkRateLimit } from "@/lib/api-auth";
 
+/**
+ * POST /api/ai-analysis
+ * AI analysis of a specific invoice (dispute/issue).
+ * Uses REAL data from the database.
+ */
 export async function POST(req: NextRequest) {
   const rateLimitErr = checkRateLimit(req);
   if (rateLimitErr) return rateLimitErr;
 
   try {
+    const auth = await verifyPiAuth(req);
+    if (!auth.ok) return auth.response;
+
     const body = await req.json();
-    const { issueId } = body;
+    const { invoiceId } = body;
 
-    if (!issueId) {
-      return NextResponse.json({ error: "issueId مطلوب" }, { status: 400 });
+    if (!invoiceId) {
+      return NextResponse.json({ error: "invoiceId مطلوب" }, { status: 400 });
     }
 
-    const issue = await db.auditIssue.findUnique({ where: { issueId } });
-    if (!issue) {
-      return NextResponse.json({ error: "المشكلة غير موجودة" }, { status: 404 });
+    const invoice = await db.invoice.findUnique({
+      where: { id: invoiceId },
+      include: { items: true, store: { select: { name: true, piUid: true } } },
+    });
+
+    if (!invoice) {
+      return NextResponse.json({ error: "الفاتورة غير موجودة" }, { status: 404 });
     }
 
-    const prompt = `أنت خبير أمني متخصص في تدقيق التطبيقات. قم بتحليل المشكلة الأمنية التالية وقدم تحليلاً مفصلاً باللغة العربية:
+    const ZAI = (await import("z-ai-web-dev-sdk")).default;
+    const prompt = `أنت خبير في منصة Ledgererp للضمان الآمن. قم بتحليل الفاتورة التالية وقدم تحليلاً مفصلاً باللغة العربية:
 
-**رقم المشكلة:** ${issue.issueId}
-**الخطورة:** ${issue.severity}
-**المصدر:** ${issue.source}
-**الملف:** ${issue.file}${issue.line > 0 ? ` (سطر ${issue.line})` : ""}
-**الفئة:** ${issue.category}
-**العنوان:** ${issue.title}
-**الوصف:** ${issue.description || "غير متوفر"}
-**التوصية:** ${issue.recommendation || "غير متوفر"}
+**رقم الفاتورة:** ${invoice.invoiceNumber}
+**المتجر:** ${invoice.store?.name || "غير معروف"}
+**الزبون:** ${invoice.customerName || invoice.customerPiUid}
+**الحالة:** ${invoice.status}
+**المجموع:** ${invoice.total}π
+**رسوم الضمان:** ${invoice.escrowFee}π
+**الملاحظات:** ${invoice.notes || "لا يوجد"}
+**المنتجات:** ${invoice.items.map((i) => `${i.productName} x${i.quantity} = ${i.totalPrice}π`).join(", ")}
 
 يرجى تقديم:
 1. **مستوى الخطر:** (حرج / مرتفع / متوسط / منخفض)
-2. **التحليل المفصل:** شرح أمني شامل للمشكلة وتأثيرها المحتمل
-3. **الحل المقترح:** خطوات عملية مفصلة للإصلاح مع أمثلة كود إذا أمكن
+2. **التحليل المفصل:** شرح شامل لحالة الفاتورة
+3. **التوصية:** خطوات عملية مقترحة
 
 أجب باللغة العربية بشكل احترافي ومفصل.`;
 
@@ -42,10 +54,7 @@ export async function POST(req: NextRequest) {
     const completion = await ai.chat.completions.create({
       model: "deepseek-chat",
       messages: [
-        {
-          role: "system",
-          content: "أنت محقق أمني رقمي متخصص. قدم تحليلات أمنية دقيقة ومفصلة. أجب دائماً باللغة العربية.",
-        },
+        { role: "system", content: "أنت مستشار ضمان آمن متخصص. أجب دائماً باللغة العربية." },
         { role: "user", content: prompt },
       ],
       temperature: 0.3,
@@ -54,7 +63,6 @@ export async function POST(req: NextRequest) {
 
     const analysisText = completion.choices?.[0]?.message?.content || "لم يتم الحصول على تحليل";
 
-    // Determine risk level from analysis
     let riskLevel = "متوسط";
     if (analysisText.includes("حرج") || analysisText.includes("كارثي")) riskLevel = "حرج";
     else if (analysisText.includes("مرتفع") || analysisText.includes("خطير")) riskLevel = "مرتفع";
@@ -64,7 +72,9 @@ export async function POST(req: NextRequest) {
     await db.auditLog.create({
       data: {
         action: "ai_analysis",
-        issueId: issue.issueId,
+        userId: auth.user.uid,
+        entity: "invoice",
+        entityId: invoiceId,
         details: `تحليل ذكي - مستوى الخطر: ${riskLevel}`,
       },
     });
@@ -72,7 +82,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       analysis: analysisText,
       riskLevel,
-      suggestedFix: issue.recommendation || "",
+      suggestedFix: `فاتورة ${invoice.invoiceNumber} — ${invoice.status}`,
     });
   } catch (error) {
     console.error("AI Analysis failed:", error);

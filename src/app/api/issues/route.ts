@@ -1,85 +1,118 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { checkRateLimit } from "@/lib/api-auth";
+import { verifyPiAuth, checkRateLimit, sanitizeString } from "@/lib/api-auth";
 
+/**
+ * GET /api/issues
+ * Returns REAL invoice issues/disputes from the database.
+ * This endpoint now serves the escrow platform's "issues" = disputed invoices,
+ * not the old security audit issues.
+ */
 export async function GET(req: NextRequest) {
   const rateLimitErr = checkRateLimit(req);
   if (rateLimitErr) return rateLimitErr;
 
   try {
+    const auth = await verifyPiAuth(req);
+    if (!auth.ok) return auth.response;
+
     const { searchParams } = req.nextUrl;
-    const severity = searchParams.get("severity");
     const status = searchParams.get("status");
-    const source = searchParams.get("source");
 
+    // Get store for this merchant
+    const store = await db.store.findUnique({ where: { piUid: auth.user.uid } });
+
+    // Build where clause
     const where: Record<string, unknown> = {};
-    if (severity && severity !== "ALL") where.severity = severity;
-    if (status && status !== "ALL") where.status = status;
-    if (source && source !== "ALL") where.source = source;
+    if (store) where.storeId = store.id;
+    // Also include invoices where user is buyer
+    if (status && status !== "ALL") {
+      where.status = status;
+    }
 
-    const issues = await db.auditIssue.findMany({
-      where: Object.keys(where).length > 0 ? where : undefined,
-      orderBy: { priority: "asc" },
+    // Fetch disputed and problematic invoices
+    const disputedInvoices = await db.invoice.findMany({
+      where: {
+        ...where,
+        status: { in: status === "ALL" || !status ? ["disputed", "cancelled"] : [status] },
+      },
+      include: {
+        items: true,
+        store: { select: { name: true, piUid: true } },
+      },
+      orderBy: { updatedAt: "desc" },
     });
 
-    return NextResponse.json({ issues, total: issues.length });
+    // Also get buyer-side disputes
+    const buyerDisputes = await db.invoice.findMany({
+      where: {
+        customerPiUid: auth.user.uid,
+        status: { in: ["disputed", "cancelled"] },
+      },
+      include: {
+        items: true,
+        store: { select: { name: true, piUid: true } },
+      },
+      orderBy: { updatedAt: "desc" },
+    });
+
+    // Merge and deduplicate
+    const seen = new Set<string>();
+    const allIssues = [...disputedInvoices, ...buyerDisputes].filter((inv) => {
+      if (seen.has(inv.id)) return false;
+      seen.add(inv.id);
+      return true;
+    });
+
+    return NextResponse.json({ issues: allIssues, total: allIssues.length });
   } catch (error) {
     console.error("Failed to fetch issues:", error);
     return NextResponse.json({ error: "فشل في جلب البيانات" }, { status: 500 });
   }
 }
 
+/** Update an issue (resolve dispute, add notes) */
 export async function PATCH(req: NextRequest) {
   const rateLimitErr = checkRateLimit(req);
   if (rateLimitErr) return rateLimitErr;
 
   try {
+    const auth = await verifyPiAuth(req);
+    if (!auth.ok) return auth.response;
+
     const body = await req.json();
-    const { issueId, status, notes, assignee } = body;
+    const { invoiceId, status, notes } = body;
 
-    if (!issueId) {
-      return NextResponse.json({ error: "issueId مطلوب" }, { status: 400 });
+    if (!invoiceId) {
+      return NextResponse.json({ error: "invoiceId مطلوب" }, { status: 400 });
     }
 
-    const existing = await db.auditIssue.findUnique({ where: { issueId } });
+    const existing = await db.invoice.findUnique({ where: { id: invoiceId } });
     if (!existing) {
-      return NextResponse.json({ error: "المشكلة غير موجودة" }, { status: 404 });
+      return NextResponse.json({ error: "الفاتورة غير موجودة", status: 404 });
     }
 
-    const oldStatus = existing.status;
     const updateData: Record<string, unknown> = {};
-    if (status !== undefined) updateData.status = status;
-    if (notes !== undefined) updateData.notes = notes;
-    if (assignee !== undefined) updateData.assignee = assignee;
-    if (status === "fixed") updateData.fixedAt = new Date();
+    if (status) updateData.status = status;
+    if (notes) updateData.notes = sanitizeString(notes, 500);
 
-    const updated = await db.auditIssue.update({
-      where: { issueId },
+    const updated = await db.invoice.update({
+      where: { id: invoiceId },
       data: updateData,
     });
 
     // Create audit log
-    if (status !== undefined && status !== oldStatus) {
-      await db.auditLog.create({
-        data: {
-          action: "status_change",
-          issueId,
-          oldStatus,
-          newStatus: status,
-          details: `تم تغيير الحالة من ${oldStatus} إلى ${status}`,
-        },
-      });
-    }
-
-    if (notes !== undefined && notes !== "") {
-      await db.auditLog.create({
-        data: {
-          action: "note_added",
-          issueId,
-          details: notes,
-        },
-      });
-    }
+    await db.auditLog.create({
+      data: {
+        action: status ? "issue_status_change" : "issue_note_added",
+        userId: auth.user.uid,
+        entity: "invoice",
+        entityId: invoiceId,
+        details: status
+          ? `تم تغيير حالة النزاع إلى ${status}`
+          : `تم إضافة ملاحظة: ${notes}`,
+      },
+    });
 
     return NextResponse.json({ issue: updated, success: true });
   } catch (error) {

@@ -101,3 +101,122 @@ model InvoiceItem {
   @@index([invoiceId])
   @@index([productId])
 }
+
+/// ─── User & Auth ───────────────────────────────────────────────────────
+
+model User {
+  id            String   @id @default(cuid())
+  piUid         String   @unique
+  username      String
+  /// Access token from Pi SDK auth — used for API verification
+  accessToken   String   @default("")
+  avatar        String   @default("")
+  /// User's preferred language
+  language      String   @default("ar")
+  /// Has completed KYC on Pi Network
+  kycVerified   Boolean  @default(false)
+  /// User role: 'merchant' | 'buyer' | 'both'
+  role          String   @default("both")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  lastLoginAt   DateTime?
+
+  notifications Notification[]
+  settings      UserSetting[]
+  escrowTxFrom  EscrowTransaction[] @relation("TxFrom")
+  escrowTxTo    EscrowTransaction[] @relation("TxTo")
+
+  @@index([piUid])
+  @@index([lastLoginAt])
+}
+
+/// ─── Notifications (DB-backed, not mock) ────────────────────────────────
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  /// Type: 'payment' | 'order' | 'escrow' | 'delivery' | 'dispute' | 'system' | 'store'
+  type      String
+  title     String
+  message   String
+  /// Severity: 'critical' | 'high' | 'medium' | 'low' | 'info'
+  severity  String   @default("info")
+  read      Boolean  @default(false)
+  /// Optional link to related entity
+  actionUrl String   @default("")
+  /// Optional link to related invoice
+  invoiceId String?
+  /// Optional link to related store
+  storeId   String?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([userId, read])
+  @@index([createdAt])
+  @@index([type])
+}
+
+/// ─── User Settings (per-user preferences, DB-backed) ──────────────────
+
+model UserSetting {
+  id     String @id @default(cuid())
+  userId String
+  key    String
+  value  String
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, key])
+  @@index([userId])
+}
+
+/// ─── Escrow Transactions (separate tracking for U2A/A2U) ──────────────
+
+model EscrowTransaction {
+  id            String   @id @default(cuid())
+  /// U2A = user-to-app (payment into escrow), A2U = app-to-user (release to seller)
+  type          String
+  invoiceId     String
+  /// Pi payment transaction ID
+  txid          String   @default("")
+  amount        Float
+  /// Pi UID of the sender (buyer for U2A, platform wallet for A2U)
+  fromUid       String
+  /// Pi UID of the receiver (platform wallet for U2A, seller for A2U)
+  toUid         String
+  memo          String   @default("")
+  /// Status: 'pending' | 'approved' | 'completed' | 'failed'
+  status        String   @default("pending")
+  createdAt     DateTime @default(now())
+  completedAt   DateTime?
+
+  fromUser User @relation("TxFrom", fields: [fromUid], references: [piUid], onDelete: Cascade)
+  toUser   User @relation("TxTo", fields: [toUid], references: [piUid], onDelete: Cascade)
+
+  @@index([invoiceId])
+  @@index([fromUid])
+  @@index([toUid])
+  @@index([type])
+  @@index([status])
+  @@index([createdAt])
+}
+
+/// ─── Audit Log (general app activity log, replaces security-only AuditLog) ──
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  action    String
+  userId    String   @default("")
+  entity    String   @default("")
+  entityId  String   @default("")
+  details   String   @default("")
+  ip        String   @default("")
+  createdAt DateTime @default(now())
+
+  @@index([action])
+  @@index([userId])
+  @@index([entity, entityId])
+  @@index([createdAt])
+}

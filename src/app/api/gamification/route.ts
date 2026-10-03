@@ -1,112 +1,147 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { checkRateLimit } from "@/lib/api-auth";
-import {
-  XP_PER_SEVERITY,
-  calculateLevel,
-  getXpForNextLevel,
-  getAchievementProgress,
-  ACHIEVEMENTS,
-  type AchievementProgress,
-} from "@/lib/gamification";
+import { verifyPiAuth, checkRateLimit } from "@/lib/api-auth";
+
+/**
+ * GET /api/gamification
+ * Returns REAL escrow platform gamification data from the database.
+ * XP and levels are computed from actual escrow transactions, not security audit issues.
+ */
 
 export async function GET(req: NextRequest) {
   const rateLimitErr = checkRateLimit(req);
   if (rateLimitErr) return rateLimitErr;
 
   try {
-    /* ── Fetch fixed issues from DB ──────────────────────────────── */
-    const fixedIssues = await db.auditIssue.findMany({
-      where: { status: "FIXED" },
+    const auth = await verifyPiAuth(req);
+    if (!auth.ok) return auth.response;
+
+    // Ensure user exists
+    const user = await db.user.upsert({
+      where: { piUid: auth.user.uid },
+      update: { lastLoginAt: new Date() },
+      create: { piUid: auth.user.uid, username: auth.user.username },
     });
 
-    /* ── Count by severity ───────────────────────────────────────── */
-    const criticalFixed = fixedIssues.filter((i) => i.severity === "CRITICAL").length;
-    const highFixed = fixedIssues.filter((i) => i.severity === "HIGH").length;
-    const mediumFixed = fixedIssues.filter((i) => i.severity === "MEDIUM").length;
-    const lowFixed = fixedIssues.filter((i) => i.severity === "LOW").length;
-    const totalFixed = fixedIssues.length;
+    // ── Fetch user's store and invoices ──────────────────────────────
+    const store = await db.store.findUnique({ where: { piUid: auth.user.uid } });
 
-    /* ── Calculate XP ────────────────────────────────────────────── */
+    let merchantInvoices = 0;
+    let completedDeals = 0;
+    let totalEscrowed = 0;
+    let totalReleased = 0;
+    let buyerOrders = 0;
+    let disputed = 0;
+    let productsListed = 0;
+
+    if (store) {
+      const invoices = await db.invoice.findMany({
+        where: { storeId: store.id },
+      });
+      merchantInvoices = invoices.length;
+      completedDeals = invoices.filter((i) => i.status === "completed").length;
+      totalEscrowed = invoices
+        .filter((i) => ["paid_escrow", "shipped", "delivered", "completed"].includes(i.status))
+        .reduce((sum, i) => sum + i.total, 0);
+      totalReleased = invoices
+        .filter((i) => i.status === "completed")
+        .reduce((sum, i) => sum + i.subtotal, 0);
+      disputed = invoices.filter((i) => i.status === "disputed").length;
+      productsListed = await db.product.count({ where: { storeId: store.id } });
+    }
+
+    // Buyer-side stats
+    const buyerInvoices = await db.invoice.findMany({
+      where: { customerPiUid: auth.user.uid },
+    });
+    buyerOrders = buyerInvoices.length;
+
+    // ── Calculate XP (escrow-based, not security-based) ──────────────
     const xpBreakdown = {
-      critical: criticalFixed * XP_PER_SEVERITY.CRITICAL,
-      high: highFixed * XP_PER_SEVERITY.HIGH,
-      medium: mediumFixed * XP_PER_SEVERITY.MEDIUM,
-      low: lowFixed * XP_PER_SEVERITY.LOW,
+      completedDeals: completedDeals * 100,        // 100 XP per completed deal
+      escrowVolume: Math.floor(totalReleased * 10), // 10 XP per Pi released
+      productsListed: productsListed * 15,          // 15 XP per product
+      buyerOrders: buyerOrders * 20,                // 20 XP per buyer order
+      verified: store?.isVerified ? 200 : 0,        // 200 XP for verified store
+      disputesLost: disputed * -50,                  // -50 XP per dispute
     };
-    const xp = xpBreakdown.critical + xpBreakdown.high + xpBreakdown.medium + xpBreakdown.low;
-    const level = calculateLevel(xp);
 
-    /* ── Calculate streak (consecutive days with fixes) ──────────── */
-    const streak = await calculateStreak(fixedIssues);
+    const xp = Math.max(0, Object.values(xpBreakdown).reduce((sum, v) => sum + v, 0));
+    const level = Math.max(1, Math.floor(Math.sqrt(xp / 100)) + 1);
+    const xpForNext = (level * level) * 100;
 
-    /* ── Category counts for achievements ────────────────────────── */
-    const allIssues = await db.auditIssue.findMany();
+    // ── Streak: consecutive days with completed deals ────────────────
+    let streak = 0;
+    if (store) {
+      const completedInvoices = await db.invoice.findMany({
+        where: { storeId: store.id, status: "completed", completedAt: { not: null } },
+        orderBy: { completedAt: "desc" },
+        select: { completedAt: true },
+      });
 
-    const encryptionCategories = ["Cryptography", "Hardcoded Secret", "Weak Cryptography"];
-    const authCategories = ["Authentication", "Authorization"];
-    const xssCategories = ["XSS"];
-    const codeQualityCategories = ["Code Quality", "Runtime", "Supply Chain"];
-    const piCategories = ["Pi Network Compliance", "KYC", "Fake KYC", "Custodial", "Non-Custodial"];
+      if (completedInvoices.length > 0) {
+        const datesWithCompletions = new Set<string>();
+        for (const inv of completedInvoices) {
+          if (inv.completedAt) {
+            const d = inv.completedAt;
+            datesWithCompletions.add(`${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`);
+          }
+        }
 
-    const encryptionTotal = allIssues.filter((i) => encryptionCategories.some((c) => i.category.includes(c))).length;
-    const encryptionFixed = fixedIssues.filter((i) => encryptionCategories.some((c) => i.category.includes(c))).length;
+        const sortedDates = Array.from(datesWithCompletions).sort().reverse();
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const todayStr = `${today.getFullYear()}-${today.getMonth()}-${today.getDate()}`;
+        const yesterday = new Date(today);
+        yesterday.setDate(yesterday.getDate() - 1);
+        const yesterdayStr = `${yesterday.getFullYear()}-${yesterday.getMonth()}-${yesterday.getDate()}`;
 
-    const authTotal = allIssues.filter((i) => authCategories.some((c) => i.category.includes(c))).length;
-    const authFixed = fixedIssues.filter((i) => authCategories.some((c) => i.category.includes(c))).length;
+        if (sortedDates[0] === todayStr || sortedDates[0] === yesterdayStr) {
+          streak = 1;
+          for (let i = 1; i < sortedDates.length; i++) {
+            const [y1, m1, d1] = sortedDates[i - 1].split("-").map(Number);
+            const [y2, m2, d2] = sortedDates[i].split("-").map(Number);
+            const date1 = new Date(y1, m1, d1);
+            const date2 = new Date(y2, m2, d2);
+            const diff = Math.floor((date1.getTime() - date2.getTime()) / (1000 * 60 * 60 * 24));
+            if (diff === 1) streak++;
+            else break;
+          }
+        }
+      }
+    }
 
-    const xssTotal = allIssues.filter((i) => xssCategories.some((c) => i.category.includes(c))).length;
-    const xssFixed = fixedIssues.filter((i) => xssCategories.some((c) => i.category.includes(c))).length;
-
-    const codeQualityTotal = allIssues.filter((i) => codeQualityCategories.some((c) => i.category.includes(c))).length;
-    const codeQualityFixed = fixedIssues.filter((i) => codeQualityCategories.some((c) => i.category.includes(c))).length;
-
-    const piTotal = allIssues.filter((i) => piCategories.some((c) => i.category.includes(c)) || i.source === "Pi Network").length;
-    const piFixed = fixedIssues.filter((i) => piCategories.some((c) => i.category.includes(c)) || i.source === "Pi Network").length;
-
-    /* ── Fixed today ─────────────────────────────────────────────── */
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const fixedToday = fixedIssues.filter(
-      (i) => i.fixedAt && i.fixedAt >= today
-    ).length;
-
-    /* ── Achievement progress ────────────────────────────────────── */
-    const achievements: AchievementProgress[] = ACHIEVEMENTS.map((ach) =>
-      getAchievementProgress(ach, {
-        totalFixed,
-        criticalFixed,
-        encryptionFixed,
-        encryptionTotal,
-        authFixed,
-        authTotal,
-        xssFixed,
-        xssTotal,
-        codeQualityFixed,
-        codeQualityTotal,
-        piFixed,
-        piTotal,
-        level,
-        fixedToday,
-      }, [])
-    );
+    // ── Achievements (escrow-based) ──────────────────────────────────
+    const achievements = [
+      { id: "first_deal", title: "أول صفقة", description: "أكمل أول صفقة", progress: Math.min(completedDeals, 1), target: 1, unlocked: completedDeals >= 1 },
+      { id: "five_deals", title: "تاجر نشيط", description: "أكمل 5 صفقات", progress: Math.min(completedDeals, 5), target: 5, unlocked: completedDeals >= 5 },
+      { id: "ten_deals", title: "تاجر محترف", description: "أكمل 10 صفقات", progress: Math.min(completedDeals, 10), target: 10, unlocked: completedDeals >= 10 },
+      { id: "first_100pi", title: "مئوية Pi", description: "أطلق 100π في الضمان", progress: Math.min(Math.floor(totalReleased), 100), target: 100, unlocked: totalReleased >= 100 },
+      { id: "verified", title: "متجر موثق", description: "احصل على التحقق", progress: store?.isVerified ? 1 : 0, target: 1, unlocked: !!store?.isVerified },
+      { id: "products_10", title: "عرض غني", description: "أضف 10 منتجات", progress: Math.min(productsListed, 10), target: 10, unlocked: productsListed >= 10 },
+      { id: "buyer_5", title: "مشترٍ نشيط", description: "اطلب من 5 متاجر", progress: Math.min(buyerOrders, 5), target: 5, unlocked: buyerOrders >= 5 },
+      { id: "streak_7", title: "أسبوع متواصل", description: "7 أيام متتالية", progress: Math.min(streak, 7), target: 7, unlocked: streak >= 7 },
+    ];
 
     return NextResponse.json({
       profile: {
         level,
         xp,
-        totalFixed,
+        totalDeals: completedDeals,
         streak,
-        achievements: [],
+        achievements: achievements.filter((a) => a.unlocked).length,
       },
       stats: {
-        criticalFixed,
-        highFixed,
-        mediumFixed,
-        lowFixed,
-        totalFixed,
+        merchantInvoices,
+        completedDeals,
+        buyerOrders,
+        productsListed,
+        totalEscrowed: Math.round(totalEscrowed * 100) / 100,
+        totalReleased: Math.round(totalReleased * 100) / 100,
+        disputed,
         xp,
         xpBreakdown,
+        xpForNext,
       },
       achievements,
     });
@@ -117,50 +152,4 @@ export async function GET(req: NextRequest) {
       { status: 500 }
     );
   }
-}
-
-/* ── Streak Calculation ───────────────────────────────────────────── */
-
-async function calculateStreak(fixedIssues: { fixedAt: Date | null }[]): Promise<number> {
-  if (fixedIssues.length === 0) return 0;
-
-  const datesWithFixes = new Set<string>();
-  for (const issue of fixedIssues) {
-    if (issue.fixedAt) {
-      const d = new Date(issue.fixedAt);
-      datesWithFixes.add(`${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`);
-    }
-  }
-
-  if (datesWithFixes.size === 0) return 0;
-
-  // Sort dates descending
-  const sortedDates = Array.from(datesWithFixes)
-    .map((d) => {
-      const [y, m, day] = d.split("-").map(Number);
-      return new Date(y, m, day);
-    })
-    .sort((a, b) => b.getTime() - a.getTime());
-
-  let streak = 1;
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
-  // Check if most recent fix was today or yesterday
-  const mostRecent = sortedDates[0];
-  const diffFromToday = Math.floor((today.getTime() - mostRecent.getTime()) / (1000 * 60 * 60 * 24));
-  if (diffFromToday > 1) return 0;
-
-  for (let i = 1; i < sortedDates.length; i++) {
-    const diff = Math.floor(
-      (sortedDates[i - 1].getTime() - sortedDates[i].getTime()) / (1000 * 60 * 60 * 24)
-    );
-    if (diff === 1) {
-      streak++;
-    } else {
-      break;
-    }
-  }
-
-  return streak;
 }
