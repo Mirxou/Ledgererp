@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { verifyPiAuth, verifyStoreOwnership, sanitizeString, checkRateLimit } from "@/lib/api-auth";
 import { roundPi } from "@/lib/pi-amount";
-import { checkStockAvailability, deductStock } from "@/lib/inventory-guard";
+import { checkStockAvailability, deductStock, restockItems } from "@/lib/inventory-guard";
 
 /** Generate local sale invoice number: LS-YYYYMMDD-XXXXX */
 function genLocalSaleNumber(): string {
@@ -265,5 +265,144 @@ export async function POST(req: NextRequest) {
     const message = error instanceof Error ? error.message : "Failed to create local sale";
     console.error("Create local sale error:", error);
     return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+
+// ─── PATCH /api/local-sales ──────────────────────────────────────────────
+
+// Handle refund/return of local sales
+// Body: { id: saleId, action: "refund", reason?: string }
+export async function PATCH(req: NextRequest) {
+  try {
+    const rateLimitErr = checkRateLimit(req);
+    if (rateLimitErr) return rateLimitErr;
+
+    const auth = await verifyPiAuth(req);
+    if (!auth.ok) return auth.response;
+
+    const body = await req.json();
+    const { id, action } = body;
+
+    // ── Required fields ──
+    if (!id) {
+      return NextResponse.json({ error: "id (saleId) is required" }, { status: 400 });
+    }
+
+    if (action !== "refund") {
+      return NextResponse.json(
+        { error: 'Invalid action. Supported: "refund"' },
+        { status: 400 }
+      );
+    }
+
+    const reason = sanitizeString(body.reason, 500) || "No reason provided";
+    const refundedBy = auth.user.uid;
+
+    // ── Fetch the sale with items and customer ──
+    const sale = await db.localSale.findUnique({
+      where: { id },
+      include: {
+        items: true,
+        customer: true,
+      },
+    });
+
+    if (!sale) {
+      return NextResponse.json({ error: "Sale not found" }, { status: 404 });
+    }
+
+    // ── Check if already refunded ──
+    if (sale.notes && sale.notes.includes("[REFUNDED]")) {
+      return NextResponse.json(
+        { error: "Sale has already been refunded" },
+        { status: 409 }
+      );
+    }
+
+    // ── Verify store ownership ──
+    const ownership = await verifyStoreOwnership(req, sale.storeId, auth.user.uid);
+    if (!ownership.ok) return ownership.response!;
+
+    const refundTimestamp = new Date().toISOString();
+
+    // ── Step 1: Create a refund TransactionLog entry ──
+    const refundTransaction = await db.transactionLog.create({
+      data: {
+        storeId: sale.storeId,
+        type: "refund",
+        amount: roundPi(sale.total),
+        currency: "Pi",
+        description: `Refund for local sale ${sale.invoiceNumber}. Reason: ${reason}`,
+        reference: `pending:refund:${sale.invoiceNumber}`,
+        createdBy: refundedBy,
+      },
+    });
+
+    // ── Step 2: Restore inventory using restockItems ──
+    const itemsWithProduct = sale.items.filter(
+      (item): item is typeof item & { productId: string } => item.productId !== null
+    );
+
+    let restockSuccess = true;
+    if (itemsWithProduct.length > 0) {
+      restockSuccess = await restockItems(
+        sale.storeId,
+        itemsWithProduct.map((item) => ({
+          productId: item.productId,
+          quantity: item.quantity,
+        })),
+        sale.id,
+        refundedBy
+      );
+
+      if (!restockSuccess) {
+        console.warn(
+          `Restock failed for refunded sale ${sale.invoiceNumber} — transaction log created but inventory not restored`
+        );
+      }
+    }
+
+    // ── Step 3: Update customer totals (reduce totalSpent and totalOrders) ──
+    if (sale.customerId && sale.customer) {
+      const newTotalSpent = roundPi(sale.customer.totalSpent - sale.total);
+      const newTotalOrders = Math.max(0, sale.customer.totalOrders - 1);
+
+      await db.customer.update({
+        where: { id: sale.customerId },
+        data: {
+          totalSpent: Math.max(0, newTotalSpent), // Never go below 0
+          totalOrders: newTotalOrders,
+        },
+      });
+    }
+
+    // ── Step 4: Mark the sale with notes indicating refund ──
+    const existingNotes = sale.notes || "";
+    const refundNote = `[REFUNDED] Refunded by ${refundedBy} at ${refundTimestamp}. Reason: ${reason}`;
+    const updatedNotes = existingNotes
+      ? `${existingNotes} | ${refundNote}`
+      : refundNote;
+
+    await db.localSale.update({
+      where: { id },
+      data: {
+        notes: updatedNotes,
+      },
+    });
+
+    // ── Return refund result ──
+    return NextResponse.json({
+      success: true,
+      saleId: id,
+      invoiceNumber: sale.invoiceNumber,
+      refundTransactionId: refundTransaction.id,
+      refundAmount: roundPi(sale.total),
+      restockSuccess,
+      customerUpdated: !!sale.customerId,
+      refundNote,
+    });
+  } catch (error) {
+    console.error("Refund local sale error:", error);
+    return NextResponse.json({ error: "Failed to process refund" }, { status: 500 });
   }
 }

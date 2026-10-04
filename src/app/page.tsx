@@ -31,6 +31,7 @@ import { OrdersView } from "@/components/orders-view";
 import { InventoryView } from "@/components/inventory-view";
 import { CustomersView } from "@/components/customers-view";
 import { ExpensesView } from "@/components/expenses-view";
+import { FinancialView } from "@/components/financial-view";
 import { SettingsView } from "@/components/settings-view";
 import { PiSetupView } from "@/components/pi-setup-view";
 import { BuyerInvoiceView } from "@/components/buyer-invoice-view";
@@ -38,6 +39,7 @@ import { StoreDirectoryView } from "@/components/store-directory-view";
 import { StoreBuyerView } from "@/components/store-buyer-view";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { MerchantBuyerView } from "@/components/merchant-buyer-view";
+import { PaymentsView } from "@/components/payments-view";
 
 /* ═══ App Entry ═══ */
 export default function LedgererpApp() {
@@ -373,6 +375,8 @@ function AuthenticatedApp({ piUid, username }: { piUid: string; username: string
     ["orders", ShoppingCart, "الطلبات"],
     ["customers", Users, "الزبائن"],
     ["expenses", TrendingDown, "المصروفات"],
+    ["finance", Wallet, "المالية"],
+    ["payments", Wallet, "المعاملات"],
     ["shop", ShoppingBag, "تسوق"],
     ["settings", Settings, "الإعدادات"],
     ["pisetup", Zap, "إعداد Pi"],
@@ -434,7 +438,7 @@ function AuthenticatedApp({ piUid, username }: { piUid: string; username: string
           />
         ) : (
           <Tabs value={tab} onValueChange={setTab} className="space-y-5">
-            <TabsList className="grid grid-cols-5 sm:grid-cols-10 w-full h-auto p-1 bg-muted/50">
+            <TabsList className="grid grid-cols-4 sm:grid-cols-12 w-full h-auto p-1 bg-muted/50">
               {tabList.map(function(t) {
                 const Ic = t[1] as React.ElementType;
                 return (
@@ -488,7 +492,17 @@ function AuthenticatedApp({ piUid, username }: { piUid: string; username: string
               <ExpensesView storeId={myStore.id} piUid={piUid} />
             </TabsContent>
 
-            {/* 8. Shop */}
+            {/* 8. Finance */}
+            <TabsContent value="finance">
+              <FinancialView storeId={myStore.id} piUid={piUid} store={myStore} />
+            </TabsContent>
+
+            {/* 9. Payments */}
+            <TabsContent value="payments">
+              <PaymentsView storeId={myStore.id} piUid={piUid} />
+            </TabsContent>
+
+            {/* 9. Shop */}
             <TabsContent value="shop">
               <MerchantBuyerView
                 buyerPiUid={piUid}
@@ -499,12 +513,12 @@ function AuthenticatedApp({ piUid, username }: { piUid: string; username: string
               />
             </TabsContent>
 
-            {/* 9. Settings */}
+            {/* 10. Settings */}
             <TabsContent value="settings">
               <SettingsView store={myStore} onUpdate={function(d) { updateStoreMut.mutate(d); }} onDelete={function() { deleteStoreMut.mutate(myStore.id); }} updating={updateStoreMut.isPending} deleting={deleteStoreMut.isPending} piUid={piUid} />
             </TabsContent>
 
-            {/* 10. Pi Setup */}
+            {/* 11. Pi Setup */}
             <TabsContent value="pisetup">
               <PiSetupView piUid={piUid} />
             </TabsContent>

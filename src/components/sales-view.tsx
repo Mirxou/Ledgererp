@@ -27,7 +27,7 @@ export function SalesView({ store, products, piUid, customers, localSales, inven
       {subTab === "pi" ? (
         <InvoicesView store={store} products={products} piUid={piUid} />
       ) : (
-        <LocalSalesView storeId={store.id} piUid={piUid} products={products} customers={customers} inventory={inventory} />
+        <LocalSalesView storeId={store.id} piUid={piUid} products={products} customers={customers} inventory={inventory} store={store} />
       )}
     </div>
   );

@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Receipt, Plus, Search, Loader2, Banknote, CreditCard, CircleDot,
+  Printer, RotateCcw, Share2, FileDown,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -21,11 +22,12 @@ import { useToast } from "@/hooks/use-toast";
 import { useDebounce } from "@/hooks/use-debounce";
 import { api } from "@/lib/api-client";
 import { formatPi, roundPi } from "@/lib/pi-amount";
-import { fmtDate } from "@/lib/helpers";
-import type { LocalSaleData, LocalSaleItemData, ProductData, CustomerData, InventoryData } from "@/lib/types";
+import { fmtDate, fmtTime, copyText } from "@/lib/helpers";
+import type { LocalSaleData, LocalSaleItemData, ProductData, CustomerData, InventoryData, StoreData } from "@/lib/types";
+import { InvoicePrintView, InvoicePrintStyles } from "@/components/invoice-print-view";
 
 /* ═══ Local Sales ═══ */
-export function LocalSalesView({ storeId, piUid, products, customers, inventory }: { storeId: string; piUid: string; products: ProductData[]; customers: CustomerData[]; inventory?: InventoryData[] }) {
+export function LocalSalesView({ storeId, piUid, products, customers, inventory, store }: { storeId: string; piUid: string; products: ProductData[]; customers: CustomerData[]; inventory?: InventoryData[]; store?: StoreData }) {
   const qc = useQueryClient();
   const toast = useToast().toast;
   const [open, setOpen] = useState(false);
@@ -42,6 +44,12 @@ export function LocalSalesView({ storeId, piUid, products, customers, inventory 
   const [saleTax, setSaleTax] = useState("");
   const [saleDiscount, setSaleDiscount] = useState("");
   const [items, setItems] = useState([{ productName: "", quantity: 1, unitPrice: 0, _selectedProductId: "" }]);
+
+  /* Print view state */
+  const [printSale, setPrintSale] = useState<LocalSaleData | null>(null);
+
+  /* Refund state */
+  const [refunding, setRefunding] = useState(false);
 
   const salesRes = useQuery({
     queryKey: ["localSales", storeId],
@@ -123,6 +131,59 @@ export function LocalSalesView({ storeId, piUid, products, customers, inventory 
     }).catch(function() { toast({ title: "خطأ في الاتصال", variant: "destructive" }); }).finally(function() { setSaving(false); });
   };
 
+  /* ── Refund handler ── */
+  const handleRefund = function(saleId: string) {
+    setRefunding(true);
+    api.patch("/api/local-sales", { id: saleId, action: "refund" }, piUid).then(function(res) {
+      if (res.ok) {
+        qc.invalidateQueries({ queryKey: ["localSales", storeId] });
+        qc.invalidateQueries({ queryKey: ["inventory", storeId] });
+        qc.invalidateQueries({ queryKey: ["customers", storeId] });
+        setDetailSale(null);
+        toast({ title: "تم إرجاع الفاتورة بنجاح" });
+      } else {
+        res.json().catch(function() { return {}; }).then(function(err) {
+          toast({ title: "فشل الإرجاع", description: err.error || "", variant: "destructive" });
+        });
+      }
+    }).catch(function() { toast({ title: "خطأ في الاتصال", variant: "destructive" }); }).finally(function() { setRefunding(false); });
+  };
+
+  /* ── Share receipt as text ── */
+  const handleShareReceipt = function(sale: LocalSaleData) {
+    const storeName = store ? store.name : "المتجر";
+    const lines: string[] = [];
+    lines.push("════════════════════════════");
+    lines.push("  " + storeName);
+    lines.push("════════════════════════════");
+    lines.push("");
+    lines.push("فاتورة: " + sale.invoiceNumber);
+    lines.push("التاريخ: " + fmtDate(sale.createdAt) + " " + fmtTime(sale.createdAt));
+    if (sale.customer) {
+      lines.push("الزبون: " + sale.customer.name);
+    }
+    lines.push("");
+    lines.push("──────────────────────────────");
+    if (sale.items) {
+      for (let i = 0; i < sale.items.length; i++) {
+        const item = sale.items[i];
+        lines.push(item.productName + " × " + item.quantity + " = " + formatPi(item.totalPrice) + "π");
+      }
+    }
+    lines.push("──────────────────────────────");
+    lines.push("المجموع الفرعي: " + formatPi(sale.subtotal) + " π");
+    if (sale.taxAmount > 0) lines.push("الضريبة: " + formatPi(sale.taxAmount) + " π");
+    if (sale.discountAmount > 0) lines.push("الخصم: -" + formatPi(sale.discountAmount) + " π");
+    lines.push("الإجمالي: " + formatPi(sale.total) + " π");
+    lines.push("");
+    const methodLabel = sale.paymentMethod === "cash" ? "نقدي" : sale.paymentMethod === "card" ? "بطاقة" : "Pi";
+    lines.push("طريقة الدفع: " + methodLabel);
+    lines.push("");
+    lines.push("شكراً لتعاملكم معنا");
+
+    copyText(lines.join("\n"), toast, "تم نسخ نص الإيصال");
+  };
+
   const paymentMethodBadge = function(method: string) {
     if (method === "cash") return <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 bg-emerald-500/10 text-emerald-600 border-emerald-500/20"><Banknote className="h-2.5 w-2.5 ml-0.5" />نقدي</Badge>;
     if (method === "card") return <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 bg-blue-500/10 text-blue-600 border-blue-500/20"><CreditCard className="h-2.5 w-2.5 ml-0.5" />بطاقة</Badge>;
@@ -130,8 +191,16 @@ export function LocalSalesView({ storeId, piUid, products, customers, inventory 
     return <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4">{method}</Badge>;
   };
 
+  /* ── Check if sale is refunded ── */
+  const isRefunded = function(sale: LocalSaleData): boolean {
+    return !!(sale.notes && sale.notes.includes("[REFUNDED]"));
+  };
+
   return (
     <div className="space-y-4">
+      {/* Print CSS (global, injected once) */}
+      <InvoicePrintStyles />
+
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <h2 className="font-bold text-base">المبيعات المحلية</h2>
         <Dialog open={open} onOpenChange={setOpen}>
@@ -236,20 +305,23 @@ export function LocalSalesView({ storeId, piUid, products, customers, inventory 
       ) : (
         <div className="space-y-2.5">
           {filtered.map(function(sale) {
+            const refunded = isRefunded(sale);
             return (
-              <Card key={sale.id} className="border-0 shadow-sm cursor-pointer hover:shadow-md transition-shadow" onClick={function() { setDetailSale(sale); }}>
+              <Card key={sale.id} className={"border-0 shadow-sm cursor-pointer hover:shadow-md transition-shadow" + (refunded ? " opacity-60" : "")} onClick={function() { setDetailSale(sale); }}>
                 <CardContent className="p-3.5 space-y-2">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2.5 min-w-0">
-                      <div className="w-8 h-8 rounded-lg bg-emerald-500/10 flex items-center justify-center shrink-0"><Receipt className="h-4 w-4 text-emerald-600" /></div>
+                      <div className={"w-8 h-8 rounded-lg flex items-center justify-center shrink-0" + (refunded ? " bg-red-500/10" : " bg-emerald-500/10")}><Receipt className={"h-4 w-4" + (refunded ? " text-red-600" : " text-emerald-600")} /></div>
                       <div className="min-w-0">
                         <p className="font-semibold text-xs truncate" dir="ltr">{sale.invoiceNumber}</p>
-                        <p className="text-[10px] text-muted-foreground">{sale.customer ? sale.customer.name : "زبون عابر"} · {fmtDate(sale.createdAt)}</p>
+                        <p className="text-[10px] text-muted-foreground">
+                          {refunded ? "مرجعة" : (sale.customer ? sale.customer.name : "زبون عابر")} · {fmtDate(sale.createdAt)}
+                        </p>
                       </div>
                     </div>
                     <div className="text-left shrink-0 space-y-1">
-                      {paymentMethodBadge(sale.paymentMethod)}
-                      <p className="text-[11px] font-bold text-emerald-600">{formatPi(sale.total)} π</p>
+                      {refunded ? <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 bg-red-500/10 text-red-600 border-red-500/20">مرجعة</Badge> : paymentMethodBadge(sale.paymentMethod)}
+                      <p className={"text-[11px] font-bold" + (refunded ? " text-red-600 line-through" : " text-emerald-600")}>{formatPi(sale.total)} π</p>
                     </div>
                   </div>
                 </CardContent>
@@ -259,13 +331,43 @@ export function LocalSalesView({ storeId, piUid, products, customers, inventory 
         </div>
       )}
 
-      {/* Detail Dialog */}
+      {/* Detail Dialog — Enhanced with Print, Refund, Share */}
       <Dialog open={!!detailSale} onOpenChange={function(o) { if (!o) setDetailSale(null); }}>
         <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
           {detailSale && (
             <div className="space-y-4">
               <DialogHeader><DialogTitle className="text-sm" dir="ltr">{detailSale.invoiceNumber}</DialogTitle><DialogDescription className="text-xs">{fmtDate(detailSale.createdAt)} — {detailSale.customer ? detailSale.customer.name : "زبون عابر"}</DialogDescription></DialogHeader>
-              <div className="flex items-center gap-2">{paymentMethodBadge(detailSale.paymentMethod)}<span className="text-sm font-bold text-emerald-600">{formatPi(detailSale.total)} π</span></div>
+
+              {/* Action buttons row */}
+              <div className="flex items-center gap-2 flex-wrap">
+                {paymentMethodBadge(detailSale.paymentMethod)}
+                <span className="text-sm font-bold text-emerald-600">{formatPi(detailSale.total)} π</span>
+                <div className="flex-1" />
+                {/* Print button */}
+                {store && (
+                  <Button variant="outline" size="sm" onClick={function() { setPrintSale(detailSale); }} className="text-xs h-8 gap-1.5" disabled={isRefunded(detailSale)}>
+                    <Printer className="h-3.5 w-3.5" />طباعة
+                  </Button>
+                )}
+                {/* Share receipt button */}
+                <Button variant="outline" size="sm" onClick={function() { handleShareReceipt(detailSale); }} className="text-xs h-8 gap-1.5">
+                  <Share2 className="h-3.5 w-3.5" />مشاركة
+                </Button>
+                {/* Refund button */}
+                {!isRefunded(detailSale) && (
+                  <Button variant="outline" size="sm" onClick={function() { handleRefund(detailSale.id); }} disabled={refunding} className="text-xs h-8 gap-1.5 text-red-600 border-red-300 hover:bg-red-50 dark:hover:bg-red-950/20">
+                    {refunding ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}إرجاع
+                  </Button>
+                )}
+              </div>
+
+              {/* Refunded indicator */}
+              {isRefunded(detailSale) && (
+                <div className="bg-red-50 dark:bg-red-950/20 border border-red-500/20 rounded-lg p-3 text-center">
+                  <p className="text-xs font-bold text-red-600">⚠ هذه الفاتورة تم إرجاعها</p>
+                </div>
+              )}
+
               <Separator />
               {detailSale.items && detailSale.items.length > 0 && (
                 <div className="space-y-1.5">
@@ -287,11 +389,20 @@ export function LocalSalesView({ storeId, piUid, products, customers, inventory 
                 <Separator className="my-1" />
                 <div className="flex justify-between font-bold"><span>الإجمالي</span><span className="text-emerald-600">{formatPi(detailSale.total)} π</span></div>
               </div>
-              {detailSale.notes && <div className="text-xs text-muted-foreground bg-muted/30 rounded-lg p-2"><span className="font-medium">ملاحظات:</span> {detailSale.notes}</div>}
+              {detailSale.notes && !detailSale.notes.includes("[REFUNDED]") && <div className="text-xs text-muted-foreground bg-muted/30 rounded-lg p-2"><span className="font-medium">ملاحظات:</span> {detailSale.notes}</div>}
             </div>
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Invoice Print View Overlay */}
+      {printSale && store && (
+        <InvoicePrintView
+          sale={printSale}
+          store={store}
+          onClose={function() { setPrintSale(null); }}
+        />
+      )}
     </div>
   );
 }

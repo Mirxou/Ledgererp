@@ -1168,3 +1168,142 @@ Stage Summary:
 - 409 Conflict responses with detailed per-item breakdown
 - UI shows real-time availability vs reserved quantities
 - No more overselling possible — all operations are atomic
+
+---
+Task ID: 2
+Agent: TransactionLog API Builder
+Task: Build TransactionLog POST/PUT API + Local Sales Refund API
+
+Work Log:
+- Read existing transaction-logs route.ts (GET only), local-sales route.ts (GET+POST), api-auth.ts, pi-amount.ts, inventory-guard.ts, and prisma schema
+- Designed state machine using reference field prefix convention ("pending:", "approved:", "completed:", "failed:") since TransactionLog model has no status field
+- Added POST /api/transaction-logs handler: validates required fields (storeId, type, amount, currency), auto-links invoice if invoiceId provided, creates entry with "pending:" prefix in reference field, uses verifyPiAuth + checkRateLimit
+- Added PUT /api/transaction-logs handler: validates state machine transitions (pending→approved→completed|failed), extracts/updates status from reference field prefix, records completedAt timestamp in description when status→completed, returns previousStatus for clarity
+- Added GET /api/transaction-logs?storeId=xxx&stats=true endpoint: returns totalByType, totalByCurrency, pendingCount, completedCount
+- Added PATCH /api/local-sales handler for refund: creates refund TransactionLog entry, restores inventory via restockItems, reduces customer totalSpent/totalOrders, marks sale notes with [REFUNDED] tag, prevents double-refund
+- Added restockItems import to local-sales route
+- Ran ESLint: 0 errors, 1 pre-existing warning (font layout.tsx)
+- Dev server running cleanly, no errors
+
+Stage Summary:
+- /api/transaction-logs now has GET (list + stats), POST (create with state machine), PUT (state transitions)
+- /api/local-sales now has GET (list + stats), POST (create), PATCH (refund)
+- State machine convention: reference field stores status as prefix ("pending:ref_value")
+- Valid transitions: pending→approved, pending→failed, approved→completed, approved→failed
+- Refund flow: creates TransactionLog (type=refund) → restocks inventory → reduces customer totals → marks sale notes
+- 0 ESLint errors, all existing functionality preserved
+
+---
+Task ID: 1
+Agent: Invoice Print Builder
+Task: Build Invoice Print System for Local Sales
+
+Work Log:
+- Created /src/components/invoice-print-view.tsx with full professional receipt/invoice print component
+- Component includes: store header with avatar, invoice number, date/time, customer info, items table, totals section, payment method badge, barcode-style invoice number, Arabic footer
+- Implemented print CSS with @media print rules for thermal printer (80mm width), clean black & white output
+- Added InvoicePrintStyles component for global print CSS injection
+- Added buildReceiptText() utility function for plain-text receipt sharing
+- Added ReceiptContent sub-component shared between screen preview and print layout
+- Enhanced /src/components/local-sales-view.tsx with:
+  - Print button (طباعة) in detail dialog that opens InvoicePrintView overlay
+  - Refund button (إرجاع) that calls PATCH /api/local-sales with { id, action: "refund" }
+  - Share receipt button (مشاركة) that copies formatted receipt text to clipboard
+  - Visual indicator for refunded sales (red styling, strikethrough total, "مرجعة" badge)
+  - Refunded sale indicator in detail dialog
+  - Added store prop to LocalSalesView component
+- Updated /src/components/sales-view.tsx to pass store prop to LocalSalesView
+- Lint: 0 errors, 1 warning (pre-existing font warning in layout.tsx)
+- Dev server running correctly, no compilation errors
+
+Stage Summary:
+- invoice-print-view.tsx: Professional RTL Arabic receipt/invoice component with thermal printer support, A4 support, and PDF export via browser print
+- local-sales-view.tsx: Enhanced with print/refund/share action buttons in detail dialog
+- sales-view.tsx: Now passes store data to LocalSalesView for print functionality
+- All components use "use client" directive, Arabic RTL layout, function expressions (not arrow functions), existing shadcn/ui components and Lucide icons
+
+---
+Task ID: 3
+Agent: Payment Dashboard Builder
+Task: Build Payment Processing Dashboard
+
+Work Log:
+- Created /src/components/payments-view.tsx with comprehensive payment management view (~530 lines)
+- Implemented PaymentsViewProps interface: { storeId: string; piUid: string }
+- Built 4 tabbed sub-sections: Overview, Transactions, Create, Payment Flow
+- Overview tab: Revenue cards (total, pending, completed, refund), revenue by type breakdown, revenue by currency breakdown, status distribution, recent transactions preview
+- Transactions tab: Filterable list with type filter (cash|pi|ousd|refund|expense), status filter (pending|approved|completed|failed), search by description/reference, action buttons per status (موافقة/إكمال/فشل), status badges with color coding
+- Create tab: Inline form with type select, amount input, currency select, description, reference fields; POST /api/transaction-logs
+- Payment Flow tab: Visual flow diagram (Created → Pending → Approved → Completed, with Failed branch), per-transaction mini progress bars, Pi/OUSD payment type counts
+- Also added create dialog (معاملة جديدة) accessible from the header button
+- Implemented getTxStatus() helper to extract status from reference prefix convention
+- Implemented getRefValue() helper to extract actual reference value after status prefix
+- Added TxStatusBadge and TxTypeIcon as React.memo components
+- Added PaymentFlowViz sub-component for the flow visualization
+- State actions: pending→approved (موافقة), approved→completed (إكمال), pending/approved→failed (فشل) via PUT /api/transaction-logs
+- All API calls use api from @/lib/api-client with piUid
+- Integrated into page.tsx as new "المعاملات" tab (8th tab, using Wallet icon)
+- Updated tab grid to grid-cols-4 sm:grid-cols-11 for 11 total tabs
+- ESLint: 0 errors, 2 pre-existing warnings
+- Dev server running cleanly, no compilation or runtime errors
+
+Stage Summary:
+- payments-view.tsx: Full payment processing dashboard with 4 tabs (Overview, Transactions, Create, Flow)
+- Arabic RTL layout throughout, function expressions (not arrow functions)
+- Transaction state machine actions: Approve, Complete, Fail
+- Pi/OUSD payment flow visualization with color-coded status indicators
+- Create dialog + inline create form
+- Filterable transaction list with type/status/search filters
+- Integrated as new tab in main app navigation
+- 0 ESLint errors, production-quality with loading states and error handling
+
+---
+Task ID: 5
+Agent: Financial View Builder
+Task: Build unified Financial View
+
+Work Log:
+- Read worklog and existing codebase (page.tsx, types.ts, api-client.ts, helpers.tsx, expenses-view.tsx, dashboard-view.tsx, prisma schema)
+- Created /src/components/financial-view.tsx with comprehensive financial dashboard
+- Implemented 6 major sections: P&L Summary, Revenue Breakdown, Expense Breakdown, Cash Flow Timeline, Top Customers, Financial Health Indicators
+- Used 5 separate data queries (transaction-logs, expenses, local-sales, invoices, customers) with staleTime: 30_000
+- Added computed useMemo for: revenue sources, expense breakdown, P&L, cash flow (6 months), top customers, health indicators
+- Used shadcn/ui components: Card, Progress, Skeleton, Separator
+- Color-coded: Revenue=emerald, Expenses=red, Profit=emerald/red, Neutral=zinc
+- Arabic RTL layout with dir="rtl"
+- Integrated into page.tsx: Added "finance" tab (المالية) with Wallet icon after expenses tab
+- Updated TabsList grid from sm:grid-cols-11 to sm:grid-cols-12 for 12 tabs
+- Added FinancialView import and TabsContent in page.tsx
+- Ran lint: 0 errors, 1 pre-existing warning
+
+Stage Summary:
+- financial-view.tsx: Unified financial dashboard combining TransactionLog, Expenses, Revenue data
+- 6 sections: P&L (revenue/expenses/profit/margin), Revenue Breakdown (5 sources with progress bars), Expense Breakdown (7 categories), Cash Flow Timeline (6-month bars), Top 5 Customers, Health Indicators (trend/ratio/avg/refund)
+- New "المالية" tab added between expenses and payments in main navigation
+- All data fetched with useQuery (staleTime: 30_000), computed with useMemo for performance
+- 0 ESLint errors, responsive grid layout, loading skeletons, dark mode support
+
+---
+Task ID: 6
+Agent: Main Orchestrator
+Task: Build Invoice Print System + TransactionLog API + Payment Dashboard + Financial View + Refund API
+
+Work Log:
+- Built TransactionLog POST/PUT API with state machine (pending→approved→completed/failed)
+- Added GET stats endpoint for transaction-logs (totalByType, totalByCurrency, pendingCount, completedCount)
+- Built Local Sales Refund API (PATCH /api/local-sales) with inventory restoration via restockItems
+- Built Invoice Print View component (invoice-print-view.tsx) with thermal printer and A4 support
+- Enhanced Local Sales View with Print, Share, Refund buttons in detail dialog
+- Built Payment Processing Dashboard (payments-view.tsx) with 4 sub-tabs: Overview, Transactions, Create, Payment Flow
+- Built Unified Financial View (financial-view.tsx) with P&L, Revenue Breakdown, Expense Breakdown, Cash Flow, Top Customers, Health Indicators
+- Added "المالية" (Finance) and "المعاملات" (Payments) tabs to main app
+- Verified all tabs and features with Agent Browser
+- 0 ESLint errors, dev server running clean
+
+Stage Summary:
+- TransactionLog API: POST (create with state machine), PUT (state transitions pending→approved→completed/failed), GET stats
+- Local Sales Refund: PATCH with inventory restoration, customer total updates, double-refund prevention
+- Invoice Print: Professional RTL receipt with @media print CSS for thermal (80mm) and A4 printers, barcode-style invoice number
+- Payment Dashboard: Transaction management with state actions, Pi/OUSD flow visualization, create new transactions
+- Financial View: P&L summary, revenue/expense breakdown, 6-month cash flow, top customers, health indicators
+- All 12 tabs verified working: الرئيسية، المنتجات، المخزون، المبيعات، الطلبات، الزبائن، المصروفات، المالية، المعاملات، تسوق، الإعدادات، إعداد Pi
