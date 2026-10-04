@@ -26,10 +26,10 @@ import { useToast } from "@/hooks/use-toast";
 import { useDebounce } from "@/hooks/use-debounce";
 import { api } from "@/lib/api-client";
 import { formatPi } from "@/lib/pi-amount";
-import type { ProductData, CategoryData } from "@/lib/types";
+import type { ProductData, CategoryData, InventoryData } from "@/lib/types";
 
 /* ═══ Products ═══ */
-export function ProductsView({ products, storeId, piUid, categories }: { products: ProductData[]; storeId: string; piUid: string; categories: CategoryData[] }) {
+export function ProductsView({ products, storeId, piUid, categories, inventory }: { products: ProductData[]; storeId: string; piUid: string; categories: CategoryData[]; inventory?: InventoryData[] }) {
   const qc = useQueryClient();
   const toast = useToast().toast;
   const [open, setOpen] = useState(false);
@@ -100,8 +100,32 @@ export function ProductsView({ products, storeId, piUid, categories }: { product
     return cat ? cat.nameAr : null;
   };
 
+  const getProductInventory = function(productId: string): InventoryData | null {
+    if (!inventory) return null;
+    for (let i = 0; i < inventory.length; i++) {
+      if (inventory[i].productId === productId) return inventory[i];
+    }
+    return null;
+  };
+
   const isLowStock = function(p: ProductData) {
+    const inv = getProductInventory(p.id);
+    if (inv) {
+      const avail = inv.availableQuantity !== undefined ? inv.availableQuantity : inv.quantity - inv.reservedQuantity;
+      return inv.trackInventory && avail <= inv.lowStockThreshold;
+    }
     return p.trackInventory && p.stockQuantity <= p.lowStockThreshold;
+  };
+
+  const getAvailableStock = function(p: ProductData): number | null {
+    const inv = getProductInventory(p.id);
+    if (!inv) return null;
+    return inv.availableQuantity !== undefined ? inv.availableQuantity : inv.quantity - inv.reservedQuantity;
+  };
+
+  const getReservedStock = function(p: ProductData): number {
+    const inv = getProductInventory(p.id);
+    return inv ? inv.reservedQuantity : 0;
   };
 
   return (
@@ -195,7 +219,12 @@ export function ProductsView({ products, storeId, piUid, categories }: { product
                     {p.sku && <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 font-mono">{p.sku}</Badge>}
                     {catName && <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 bg-teal-500/10 text-teal-600 border-teal-500/20">{catName}</Badge>}
                     {lowStock && <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 bg-red-500/10 text-red-600 border-red-500/20"><AlertTriangle className="h-2.5 w-2.5 ml-0.5" />مخزون منخفض</Badge>}
-                    {p.trackInventory && <span className="text-[10px] text-muted-foreground">المخزون: {p.stockQuantity}</span>}
+                    {p.trackInventory && (
+                      <span className="text-[10px] text-muted-foreground">
+                        المتوفر: <span className={"font-medium " + (function() { const a = getAvailableStock(p); if (a === null) return ""; if (a <= 0) return "text-red-600"; if (a <= p.lowStockThreshold) return "text-amber-600"; return "text-emerald-600"; })()}>{getAvailableStock(p) !== null ? getAvailableStock(p) : p.stockQuantity}</span>
+                      </span>
+                    )}
+                    {getReservedStock(p) > 0 && <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 bg-amber-500/10 text-amber-600 border-amber-500/20">محجوز: {getReservedStock(p)}</Badge>}
                   </div>
                   {p.costPrice > 0 && (
                     <div className="text-[10px] text-muted-foreground">التكلفة: {formatPi(p.costPrice)} π · الربح: {formatPi(p.price - p.costPrice)} π</div>

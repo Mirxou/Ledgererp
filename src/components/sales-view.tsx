@@ -1,15 +1,13 @@
-"use client";
-
 import React, { useState } from "react";
 import { FileText, Receipt } from "lucide-react";
-import type { StoreData, ProductData, InvoiceData, CustomerData, LocalSaleData } from "@/lib/types";
+import type { StoreData, ProductData, InvoiceData, CustomerData, LocalSaleData, InventoryData } from "@/lib/types";
 import { InvoicesView } from "@/components/invoices-view";
 import { LocalSalesView } from "@/components/local-sales-view";
 
 /* ═══ Sales — Merged: Pi Invoices + Local Sales ═══ */
-export function SalesView({ store, products, piUid, customers, localSales }: {
+export function SalesView({ store, products, piUid, customers, localSales, inventory }: {
   store: StoreData; products: ProductData[]; piUid: string;
-  customers: CustomerData[]; localSales: LocalSaleData[];
+  customers: CustomerData[]; localSales: LocalSaleData[]; inventory?: InventoryData[];
 }) {
   const [subTab, setSubTab] = useState<"pi" | "local">("pi");
 
@@ -29,7 +27,7 @@ export function SalesView({ store, products, piUid, customers, localSales }: {
       {subTab === "pi" ? (
         <InvoicesView store={store} products={products} piUid={piUid} />
       ) : (
-        <LocalSalesView storeId={store.id} piUid={piUid} products={products} customers={customers} />
+        <LocalSalesView storeId={store.id} piUid={piUid} products={products} customers={customers} inventory={inventory} />
       )}
     </div>
   );

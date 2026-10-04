@@ -22,18 +22,20 @@ import { useDebounce } from "@/hooks/use-debounce";
 import { api } from "@/lib/api-client";
 import { formatPi, roundPi } from "@/lib/pi-amount";
 import { fmtDate } from "@/lib/helpers";
-import type { LocalSaleData, LocalSaleItemData, ProductData, CustomerData } from "@/lib/types";
+import type { LocalSaleData, LocalSaleItemData, ProductData, CustomerData, InventoryData } from "@/lib/types";
 
 /* ═══ Local Sales ═══ */
-export function LocalSalesView({ storeId, piUid, products, customers }: { storeId: string; piUid: string; products: ProductData[]; customers: CustomerData[] }) {
+export function LocalSalesView({ storeId, piUid, products, customers, inventory }: { storeId: string; piUid: string; products: ProductData[]; customers: CustomerData[]; inventory?: InventoryData[] }) {
   const qc = useQueryClient();
   const toast = useToast().toast;
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState("");
-  const [detailSale, setDetailSale] = useState<LocalSaleData | null>(null);
+  const [conflictItems, setConflictItems] = useState<Array<{ product: string; requested: number; available: number; inStock: number; reserved: number }>>([]);
 
-  // Sale form state
+  const detailSaleState = useState<LocalSaleData | null>(null);
+  const detailSale = detailSaleState[0];
+  const setDetailSale = detailSaleState[1];
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>("none");
   const [paymentMethod, setPaymentMethod] = useState("cash");
   const [saleNotes, setSaleNotes] = useState("");
@@ -54,6 +56,17 @@ export function LocalSalesView({ storeId, piUid, products, customers }: { storeI
     const q = debouncedSearch.toLowerCase();
     return s.invoiceNumber.toLowerCase().indexOf(q) !== -1 || (s.customer && s.customer.name.toLowerCase().indexOf(q) !== -1);
   }) : sales;
+
+  const getProductAvailableQty = function(productId: string): number | null {
+    if (!inventory) return null;
+    for (let i = 0; i < inventory.length; i++) {
+      if (inventory[i].productId === productId) {
+        const inv = inventory[i];
+        return inv.availableQuantity !== undefined ? inv.availableQuantity : inv.quantity - inv.reservedQuantity;
+      }
+    }
+    return null;
+  };
 
   const activeProducts = products.filter(function(p) { return p.isActive; });
 
@@ -97,7 +110,13 @@ export function LocalSalesView({ storeId, piUid, products, customers }: { storeI
         setSaleNotes("");
         setSaleTax("");
         setSaleDiscount("");
+        setConflictItems([]);
         toast({ title: "تم تسجيل البيع المحلية" });
+      } else if (res.status === 409) {
+        res.json().catch(function() { return {}; }).then(function(err) {
+          setConflictItems(err.details || []);
+          toast({ title: "لا يمكن إتمام العملية — مخزون غير كافٍ", description: err.error || "", variant: "destructive" });
+        });
       } else {
         res.json().catch(function() { return {}; }).then(function(err) { toast({ title: "فشل التسجيل", description: err.error || "", variant: "destructive" }); });
       }
@@ -120,6 +139,20 @@ export function LocalSalesView({ storeId, piUid, products, customers }: { storeI
           <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
             <DialogHeader><DialogTitle className="text-sm">تسجيل بيع محلية</DialogTitle><DialogDescription className="text-xs">بيع بنقدي أو بطاقة (بدون ضمان Pi)</DialogDescription></DialogHeader>
             <div className="space-y-4">
+              {/* Conflict Warning */}
+              {conflictItems.length > 0 && (
+                <div className="border border-red-500/30 bg-red-50 dark:bg-red-950/20 rounded-lg p-3 space-y-1.5">
+                  <p className="text-xs font-bold text-red-600">لا يمكن إتمام العملية — مخزون غير كافٍ</p>
+                  {conflictItems.map(function(ci, i) {
+                    return (
+                      <div key={i} className="text-[11px] text-red-700 dark:text-red-400 flex items-center justify-between">
+                        <span className="truncate">{ci.product}</span>
+                        <span className="shrink-0 font-mono">مطلوب: {ci.requested} · متوفر: {ci.available}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
                   <Label className="text-xs">الزبون (اختياري)</Label>
@@ -154,10 +187,19 @@ export function LocalSalesView({ storeId, piUid, products, customers }: { storeI
                           {idx === 0 && <span className="text-[10px] text-muted-foreground">المنتج</span>}
                           <select value={selectedProductId} onChange={function(e) { const found = activeProducts.find(function(p) { return p.id === e.target.value; }); setItems(function(prev) { return prev.map(function(it, i) { if (i === idx) return Object.assign({}, it, { _selectedProductId: e.target.value, productName: found ? found.name : "", unitPrice: found ? found.price : 0 }); return it; }); }); }} className="w-full h-8 rounded-md border border-input bg-background px-2 text-xs">
                             <option value="">{activeProducts.length > 0 ? "اختر منتج" : "لا توجد منتجات"}</option>
-                            {activeProducts.map(function(p) { return <option key={p.id} value={p.id}>{p.name} — {p.price}π</option>; })}
+                            {activeProducts.map(function(p) { const avail = getProductAvailableQty(p.id); return <option key={p.id} value={p.id}>{p.name} — {p.price}π{avail !== null ? " (متوفر: " + avail + ")" : ""}</option>; })}
                           </select>
+                          {selectedProductId && getProductAvailableQty(selectedProductId) !== null && (
+                            <span className={"text-[9px] " + (function() { const a = getProductAvailableQty(selectedProductId)!; const p = activeProducts.find(function(x) { return x.id === selectedProductId; }); if (a <= 0) return "text-red-600"; if (p && a <= p.lowStockThreshold) return "text-amber-600"; return "text-emerald-600"; })()}>متوفر: {getProductAvailableQty(selectedProductId)}</span>
+                          )}
                         </div>
-                        <div>{idx === 0 && <span className="text-[10px] text-muted-foreground">الكمية</span>}<Input type="number" min="1" inputMode="numeric" value={item.quantity} onChange={function(e) { updateItem(idx, "quantity", parseInt(e.target.value) || 1); }} className="text-xs h-8 text-center" /></div>
+                        <div>
+                          {idx === 0 && <span className="text-[10px] text-muted-foreground">الكمية</span>}
+                          <Input type="number" min="1" inputMode="numeric" value={item.quantity} onChange={function(e) { updateItem(idx, "quantity", parseInt(e.target.value) || 1); }} className="text-xs h-8 text-center" />
+                          {selectedProductId && getProductAvailableQty(selectedProductId) !== null && item.quantity > (getProductAvailableQty(selectedProductId) || 0) && (
+                            <span className="text-[9px] text-red-600 font-medium">الكمية المطلوبة تتجاوز المخزون المتوفر ({getProductAvailableQty(selectedProductId)} متوفر)</span>
+                          )}
+                        </div>
                         <div>{idx === 0 && <span className="text-[10px] text-muted-foreground">السعر</span>}<Input type="number" step="0.01" value={item.unitPrice} onChange={function(e) { updateItem(idx, "unitPrice", parseFloat(e.target.value) || 0); }} className="text-xs h-8" dir="ltr" /></div>
                         <Button variant="ghost" size="sm" onClick={function() { removeItem(idx); }} className="h-8 w-8 p-0 text-destructive" disabled={items.length <= 1}>×</Button>
                       </div>

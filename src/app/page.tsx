@@ -447,12 +447,12 @@ function AuthenticatedApp({ piUid, username }: { piUid: string; username: string
 
             {/* 1. Dashboard */}
             <TabsContent value="dashboard">
-              <DashboardView stats={stats} store={myStore} transactionLogs={transactionLogs} />
+              <DashboardView stats={stats} store={myStore} transactionLogs={transactionLogs} inventory={inventory} />
             </TabsContent>
 
             {/* 2. Products */}
             <TabsContent value="products">
-              <ProductsView products={products} storeId={myStore.id} piUid={piUid} categories={categories} />
+              <ProductsView products={products} storeId={myStore.id} piUid={piUid} categories={categories} inventory={inventory} />
             </TabsContent>
 
             {/* 3. Inventory */}
@@ -462,7 +462,7 @@ function AuthenticatedApp({ piUid, username }: { piUid: string; username: string
 
             {/* 4. Sales (merged Pi invoices + local sales) */}
             <TabsContent value="sales">
-              <SalesView store={myStore} products={products} piUid={piUid} customers={customers} localSales={localSales} />
+              <SalesView store={myStore} products={products} piUid={piUid} customers={customers} localSales={localSales} inventory={inventory} />
             </TabsContent>
 
             {/* 5. Orders */}

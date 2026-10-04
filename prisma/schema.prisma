@@ -161,6 +161,8 @@ model Inventory {
   quantity          Int      @default(0)
   /// Quantity reserved in pending escrow orders
   reservedQuantity  Int      @default(0)
+  /// Optimistic locking version — incremented on every update
+  version           Int      @default(0)
   /// Alert threshold — notify when quantity drops below
   lowStockThreshold Int      @default(5)
   /// Whether to track inventory for this product

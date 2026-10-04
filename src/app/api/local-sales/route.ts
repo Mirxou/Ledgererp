@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { verifyPiAuth, verifyStoreOwnership, sanitizeString, checkRateLimit } from "@/lib/api-auth";
 import { roundPi } from "@/lib/pi-amount";
+import { checkStockAvailability, deductStock } from "@/lib/inventory-guard";
 
 /** Generate local sale invoice number: LS-YYYYMMDD-XXXXX */
 function genLocalSaleNumber(): string {
@@ -161,6 +162,34 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // === Strict stock availability check BEFORE creating sale ===
+    const itemsWithProduct = validatedItems.filter((i): i is typeof i & { productId: string } => i.productId !== null);
+    if (itemsWithProduct.length > 0) {
+      const stockCheck = await checkStockAvailability(
+        storeId,
+        itemsWithProduct.map((i) => ({ productId: i.productId, quantity: i.quantity }))
+      );
+
+      if (!stockCheck.available) {
+        // BLOCK the sale — return 409 Conflict with details
+        return NextResponse.json(
+          {
+            error: "مخزون غير كافٍ",
+            details: stockCheck.items
+              .filter((i) => !i.sufficient)
+              .map((i) => ({
+                product: i.productName,
+                requested: i.requested,
+                available: i.available,
+                inStock: i.inStock,
+                reserved: i.reserved,
+              })),
+          },
+          { status: 409 }
+        );
+      }
+    }
+
     const invoiceNumber = genLocalSaleNumber();
 
     // Create the local sale with items
@@ -197,49 +226,23 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    // === Update inventory and create movements for each item ===
-    for (const item of validatedItems) {
-      if (!item.productId) continue; // Custom items don't affect inventory
+    // === Deduct stock atomically using inventory guard ===
+    if (itemsWithProduct.length > 0) {
+      const deductResult = await deductStock(
+        storeId,
+        itemsWithProduct.map((i) => ({ productId: i.productId, quantity: i.quantity })),
+        sale.id,
+        createdBy,
+        false // isEscrow = false for local sales
+      );
 
-      // Find inventory record for this product+store
-      const inventory = await db.inventory.findUnique({
-        where: { productId_storeId: { productId: item.productId, storeId } },
-      });
-
-      if (inventory && inventory.trackInventory) {
-        // Check stock availability
-        if (inventory.quantity < item.quantity) {
-          // Log warning but don't block sale (allow negative stock)
-          console.warn(
-            `Insufficient stock for product ${item.productId}: available ${inventory.quantity}, requested ${item.quantity}`
-          );
-        }
-
-        const newQuantity = inventory.quantity - item.quantity;
-
-        // Create InventoryMovement
-        await db.inventoryMovement.create({
-          data: {
-            inventoryId: inventory.id,
-            type: "sale",
-            quantity: -item.quantity,
-            reason: `Local sale ${invoiceNumber}`,
-            referenceId: sale.id,
-            createdBy,
-          },
-        });
-
-        // Update Inventory quantity
-        await db.inventory.update({
-          where: { id: inventory.id },
-          data: { quantity: newQuantity },
-        });
-
-        // Update Product.stockQuantity (denormalized)
-        await db.product.update({
-          where: { id: item.productId },
-          data: { stockQuantity: newQuantity },
-        });
+      if (!deductResult.success) {
+        // Sale was created but stock deduction failed (concurrent modification)
+        // This is a rare edge case — log warning but don't fail the sale
+        console.warn(
+          `Stock deduction failed for local sale ${sale.invoiceNumber}:`,
+          deductResult.conflicts
+        );
       }
     }
 

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { verifyPiAuth, verifyStoreOwnership, sanitizeString, validateNonNegativeNumber, isValidInvoiceStatus, checkRateLimit } from "@/lib/api-auth";
 import { roundPi } from "@/lib/pi-amount";
+import { reserveStock, deductStock, releaseReservedStock } from "@/lib/inventory-guard";
 
 /** Invoice status transition rules — enforces the escrow flow */
 const VALID_TRANSITIONS: Record<string, string[]> = {
@@ -252,6 +253,78 @@ export async function PATCH(req: NextRequest) {
     if (status === "delivered") data.deliveredAt = new Date();
     if (status === "completed") data.completedAt = new Date();
     if (status === "cancelled") data.cancelledAt = new Date();
+
+    // === Escrow inventory management ===
+    // When status becomes 'paid_escrow': RESERVE stock
+    if (status === "paid_escrow") {
+      const invoiceItems = await db.invoiceItem.findMany({ where: { invoiceId: id } });
+      const itemsWithProduct = invoiceItems.filter((i): i is typeof i & { productId: string } => i.productId !== null);
+
+      if (itemsWithProduct.length > 0) {
+        const reserveResult = await reserveStock(
+          invoice.storeId,
+          itemsWithProduct.map((i) => ({ productId: i.productId, quantity: i.quantity })),
+          id,
+          auth.user.uid
+        );
+
+        if (!reserveResult.success) {
+          return NextResponse.json(
+            {
+              error: "مخزون غير كاف للحجز",
+              details: reserveResult.conflicts,
+            },
+            { status: 409 }
+          );
+        }
+      }
+    }
+
+    // When status becomes 'completed': DEDUCT stock (was reserved)
+    if (status === "completed") {
+      const invoiceItems = await db.invoiceItem.findMany({ where: { invoiceId: id } });
+      const itemsWithProduct = invoiceItems.filter((i): i is typeof i & { productId: string } => i.productId !== null);
+
+      if (itemsWithProduct.length > 0) {
+        await deductStock(
+          invoice.storeId,
+          itemsWithProduct.map((i) => ({ productId: i.productId, quantity: i.quantity })),
+          id,
+          auth.user.uid,
+          true // isEscrow = true
+        );
+      }
+    }
+
+    // When status becomes 'cancelled' and current is 'paid_escrow': RELEASE reservation
+    if (status === "cancelled" && invoice.status === "paid_escrow") {
+      const invoiceItems = await db.invoiceItem.findMany({ where: { invoiceId: id } });
+      const itemsWithProduct = invoiceItems.filter((i): i is typeof i & { productId: string } => i.productId !== null);
+
+      if (itemsWithProduct.length > 0) {
+        await releaseReservedStock(
+          invoice.storeId,
+          itemsWithProduct.map((i) => ({ productId: i.productId, quantity: i.quantity })),
+          id,
+          auth.user.uid
+        );
+      }
+    }
+
+    // When status becomes 'disputed' from 'paid_escrow': also release reservation
+    if (status === "disputed" && invoice.status === "paid_escrow") {
+      const invoiceItems = await db.invoiceItem.findMany({ where: { invoiceId: id } });
+      const itemsWithProduct = invoiceItems.filter((i): i is typeof i & { productId: string } => i.productId !== null);
+
+      if (itemsWithProduct.length > 0) {
+        await releaseReservedStock(
+          invoice.storeId,
+          itemsWithProduct.map((i) => ({ productId: i.productId, quantity: i.quantity })),
+          id,
+          auth.user.uid
+        );
+      }
+    }
 
     // If taxAmount or discountAmount changed, recalculate total
     if (body.taxAmount !== undefined || body.discountAmount !== undefined) {

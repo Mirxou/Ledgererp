@@ -145,11 +145,12 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    // Update inventory quantity
+    // Update inventory quantity with optimistic locking version increment
     const updatedInventory = await db.inventory.update({
       where: { id: inventoryId },
       data: {
         quantity: newQuantity,
+        version: { increment: 1 },
         lastRestockedAt: quantity > 0 ? new Date() : inventory.lastRestockedAt,
       },
     });

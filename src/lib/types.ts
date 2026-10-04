@@ -86,8 +86,10 @@ export interface InventoryData {
   storeId: string;
   quantity: number;
   reservedQuantity: number;
+  availableQuantity?: number;
   lowStockThreshold: number;
   trackInventory: boolean;
+  version?: number;
   lastRestockedAt: string | null;
   product?: { id: string; name: string; sku: string; category?: { id: string; nameAr: string; nameEn: string } };
   isLowStock?: boolean;

@@ -13,13 +13,14 @@ import { Button } from "@/components/ui/button";
 import { formatPi, roundPi } from "@/lib/pi-amount";
 import { StatusBadge, copyText, fmtDate, fmtTime } from "@/lib/helpers";
 import { useToast } from "@/hooks/use-toast";
-import type { StoreData, InvoiceData, TransactionLogData } from "@/lib/types";
+import type { StoreData, InvoiceData, TransactionLogData, InventoryData } from "@/lib/types";
 
 /* ═══ Dashboard ═══ */
-export function DashboardView({ stats, store, transactionLogs }: {
+export function DashboardView({ stats, store, transactionLogs, inventory }: {
   stats: Record<string, unknown>;
   store: StoreData;
   transactionLogs?: TransactionLogData[];
+  inventory?: InventoryData[];
 }) {
   const toast = useToast().toast;
 
@@ -34,6 +35,9 @@ export function DashboardView({ stats, store, transactionLogs }: {
     copyText(storesDirLink, toast, "تم نسخ رابط الدليل");
   }, [storesDirLink, toast]);
 
+  const totalReserved = inventory ? inventory.reduce(function(s, inv) { return s + inv.reservedQuantity; }, 0) : 0;
+  const reservedItemsCount = inventory ? inventory.filter(function(inv) { return inv.reservedQuantity > 0; }).length : 0;
+
   const cards = [
     { label: "إجمالي الفواتير", value: String(stats.totalInvoices || 0), icon: FileText, color: "text-blue-500", bg: "bg-blue-500/10" },
     { label: "المنتجات", value: String(stats.totalProducts || 0), icon: Package, color: "text-violet-500", bg: "bg-violet-500/10" },
@@ -41,6 +45,7 @@ export function DashboardView({ stats, store, transactionLogs }: {
     { label: "π مكتمل", value: formatPi(Number(stats.completedPi || 0)), icon: CheckCircle2, color: "text-emerald-500", bg: "bg-emerald-500/10" },
     { label: "الزبائن", value: String(stats.totalCustomers || 0), icon: Users, color: "text-teal-500", bg: "bg-teal-500/10" },
     { label: "تنبيهات مخزون", value: String(stats.lowStockCount || 0), icon: AlertTriangle, color: "text-red-500", bg: "bg-red-500/10" },
+    { label: "محجوز ضمان", value: String(totalReserved), icon: Shield, color: "text-amber-500", bg: "bg-amber-500/10" },
   ];
 
   const recent = (stats.recentOrders || []) as InvoiceData[];
@@ -114,7 +119,7 @@ export function DashboardView({ stats, store, transactionLogs }: {
       </Card>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
         {cards.map(function(c) {
           return (
             <Card key={c.label} className="border-0 shadow-sm">
@@ -127,8 +132,34 @@ export function DashboardView({ stats, store, transactionLogs }: {
         })}
       </div>
 
+      {/* Inventory Alerts */}
+      {(Number(stats.lowStockCount || 0) > 0 || reservedItemsCount > 0) && (
+        <Card className="border-0 shadow-sm border-l-4" style={{ borderLeftColor: reservedItemsCount > 0 ? "var(--color-amber-500, #f59e0b)" : "var(--color-red-500, #ef4444)" }}>
+          <CardContent className="p-3.5 space-y-1.5">
+            <p className="text-xs font-bold flex items-center gap-2">
+              <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
+              تنبيهات المخزون
+            </p>
+            {Number(stats.lowStockCount || 0) > 0 && (
+              <p className="text-[11px] text-muted-foreground">{stats.lowStockCount} منتجات منخفضة المخزون</p>
+            )}
+            {reservedItemsCount > 0 && (
+              <p className="text-[11px] text-amber-600 font-medium">{reservedItemsCount} عناصر محجوزة في الضمان ({totalReserved} وحدة)</p>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       {/* Revenue & Expenses */}
       <div className="grid grid-cols-2 gap-3">
+        {reservedItemsCount > 0 && (
+          <Card className="border-0 shadow-sm border-l-4" style={{ borderLeftColor: "var(--color-amber-500, #f59e0b)" }}>
+            <CardContent className="p-3.5 flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-amber-500/10 flex items-center justify-center shrink-0"><Shield className="h-4 w-4 text-amber-500" /></div>
+              <div className="min-w-0"><p className="text-[11px] text-muted-foreground truncate">عناصر محجوزة في الضمان</p><p className="font-bold text-base leading-tight text-amber-600">{reservedItemsCount} <span className="text-xs font-normal text-muted-foreground">عنصر</span></p></div>
+            </CardContent>
+          </Card>
+        )}
         <Card className="border-0 shadow-sm">
           <CardContent className="p-3.5 flex items-center gap-3">
             <div className="w-9 h-9 rounded-xl bg-emerald-500/10 flex items-center justify-center shrink-0"><TrendingUp className="h-4 w-4 text-emerald-500" /></div>

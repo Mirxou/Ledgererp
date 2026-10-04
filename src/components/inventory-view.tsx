@@ -119,21 +119,28 @@ export function InventoryView({ storeId, piUid }: { storeId: string; piUid: stri
     }).catch(function() { toast({ title: "خطأ في الاتصال", variant: "destructive" }); }).finally(function() { setSaving(false); });
   };
 
+  const getAvailable = function(inv: InventoryData) {
+    return inv.availableQuantity !== undefined ? inv.availableQuantity : inv.quantity - inv.reservedQuantity;
+  };
+
   const statusColor = function(inv: InventoryData) {
-    if (inv.quantity <= 0) return "text-red-500";
-    if (inv.isLowStock) return "text-amber-500";
+    const avail = getAvailable(inv);
+    if (avail <= 0) return "text-red-500";
+    if (avail <= inv.lowStockThreshold) return "text-amber-500";
     return "text-emerald-500";
   };
 
   const statusLabel = function(inv: InventoryData) {
-    if (inv.quantity <= 0) return "نفذ";
-    if (inv.isLowStock) return "منخفض";
+    const avail = getAvailable(inv);
+    if (avail <= 0) return "غير متوفر";
+    if (avail <= inv.lowStockThreshold) return "منخفض";
     return "متوفر";
   };
 
   const statusBg = function(inv: InventoryData) {
-    if (inv.quantity <= 0) return "bg-red-500/10 border-red-500/20 text-red-600";
-    if (inv.isLowStock) return "bg-amber-500/10 border-amber-500/20 text-amber-600";
+    const avail = getAvailable(inv);
+    if (avail <= 0) return "bg-red-500/10 border-red-500/20 text-red-600";
+    if (avail <= inv.lowStockThreshold) return "bg-amber-500/10 border-amber-500/20 text-amber-600";
     return "bg-emerald-500/10 border-emerald-500/20 text-emerald-600";
   };
 
@@ -149,7 +156,7 @@ export function InventoryView({ storeId, piUid }: { storeId: string; piUid: stri
       </div>
 
       {/* Summary */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <Card className="border-0 shadow-sm">
           <CardContent className="p-3 flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-lg bg-emerald-500/10 flex items-center justify-center"><Package className="h-4 w-4 text-emerald-500" /></div>
@@ -160,6 +167,12 @@ export function InventoryView({ storeId, piUid }: { storeId: string; piUid: stri
           <CardContent className="p-3 flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-lg bg-amber-500/10 flex items-center justify-center"><AlertTriangle className="h-4 w-4 text-amber-500" /></div>
             <div><p className="text-[10px] text-muted-foreground">مخزون منخفض</p><p className="font-bold text-sm">{lowStockCount}</p></div>
+          </CardContent>
+        </Card>
+        <Card className="border-0 shadow-sm">
+          <CardContent className="p-3 flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-amber-500/10 flex items-center justify-center"><CircleDot className="h-4 w-4 text-amber-500" /></div>
+            <div><p className="text-[10px] text-muted-foreground">محجوز ضمان</p><p className="font-bold text-sm text-amber-600">{inventory.reduce(function(s, inv) { return s + inv.reservedQuantity; }, 0)}</p></div>
           </CardContent>
         </Card>
         <Card className="border-0 shadow-sm">
@@ -194,7 +207,7 @@ export function InventoryView({ storeId, piUid }: { storeId: string; piUid: stri
                 <CardContent className="p-3.5 space-y-2">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2.5 min-w-0">
-                      <div className={"w-8 h-8 rounded-lg flex items-center justify-center shrink-0 " + (inv.isLowStock ? "bg-amber-500/10" : "bg-emerald-500/10")}>
+                      <div className={"w-8 h-8 rounded-lg flex items-center justify-center shrink-0 " + (function() { const a = getAvailable(inv); if (a <= 0) return "bg-red-500/10"; if (a <= inv.lowStockThreshold) return "bg-amber-500/10"; return "bg-emerald-500/10"; })()}>
                         <Package className={"h-4 w-4 " + statusColor(inv)} />
                       </div>
                       <div className="min-w-0">
@@ -207,12 +220,16 @@ export function InventoryView({ storeId, piUid }: { storeId: string; piUid: stri
                     </div>
                     <Badge variant="outline" className={"text-[9px] px-1.5 py-0 h-4 border " + statusBg(inv)}>{statusLabel(inv)}</Badge>
                   </div>
-                  <div className="grid grid-cols-4 gap-2 text-center text-[10px]">
-                    <div><p className="text-muted-foreground">في المخزون</p><p className="font-bold text-xs">{inv.quantity}</p></div>
-                    <div><p className="text-muted-foreground">محجوز</p><p className="font-bold text-xs">{inv.reservedQuantity}</p></div>
-                    <div><p className="text-muted-foreground">متاح</p><p className="font-bold text-xs">{inv.quantity - inv.reservedQuantity}</p></div>
-                    <div><p className="text-muted-foreground">الحد الأدنى</p><p className="font-bold text-xs">{inv.lowStockThreshold}</p></div>
+                  <div className="grid grid-cols-3 gap-2 text-center text-[10px]">
+                    <div><p className="text-muted-foreground">المتوفر</p><p className={"font-bold text-xs " + (function() { const a = getAvailable(inv); if (a <= 0) return "text-red-600"; if (a <= inv.lowStockThreshold) return "text-amber-600"; return "text-emerald-600"; })()}>{getAvailable(inv)}</p></div>
+                    <div><p className="text-muted-foreground">المحجوز</p><p className="font-bold text-xs text-amber-600">{inv.reservedQuantity}</p></div>
+                    <div><p className="text-muted-foreground">الإجمالي</p><p className="font-bold text-xs">{inv.quantity}</p></div>
                   </div>
+                  {inv.reservedQuantity > 0 && (
+                    <div className="flex items-center gap-1">
+                      <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 bg-amber-500/10 text-amber-600 border-amber-500/20">{inv.reservedQuantity} محجوز ضمان</Badge>
+                    </div>
+                  )}
                   <div className="flex items-center gap-1.5 pt-1 border-t border-border/50">
                     <Button variant="outline" size="sm" className="h-7 text-[10px] gap-1 border-emerald-500/30 text-emerald-600" onClick={function() { setSelectedInv(inv); setRestockOpen(true); }}>
                       <Plus className="h-3 w-3" />تزويد
@@ -265,6 +282,11 @@ export function InventoryView({ storeId, piUid }: { storeId: string; piUid: stri
         <DialogContent>
           <DialogHeader><DialogTitle className="text-sm">تزويد المخزون</DialogTitle><DialogDescription className="text-xs">أضف كمية جديدة لـ {selectedInv?.product?.name || ""}</DialogDescription></DialogHeader>
           <div className="space-y-3">
+            {selectedInv && selectedInv.reservedQuantity > 0 && (
+              <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-500/20 rounded-lg px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
+                {selectedInv.reservedQuantity} وحدة محجوزة في الضمان حالياً — لا تؤثر على الكمية المضافة
+              </div>
+            )}
             <div className="space-y-1.5"><Label className="text-xs">الكمية المضافة *</Label><Input type="number" min="1" inputMode="numeric" value={restockQty} onChange={function(e) { setRestockQty(e.target.value); }} placeholder="مثال: 50" className="text-sm" dir="ltr" /></div>
             <div className="space-y-1.5"><Label className="text-xs">السبب (اختياري)</Label><Input value={restockReason} onChange={function(e) { setRestockReason(e.target.value); }} placeholder="مثال: شحنة جديدة" className="text-sm" /></div>
           </div>

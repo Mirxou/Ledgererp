@@ -40,10 +40,12 @@ export async function GET(req: NextRequest) {
       take: limit,
     });
 
-    // Add isLowStock flag and filter if lowStock=true
+    // Add isLowStock flag, availableQuantity, and reservedQuantity; filter if lowStock=true
     let results = inventory.map((inv) => ({
       ...inv,
       isLowStock: inv.quantity <= inv.lowStockThreshold,
+      availableQuantity: inv.quantity - inv.reservedQuantity,
+      reservedQuantity: inv.reservedQuantity,
     }));
 
     if (lowStock) {
@@ -100,13 +102,14 @@ export async function POST(req: NextRequest) {
     });
 
     if (existing) {
-      // Update existing inventory
+      // Update existing inventory (increment version for optimistic locking)
       const updated = await db.inventory.update({
         where: { id: existing.id },
         data: {
           quantity: isNaN(quantity) ? existing.quantity : quantity,
           lowStockThreshold: isNaN(lowStockThreshold) ? existing.lowStockThreshold : lowStockThreshold,
           trackInventory,
+          version: { increment: 1 },
           lastRestockedAt: quantity > existing.quantity ? new Date() : existing.lastRestockedAt,
         },
         include: {
@@ -122,7 +125,11 @@ export async function POST(req: NextRequest) {
         data: { stockQuantity: isNaN(quantity) ? existing.quantity : quantity },
       });
 
-      return NextResponse.json({ ...updated, isLowStock: updated.quantity <= updated.lowStockThreshold });
+      return NextResponse.json({
+        ...updated,
+        isLowStock: updated.quantity <= updated.lowStockThreshold,
+        availableQuantity: updated.quantity - updated.reservedQuantity,
+      });
     }
 
     // Create new inventory record
@@ -148,7 +155,11 @@ export async function POST(req: NextRequest) {
       data: { stockQuantity: isNaN(quantity) ? 0 : quantity },
     });
 
-    return NextResponse.json({ ...inventory, isLowStock: inventory.quantity <= inventory.lowStockThreshold });
+    return NextResponse.json({
+      ...inventory,
+      isLowStock: inventory.quantity <= inventory.lowStockThreshold,
+      availableQuantity: inventory.quantity - inventory.reservedQuantity,
+    });
   } catch (error) {
     console.error("Create inventory error:", error);
     return NextResponse.json({ error: "Failed to create inventory" }, { status: 500 });
@@ -189,9 +200,35 @@ export async function PATCH(req: NextRequest) {
     const newTrackInventory = body.trackInventory !== undefined ? Boolean(body.trackInventory) : undefined;
 
     if (newQuantity !== undefined && !isNaN(newQuantity)) {
-      data.quantity = newQuantity;
-      if (newQuantity > inventory.quantity) {
-        data.lastRestockedAt = new Date();
+      const expectedVersion = body.version !== undefined ? parseInt(String(body.version), 10) : undefined;
+
+      if (expectedVersion !== undefined && !isNaN(expectedVersion)) {
+        // Optimistic lock: only update if version matches
+        const result = await db.inventory.updateMany({
+          where: { id, version: expectedVersion },
+          data: {
+            quantity: newQuantity,
+            version: { increment: 1 },
+            lastRestockedAt: newQuantity > inventory.quantity ? new Date() : inventory.lastRestockedAt,
+          },
+        });
+
+        if (result.count === 0) {
+          return NextResponse.json(
+            { error: "تعارض في التحديث — تم تعديل المخزون بواسطة عملية أخرى. أعد التحميل وحاول مرة أخرى." },
+            { status: 409 }
+          );
+        }
+
+        // Skip the default update since we already did it with updateMany
+        data.quantity = newQuantity; // Set so the movement log is created below
+      } else {
+        // No version provided, update directly (backward compatible)
+        data.quantity = newQuantity;
+        data.version = { increment: 1 };
+        if (newQuantity > inventory.quantity) {
+          data.lastRestockedAt = new Date();
+        }
       }
     }
     if (newLowStockThreshold !== undefined && !isNaN(newLowStockThreshold)) {
@@ -201,15 +238,56 @@ export async function PATCH(req: NextRequest) {
       data.trackInventory = newTrackInventory;
     }
 
-    const updated = await db.inventory.update({
-      where: { id },
-      data,
-      include: {
-        product: {
-          select: { id: true, name: true, sku: true, category: { select: { id: true, nameEn: true } } },
+    // Skip update if we already did optimistic lock updateMany for quantity
+    const alreadyUpdatedQuantity = newQuantity !== undefined && !isNaN(newQuantity) && body.version !== undefined && !isNaN(parseInt(String(body.version), 10));
+    let updated;
+
+    if (alreadyUpdatedQuantity) {
+      // We already updated quantity via updateMany, just read the current state
+      // Still need to update other fields if provided
+      const otherData: Record<string, unknown> = {};
+      if (newLowStockThreshold !== undefined && !isNaN(newLowStockThreshold)) {
+        otherData.lowStockThreshold = newLowStockThreshold;
+      }
+      if (newTrackInventory !== undefined) {
+        otherData.trackInventory = newTrackInventory;
+      }
+
+      if (Object.keys(otherData).length > 0) {
+        updated = await db.inventory.update({
+          where: { id },
+          data: otherData,
+          include: {
+            product: {
+              select: { id: true, name: true, sku: true, category: { select: { id: true, nameEn: true } } },
+            },
+          },
+        });
+      } else {
+        updated = await db.inventory.findUnique({
+          where: { id },
+          include: {
+            product: {
+              select: { id: true, name: true, sku: true, category: { select: { id: true, nameEn: true } } },
+            },
+          },
+        });
+      }
+    } else {
+      updated = await db.inventory.update({
+        where: { id },
+        data,
+        include: {
+          product: {
+            select: { id: true, name: true, sku: true, category: { select: { id: true, nameEn: true } } },
+          },
         },
-      },
-    });
+      });
+    }
+
+    if (!updated) {
+      return NextResponse.json({ error: "Inventory record not found after update" }, { status: 404 });
+    }
 
     // Auto-create InventoryMovement log when quantity changes
     if (newQuantity !== undefined && !isNaN(newQuantity) && newQuantity !== inventory.quantity) {
@@ -232,7 +310,11 @@ export async function PATCH(req: NextRequest) {
       });
     }
 
-    return NextResponse.json({ ...updated, isLowStock: updated.quantity <= updated.lowStockThreshold });
+    return NextResponse.json({
+      ...updated,
+      isLowStock: updated.quantity <= updated.lowStockThreshold,
+      availableQuantity: updated.quantity - updated.reservedQuantity,
+    });
   } catch (error) {
     console.error("Update inventory error:", error);
     return NextResponse.json({ error: "Failed to update inventory" }, { status: 500 });
