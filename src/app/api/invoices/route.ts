@@ -29,7 +29,9 @@ function genInvoiceNumber(): string {
   return `${prefix}-${date}-${rand}`;
 }
 
-// GET /api/invoices?storeId=xxx&customerPiUid=xxx&status=xxx&invoiceNumber=INV-xxx
+const VALID_PAYMENT_METHODS = ["pi", "cash", "card", "ousd"];
+
+// GET /api/invoices?storeId=xxx&customerPiUid=xxx&status=xxx&invoiceNumber=INV-xxx&paymentMethod=xxx
 // invoiceNumber is a PUBLIC endpoint for buyers — no auth required
 export async function GET(req: NextRequest) {
   try {
@@ -41,6 +43,7 @@ export async function GET(req: NextRequest) {
     const customerPiUid = searchParams.get("customerPiUid");
     const status = searchParams.get("status");
     const invoiceNumber = searchParams.get("invoiceNumber");
+    const paymentMethod = searchParams.get("paymentMethod");
 
     // Public buyer endpoint: fetch single invoice by invoiceNumber (no auth required)
     if (invoiceNumber) {
@@ -62,10 +65,16 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Invalid status filter" }, { status: 400 });
     }
 
+    // Validate paymentMethod if provided
+    if (paymentMethod && !VALID_PAYMENT_METHODS.includes(paymentMethod)) {
+      return NextResponse.json({ error: "Invalid paymentMethod filter" }, { status: 400 });
+    }
+
     const where: Record<string, unknown> = {};
     if (storeId) where.storeId = storeId;
     if (customerPiUid) where.customerPiUid = customerPiUid;
     if (status) where.status = status;
+    if (paymentMethod) where.paymentMethod = paymentMethod;
 
     const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10));
     const limit = Math.min(200, Math.max(1, parseInt(searchParams.get("limit") || "50", 10)));
@@ -83,12 +92,14 @@ export async function GET(req: NextRequest) {
     ]);
     const totalPages = Math.ceil(total / limit);
     return NextResponse.json({ data: invoices, total, page, limit, totalPages });
-  } catch {
+  } catch (error) {
+    console.error("Fetch invoices error:", error);
     return NextResponse.json({ error: "Failed to fetch invoices" }, { status: 500 });
   }
 }
 
 // POST /api/invoices — create invoice with items (auth required)
+// Supports paymentMethod, taxAmount, discountAmount
 export async function POST(req: NextRequest) {
   try {
     const rateLimitErr = checkRateLimit(req);
@@ -101,9 +112,20 @@ export async function POST(req: NextRequest) {
     const { storeId, items, notes, escrowFee } = body;
     const customerPiUid = sanitizeString(body.customerPiUid, 100);
     const customerName = sanitizeString(body.customerName, 100);
+    const paymentMethod = sanitizeString(body.paymentMethod, 20) || "pi";
+    const taxAmount = body.taxAmount !== undefined ? Number(body.taxAmount) : 0;
+    const discountAmount = body.discountAmount !== undefined ? Number(body.discountAmount) : 0;
 
     if (!storeId || !customerPiUid || !items || !Array.isArray(items) || items.length === 0) {
       return NextResponse.json({ error: "storeId, customerPiUid, and items array required" }, { status: 400 });
+    }
+
+    // Validate payment method
+    if (!VALID_PAYMENT_METHODS.includes(paymentMethod)) {
+      return NextResponse.json(
+        { error: `Invalid paymentMethod. Valid: ${VALID_PAYMENT_METHODS.join(", ")}` },
+        { status: 400 }
+      );
     }
 
     // Verify store ownership
@@ -129,7 +151,9 @@ export async function POST(req: NextRequest) {
 
     const subtotal = roundPi(validatedItems.reduce((sum: number, i) => sum + i.totalPrice, 0));
     const fee = roundPi(validateNonNegativeNumber(escrowFee) || 0);
-    const total = roundPi(subtotal + fee);
+    const roundedTaxAmount = roundPi(validateNonNegativeNumber(taxAmount) || 0);
+    const roundedDiscountAmount = roundPi(validateNonNegativeNumber(discountAmount) || 0);
+    const total = roundPi(subtotal + fee + roundedTaxAmount - roundedDiscountAmount);
 
     const invoice = await db.invoice.create({
       data: {
@@ -138,8 +162,11 @@ export async function POST(req: NextRequest) {
         customerPiUid,
         customerName: customerName || "",
         subtotal,
+        taxAmount: roundedTaxAmount,
+        discountAmount: roundedDiscountAmount,
         escrowFee: fee,
         total,
+        paymentMethod,
         notes: sanitizeString(notes, 500) || "",
         items: { create: validatedItems },
       },
@@ -155,6 +182,7 @@ export async function POST(req: NextRequest) {
 }
 
 // PATCH /api/invoices — update invoice status (auth + ownership required)
+// Supports paymentMethod, taxAmount, discountAmount
 export async function PATCH(req: NextRequest) {
   try {
     const rateLimitErr = checkRateLimit(req);
@@ -199,6 +227,24 @@ export async function PATCH(req: NextRequest) {
     if (paymentTxId) data.paymentTxId = sanitizeString(paymentTxId, 200);
     if (releaseTxId) data.releaseTxId = sanitizeString(releaseTxId, 200);
     if (notes !== undefined) data.notes = sanitizeString(notes, 500);
+    if (body.paymentMethod !== undefined) {
+      const pm = sanitizeString(body.paymentMethod, 20);
+      if (!VALID_PAYMENT_METHODS.includes(pm)) {
+        return NextResponse.json(
+          { error: `Invalid paymentMethod. Valid: ${VALID_PAYMENT_METHODS.join(", ")}` },
+          { status: 400 }
+        );
+      }
+      data.paymentMethod = pm;
+    }
+    if (body.taxAmount !== undefined) {
+      const ta = Number(body.taxAmount);
+      data.taxAmount = roundPi(validateNonNegativeNumber(ta) || 0);
+    }
+    if (body.discountAmount !== undefined) {
+      const da = Number(body.discountAmount);
+      data.discountAmount = roundPi(validateNonNegativeNumber(da) || 0);
+    }
 
     // Auto-set timestamps based on status
     if (status === "paid_escrow") data.paidAt = new Date();
@@ -206,6 +252,19 @@ export async function PATCH(req: NextRequest) {
     if (status === "delivered") data.deliveredAt = new Date();
     if (status === "completed") data.completedAt = new Date();
     if (status === "cancelled") data.cancelledAt = new Date();
+
+    // If taxAmount or discountAmount changed, recalculate total
+    if (body.taxAmount !== undefined || body.discountAmount !== undefined) {
+      const currentInvoice = await db.invoice.findUnique({
+        where: { id },
+        select: { subtotal: true, escrowFee: true, taxAmount: true, discountAmount: true },
+      });
+      if (currentInvoice) {
+        const newTax = data.taxAmount !== undefined ? data.taxAmount : currentInvoice.taxAmount;
+        const newDiscount = data.discountAmount !== undefined ? data.discountAmount : currentInvoice.discountAmount;
+        data.total = roundPi(currentInvoice.subtotal + currentInvoice.escrowFee + Number(newTax) - Number(newDiscount));
+      }
+    }
 
     const updated = await db.invoice.update({
       where: { id },
@@ -249,7 +308,8 @@ export async function DELETE(req: NextRequest) {
     await db.invoiceItem.deleteMany({ where: { invoiceId: id } });
     await db.invoice.delete({ where: { id } });
     return NextResponse.json({ success: true });
-  } catch {
+  } catch (error) {
+    console.error("Delete invoice error:", error);
     return NextResponse.json({ error: "Failed to delete invoice" }, { status: 500 });
   }
 }

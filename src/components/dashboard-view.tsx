@@ -4,18 +4,23 @@ import React, { useCallback } from "react";
 import {
   FileText, Package, Shield, CheckCircle2, Store as StoreIcon,
   ArrowRightLeft, CreditCard, Truck, Wallet, Clock, ChevronDown, Receipt,
-  Share2, Link, Copy, Link2, Globe,
+  Share2, Link, Copy, Link2, Globe, Users, AlertTriangle,
+  TrendingUp, TrendingDown, CircleDot, Banknote,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { formatPi } from "@/lib/pi-amount";
-import { StatusBadge, copyText } from "@/lib/helpers";
+import { formatPi, roundPi } from "@/lib/pi-amount";
+import { StatusBadge, copyText, fmtDate, fmtTime } from "@/lib/helpers";
 import { useToast } from "@/hooks/use-toast";
-import type { StoreData, InvoiceData } from "@/lib/types";
+import type { StoreData, InvoiceData, TransactionLogData } from "@/lib/types";
 
 /* ═══ Dashboard ═══ */
-export function DashboardView({ stats, store }: { stats: Record<string, unknown>; store: StoreData }) {
+export function DashboardView({ stats, store, transactionLogs }: {
+  stats: Record<string, unknown>;
+  store: StoreData;
+  transactionLogs?: TransactionLogData[];
+}) {
   const toast = useToast().toast;
 
   const storeLink = typeof window !== "undefined" ? window.location.origin + "?store=" + store.id : "";
@@ -30,12 +35,25 @@ export function DashboardView({ stats, store }: { stats: Record<string, unknown>
   }, [storesDirLink, toast]);
 
   const cards = [
-    { label: "إجمالي الفواتير", value: String(stats.totalInvoices), icon: FileText, color: "text-blue-500", bg: "bg-blue-500/10" },
-    { label: "المنتجات", value: String(stats.totalProducts), icon: Package, color: "text-violet-500", bg: "bg-violet-500/10" },
+    { label: "إجمالي الفواتير", value: String(stats.totalInvoices || 0), icon: FileText, color: "text-blue-500", bg: "bg-blue-500/10" },
+    { label: "المنتجات", value: String(stats.totalProducts || 0), icon: Package, color: "text-violet-500", bg: "bg-violet-500/10" },
     { label: "π في الضمان", value: formatPi(Number(stats.escrowedPi || 0)), icon: Shield, color: "text-amber-500", bg: "bg-amber-500/10" },
     { label: "π مكتمل", value: formatPi(Number(stats.completedPi || 0)), icon: CheckCircle2, color: "text-emerald-500", bg: "bg-emerald-500/10" },
+    { label: "الزبائن", value: String(stats.totalCustomers || 0), icon: Users, color: "text-teal-500", bg: "bg-teal-500/10" },
+    { label: "تنبيهات مخزون", value: String(stats.lowStockCount || 0), icon: AlertTriangle, color: "text-red-500", bg: "bg-red-500/10" },
   ];
+
   const recent = (stats.recentOrders || []) as InvoiceData[];
+  const logs = transactionLogs || [];
+
+  // Revenue & Expenses
+  const localSalesRevenue = Number(stats.localSalesRevenue || 0);
+  const piEscrowRevenue = Number(stats.escrowedPi || 0);
+  const piCompletedRevenue = Number(stats.completedPi || 0);
+  const totalRevenue = roundPi(localSalesRevenue + piCompletedRevenue);
+  const totalExpenses = Number(stats.totalExpenses || 0);
+  const profitEstimate = roundPi(totalRevenue - totalExpenses);
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -60,7 +78,7 @@ export function DashboardView({ stats, store }: { stats: Record<string, unknown>
         </div>
       </div>
 
-      {/* Store Link Sharing — CORE: How merchant tells buyers to find them */}
+      {/* Store Link Sharing */}
       <Card className="border-0 shadow-sm border-l-4 border-l-emerald-500/40">
         <CardHeader className="pb-2 pt-3.5 px-4">
           <CardTitle className="text-xs font-bold flex items-center gap-2">
@@ -95,7 +113,8 @@ export function DashboardView({ stats, store }: { stats: Record<string, unknown>
         </CardContent>
       </Card>
 
-      <div className="grid grid-cols-2 gap-3">
+      {/* Stats Grid */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
         {cards.map(function(c) {
           return (
             <Card key={c.label} className="border-0 shadow-sm">
@@ -107,6 +126,34 @@ export function DashboardView({ stats, store }: { stats: Record<string, unknown>
           );
         })}
       </div>
+
+      {/* Revenue & Expenses */}
+      <div className="grid grid-cols-2 gap-3">
+        <Card className="border-0 shadow-sm">
+          <CardContent className="p-3.5 flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-emerald-500/10 flex items-center justify-center shrink-0"><TrendingUp className="h-4 w-4 text-emerald-500" /></div>
+            <div className="min-w-0"><p className="text-[11px] text-muted-foreground truncate">إجمالي الإيرادات</p><p className="font-bold text-base leading-tight text-emerald-600">{formatPi(totalRevenue)} π</p></div>
+          </CardContent>
+        </Card>
+        <Card className="border-0 shadow-sm">
+          <CardContent className="p-3.5 flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-red-500/10 flex items-center justify-center shrink-0"><TrendingDown className="h-4 w-4 text-red-500" /></div>
+            <div className="min-w-0"><p className="text-[11px] text-muted-foreground truncate">إجمالي المصروفات</p><p className="font-bold text-base leading-tight text-red-500">{formatPi(totalExpenses)} π</p></div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Profit Estimate */}
+      <Card className="border-0 shadow-sm border-l-4" style={{ borderLeftColor: profitEstimate >= 0 ? "var(--color-emerald-500, #10b981)" : "var(--color-red-500, #ef4444)" }}>
+        <CardContent className="p-3.5 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className={"w-9 h-9 rounded-xl flex items-center justify-center " + (profitEstimate >= 0 ? "bg-emerald-500/10" : "bg-red-500/10")}>
+              <Wallet className={"h-4 w-4 " + (profitEstimate >= 0 ? "text-emerald-500" : "text-red-500")} />
+            </div>
+            <div><p className="text-[11px] text-muted-foreground">تقدير الربح (إيرادات - مصروفات)</p><p className={"font-bold text-lg " + (profitEstimate >= 0 ? "text-emerald-600" : "text-red-500")}>{formatPi(Math.abs(profitEstimate))} π {profitEstimate >= 0 ? "" : "(خسارة)"}</p></div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Escrow Flow */}
       <Card className="border-0 shadow-sm">
@@ -129,6 +176,7 @@ export function DashboardView({ stats, store }: { stats: Record<string, unknown>
         </CardContent>
       </Card>
 
+      {/* Recent Orders */}
       {recent.length > 0 && (
         <Card className="border-0 shadow-sm">
           <CardHeader className="pb-2 pt-4 px-4"><CardTitle className="text-xs font-bold flex items-center gap-2"><Clock className="h-3.5 w-3.5 text-emerald-500" />آخر الطلبات</CardTitle></CardHeader>
@@ -144,6 +192,32 @@ export function DashboardView({ stats, store }: { stats: Record<string, unknown>
                   <div className="flex items-center gap-2 shrink-0">
                     <StatusBadge status={inv.status} />
                     <span className="text-[11px] font-semibold text-emerald-600">{formatPi(inv.total)}π</span>
+                  </div>
+                </div>
+              );
+            })}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Recent Activity (Transaction Logs) */}
+      {logs.length > 0 && (
+        <Card className="border-0 shadow-sm">
+          <CardHeader className="pb-2 pt-4 px-4"><CardTitle className="text-xs font-bold flex items-center gap-2"><CircleDot className="h-3.5 w-3.5 text-emerald-500" />النشاط الأخير</CardTitle></CardHeader>
+          <CardContent className="pb-3 px-4 space-y-2">
+            {logs.slice(0, 5).map(function(log) {
+              const typeMap: Record<string, string> = { cash: "💵 نقدي", pi: "π Pi", ousd: "💲 OUSD", expense: "📉 مصروف", refund: "↩️ إرجاع" };
+              return (
+                <div key={log.id} className="flex items-center justify-between py-1.5">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="text-xs shrink-0">{typeMap[log.type] || log.type}</span>
+                    <span className="text-[11px] text-muted-foreground truncate">{log.description}</span>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className={"text-[11px] font-semibold " + (log.type === "expense" || log.type === "refund" ? "text-red-500" : "text-emerald-600")}>
+                      {log.type === "expense" || log.type === "refund" ? "-" : "+"}{formatPi(log.amount)} π
+                    </span>
+                    <span className="text-[10px] text-muted-foreground">{fmtTime(log.createdAt)}</span>
                   </div>
                 </div>
               );

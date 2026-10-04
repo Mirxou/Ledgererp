@@ -9,7 +9,7 @@ import { api, setAccessToken } from "@/lib/api-client";
 import {
   Shield, BarChart3, Package, FileText, ShoppingCart,
   Settings, Zap, CircleDot, Sun, Moon, Copy, Bell,
-  ShoppingBag, LogOut,
+  ShoppingBag, LogOut, Warehouse, Users, Wallet, TrendingDown,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -19,15 +19,18 @@ import { useTheme } from "next-themes";
 import { copyText } from "@/lib/helpers";
 import { roundPi } from "@/lib/pi-amount";
 import { DEMO_MODE, DEMO_USER } from "@/lib/constants";
-import type { StoreData, ProductData, InvoiceData } from "@/lib/types";
+import type { StoreData, ProductData, InvoiceData, CategoryData, InventoryData, CustomerData, LocalSaleData, ExpenseData, TransactionLogData } from "@/lib/types";
 
 /* ═══ Extracted Components ═══ */
 import { FullPageLoader, PiBrowserRequired, LoginScreen } from "@/components/auth-screens";
 import { StoreSetup, type ConnectStoreData } from "@/components/store-setup";
 import { DashboardView } from "@/components/dashboard-view";
 import { ProductsView } from "@/components/products-view";
-import { InvoicesView } from "@/components/invoices-view";
+import { SalesView } from "@/components/sales-view";
 import { OrdersView } from "@/components/orders-view";
+import { InventoryView } from "@/components/inventory-view";
+import { CustomersView } from "@/components/customers-view";
+import { ExpensesView } from "@/components/expenses-view";
 import { SettingsView } from "@/components/settings-view";
 import { PiSetupView } from "@/components/pi-setup-view";
 import { BuyerInvoiceView } from "@/components/buyer-invoice-view";
@@ -147,19 +150,16 @@ function AuthenticatedApp({ piUid, username }: { piUid: string; username: string
     staleTime: 30_000,
   });
 
-  /* Payment status polling — refresh every 15s when there are active invoices, every 60s otherwise */
+  /* Payment status polling */
   useEffect(function() {
     const merchantInvoices = ((merchantInvRes.data as Record<string, unknown>)?.data || []) as InvoiceData[];
     const hasActiveInvoices = merchantInvoices.some(function(inv) {
       return inv.status === "pending" || inv.status === "paid_escrow" || inv.status === "shipped" || inv.status === "delivered";
     });
-
     const intervalMs = hasActiveInvoices ? 15_000 : 60_000;
-
     const interval = setInterval(function() {
       qc.invalidateQueries({ queryKey: ["invoices"] });
     }, intervalMs);
-
     return function() { clearInterval(interval); };
   }, [merchantInvRes.data, qc]);
 
@@ -170,6 +170,68 @@ function AuthenticatedApp({ piUid, username }: { piUid: string; username: string
     enabled: !!myStore && !!myStore.id,
     staleTime: 30_000,
   });
+  const products = ((productsRes.data as Record<string, unknown>)?.data || []) as ProductData[];
+
+  /* Categories */
+  const categoriesRes = useQuery({
+    queryKey: ["categories"],
+    queryFn: function() { return api.get("/api/categories?active=true", piUid).then(function(r) { return r.json(); }); },
+    staleTime: 60_000,
+  });
+  const categories = ((categoriesRes.data as Record<string, unknown>)?.data || []) as CategoryData[];
+
+  /* Inventory */
+  const inventoryRes = useQuery({
+    queryKey: ["inventory", myStore ? myStore.id : ""],
+    queryFn: function() { return api.get("/api/inventory?storeId=" + myStore!.id + "&limit=200", piUid).then(function(r) { return r.json(); }); },
+    enabled: !!myStore && !!myStore.id,
+    staleTime: 30_000,
+  });
+  const inventory = ((inventoryRes.data as Record<string, unknown>)?.data || []) as InventoryData[];
+
+  /* Customers */
+  const customersRes = useQuery({
+    queryKey: ["customers", myStore ? myStore.id : ""],
+    queryFn: function() { return api.get("/api/customers?storeId=" + myStore!.id + "&limit=200", piUid).then(function(r) { return r.json(); }); },
+    enabled: !!myStore && !!myStore.id,
+    staleTime: 30_000,
+  });
+  const customers = ((customersRes.data as Record<string, unknown>)?.data || []) as CustomerData[];
+
+  /* Local Sales */
+  const localSalesRes = useQuery({
+    queryKey: ["localSales", myStore ? myStore.id : ""],
+    queryFn: function() { return api.get("/api/local-sales?storeId=" + myStore!.id + "&limit=200", piUid).then(function(r) { return r.json(); }); },
+    enabled: !!myStore && !!myStore.id,
+    staleTime: 30_000,
+  });
+  const localSales = ((localSalesRes.data as Record<string, unknown>)?.data || []) as LocalSaleData[];
+
+  /* Expenses */
+  const expensesRes = useQuery({
+    queryKey: ["expenses", myStore ? myStore.id : ""],
+    queryFn: function() { return api.get("/api/expenses?storeId=" + myStore!.id + "&limit=200", piUid).then(function(r) { return r.json(); }); },
+    enabled: !!myStore && !!myStore.id,
+    staleTime: 30_000,
+  });
+  const expenses = ((expensesRes.data as Record<string, unknown>)?.data || []) as ExpenseData[];
+
+  /* Expenses Stats */
+  const expensesStatsRes = useQuery({
+    queryKey: ["expenses-stats", myStore ? myStore.id : ""],
+    queryFn: function() { return api.get("/api/expenses?storeId=" + myStore!.id + "&stats=true", piUid).then(function(r) { return r.json(); }); },
+    enabled: !!myStore && !!myStore.id,
+    staleTime: 30_000,
+  });
+
+  /* Transaction Logs */
+  const txLogsRes = useQuery({
+    queryKey: ["transaction-logs", myStore ? myStore.id : ""],
+    queryFn: function() { return api.get("/api/transaction-logs?storeId=" + myStore!.id + "&limit=20", piUid).then(function(r) { return r.json(); }); },
+    enabled: !!myStore && !!myStore.id,
+    staleTime: 30_000,
+  });
+  const transactionLogs = ((txLogsRes.data as Record<string, unknown>)?.data || []) as TransactionLogData[];
 
   /* Mutations */
   const createStoreMut = useMutation({
@@ -216,24 +278,31 @@ function AuthenticatedApp({ piUid, username }: { piUid: string; username: string
     onSuccess: function() { qc.invalidateQueries({ queryKey: ["invoices"] }); },
   });
 
-  /* Stats */
+  /* Stats — Enhanced with all new data */
   const stats = useMemo(function() {
     const mi = ((merchantInvRes.data as Record<string, unknown>)?.data || []) as InvoiceData[];
     const ci = ((customerInvRes.data as Record<string, unknown>)?.data || []) as InvoiceData[];
     const escrowed = mi.filter(function(inv) { return ["paid_escrow", "shipped", "delivered"].indexOf(inv.status) !== -1; });
-    const disputed = mi.filter(function(inv) { return inv.status === "disputed"; });
-    const cancelled = mi.filter(function(inv) { return inv.status === "cancelled"; });
+    const completedPi = roundPi(mi.filter(function(inv) { return inv.status === "completed"; }).reduce(function(s, inv) { return s + inv.subtotal; }, 0));
+    const localSalesRevenue = roundPi(localSales.reduce(function(s, sale) { return s + sale.total; }, 0));
+    const totalExpenses = roundPi(expenses.reduce(function(s, exp) { return s + exp.amount; }, 0));
+    const lowStockCount = inventory.filter(function(inv) { return inv.isLowStock; }).length;
+
     return {
       totalInvoices: mi.length,
-      totalProducts: ((productsRes.data as Record<string, unknown>)?.data || [] as unknown[]).length,
+      totalProducts: products.length,
       escrowedPi: roundPi(escrowed.reduce(function(s, inv) { return s + inv.total; }, 0)),
-      completedPi: roundPi(mi.filter(function(inv) { return inv.status === "completed"; }).reduce(function(s, inv) { return s + inv.subtotal; }, 0)),
+      completedPi: completedPi,
+      localSalesRevenue: localSalesRevenue,
+      totalExpenses: totalExpenses,
+      totalCustomers: customers.length,
+      lowStockCount: lowStockCount,
       myOrders: ci.length,
-      disputedCount: disputed.length,
-      cancelledCount: cancelled.length,
+      disputedCount: mi.filter(function(inv) { return inv.status === "disputed"; }).length,
+      cancelledCount: mi.filter(function(inv) { return inv.status === "cancelled"; }).length,
       recentOrders: mi.slice(0, 5),
     };
-  }, [merchantInvRes.data, customerInvRes.data, productsRes.data]);
+  }, [merchantInvRes.data, customerInvRes.data, products, localSales, expenses, customers, inventory]);
 
   /* Pay with Pi (U2A) */
   const payWithPi = useCallback(function(invoice: InvoiceData) {
@@ -281,7 +350,6 @@ function AuthenticatedApp({ piUid, username }: { piUid: string; username: string
   }, [myStore, qc, toast, piUid]);
 
   const handleShip = useCallback(function(inv: InvoiceData) { updateInvoiceMut.mutate({ id: inv.id, status: "shipped" }); toast({ title: "تم تحديث الحالة: تم الشحن" }); }, [updateInvoiceMut, toast]);
-  // Buyer confirms delivery — uses public buyer-action endpoint (no store ownership required)
   const handleConfirm = useCallback(function(inv: InvoiceData) {
     api.post("/api/invoices/buyer-action", { invoiceId: inv.id, action: "confirmDelivery" }, piUid).then(function(res) {
       if (res.ok) { qc.invalidateQueries({ queryKey: ["invoices"] }); toast({ title: "تم تأكيد التسليم ✅" }); }
@@ -295,6 +363,20 @@ function AuthenticatedApp({ piUid, username }: { piUid: string; username: string
     }).catch(function() { toast({ title: "خطأ في الاتصال", variant: "destructive" }); });
   }, [qc, toast, piUid]);
   const handleCancel = useCallback(function(inv: InvoiceData) { updateInvoiceMut.mutate({ id: inv.id, status: "cancelled" }); toast({ title: "تم إلغاء الطلب" }); }, [updateInvoiceMut, toast]);
+
+  /* ── 10 Tabs ── */
+  const tabList = [
+    ["dashboard", BarChart3, "الرئيسية"],
+    ["products", Package, "المنتجات"],
+    ["inventory", Warehouse, "المخزون"],
+    ["sales", FileText, "المبيعات"],
+    ["orders", ShoppingCart, "الطلبات"],
+    ["customers", Users, "الزبائن"],
+    ["expenses", TrendingDown, "المصروفات"],
+    ["shop", ShoppingBag, "تسوق"],
+    ["settings", Settings, "الإعدادات"],
+    ["pisetup", Zap, "إعداد Pi"],
+  ] as const;
 
   /* ── Render ────────────────────────────────────────── */
   return (
@@ -352,9 +434,9 @@ function AuthenticatedApp({ piUid, username }: { piUid: string; username: string
           />
         ) : (
           <Tabs value={tab} onValueChange={setTab} className="space-y-5">
-            <TabsList className="grid grid-cols-7 w-full h-auto p-1 bg-muted/50">
-              {[["dashboard", BarChart3, "الرئيسية"], ["products", Package, "المنتجات"], ["invoices", FileText, "الفواتير"], ["orders", ShoppingCart, "الطلبات"], ["shop", ShoppingBag, "تسوق"], ["settings", Settings, "الإعدادات"], ["pisetup", Zap, "إعداد Pi"]].map(function(t) {
-              const Ic = t[1] as React.ElementType;
+            <TabsList className="grid grid-cols-5 sm:grid-cols-10 w-full h-auto p-1 bg-muted/50">
+              {tabList.map(function(t) {
+                const Ic = t[1] as React.ElementType;
                 return (
                   <TabsTrigger key={t[0] as string} value={t[0] as string} className="text-[11px] py-2 data-[state=active]:bg-emerald-600 data-[state=active]:text-white gap-1">
                     <Ic className="h-3.5 w-3.5" /><span className="hidden sm:inline">{t[2] as string}</span>
@@ -362,9 +444,28 @@ function AuthenticatedApp({ piUid, username }: { piUid: string; username: string
                 );
               })}
             </TabsList>
-            <TabsContent value="dashboard"><DashboardView stats={stats} store={myStore} /></TabsContent>
-            <TabsContent value="products"><ProductsView products={((productsRes.data as Record<string, unknown>)?.data || []) as ProductData[]} storeId={myStore.id} piUid={piUid} /></TabsContent>
-            <TabsContent value="invoices"><InvoicesView store={myStore} products={((productsRes.data as Record<string, unknown>)?.data || []) as ProductData[]} piUid={piUid} /></TabsContent>
+
+            {/* 1. Dashboard */}
+            <TabsContent value="dashboard">
+              <DashboardView stats={stats} store={myStore} transactionLogs={transactionLogs} />
+            </TabsContent>
+
+            {/* 2. Products */}
+            <TabsContent value="products">
+              <ProductsView products={products} storeId={myStore.id} piUid={piUid} categories={categories} />
+            </TabsContent>
+
+            {/* 3. Inventory */}
+            <TabsContent value="inventory">
+              <InventoryView storeId={myStore.id} piUid={piUid} />
+            </TabsContent>
+
+            {/* 4. Sales (merged Pi invoices + local sales) */}
+            <TabsContent value="sales">
+              <SalesView store={myStore} products={products} piUid={piUid} customers={customers} localSales={localSales} />
+            </TabsContent>
+
+            {/* 5. Orders */}
             <TabsContent value="orders">
               <OrdersView
                 merchantInvoices={((merchantInvRes.data as Record<string, unknown>)?.data || []) as InvoiceData[]}
@@ -376,6 +477,18 @@ function AuthenticatedApp({ piUid, username }: { piUid: string; username: string
                 onRefresh={function() { qc.invalidateQueries({ queryKey: ["invoices"] }); }}
               />
             </TabsContent>
+
+            {/* 6. Customers */}
+            <TabsContent value="customers">
+              <CustomersView storeId={myStore.id} piUid={piUid} />
+            </TabsContent>
+
+            {/* 7. Expenses */}
+            <TabsContent value="expenses">
+              <ExpensesView storeId={myStore.id} piUid={piUid} />
+            </TabsContent>
+
+            {/* 8. Shop */}
             <TabsContent value="shop">
               <MerchantBuyerView
                 buyerPiUid={piUid}
@@ -385,9 +498,13 @@ function AuthenticatedApp({ piUid, username }: { piUid: string; username: string
                 onViewOrders={function() { setTab("orders"); }}
               />
             </TabsContent>
+
+            {/* 9. Settings */}
             <TabsContent value="settings">
               <SettingsView store={myStore} onUpdate={function(d) { updateStoreMut.mutate(d); }} onDelete={function() { deleteStoreMut.mutate(myStore.id); }} updating={updateStoreMut.isPending} deleting={deleteStoreMut.isPending} piUid={piUid} />
             </TabsContent>
+
+            {/* 10. Pi Setup */}
             <TabsContent value="pisetup">
               <PiSetupView piUid={piUid} />
             </TabsContent>
@@ -399,7 +516,7 @@ function AuthenticatedApp({ piUid, username }: { piUid: string; username: string
       <footer className="border-t mt-auto py-3 bg-muted/30">
         <div className="max-w-5xl mx-auto px-4 flex items-center justify-between text-[11px] text-muted-foreground">
           <span>Ledgererp — منصة الفواتير والضمان الآمن</span>
-          <span>v2.0</span>
+          <span>v3.0</span>
         </div>
       </footer>
     </div>

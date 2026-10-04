@@ -2,183 +2,652 @@ import { PrismaClient } from '@prisma/client';
 
 const db = new PrismaClient();
 
-const criticalFindings = [
-  { id: "C-001", source: "Backend", file: "app/main.py", line: 548, category: "Hardcoded Secret", title: "Hardcoded default license signing secret", description: 'LICENSE_SIGNING_SECRET defaults to "super_secret_signing_key_change_me" via os.getenv fallback. An attacker can forge any subscription license.', recommendation: "Remove the default value entirely. Fail hard at startup if not set in production." },
-  { id: "C-002", source: "Backend", file: "app/services/blockchain.py", line: 159, category: "Hardcoded Secret", title: "Duplicate hardcoded signing secret in blockchain service", description: "Same default signing key duplicated in the blockchain service.", recommendation: "Use a single centralized secret management. Import from config module only." },
-  { id: "C-003", source: "Backend", file: "app/middleware/kyb.py", line: 59, category: "Authentication Bypass", title: "Unauthenticated requests silently pass through KYB middleware", description: "When the token isn't cached, unauthenticated requests silently pass through without verification.", recommendation: "Always validate tokens. Return 401 for requests without valid authentication." },
-  { id: "C-004", source: "Backend", file: "app/routers/notifications.py", line: 89, category: "Authorization Bypass", title: "Unauthenticated SSE stream exposes merchant payment data", description: "Anyone can subscribe to any merchant's real-time payment data with zero authentication.", recommendation: "Require authentication for SSE endpoints. Validate subscriber access." },
-  { id: "C-005", source: "Backend", file: "app/routers/blockchain.py", line: 110, category: "Authorization Bypass", title: "Any authenticated user can read any merchant's on-chain data", description: "The blockchain data endpoint takes merchant_id but never validates ownership.", recommendation: "Verify authenticated user owns the requested merchant_id." },
-  { id: "C-006", source: "Backend", file: "app/main.py", line: 585, category: "Runtime Crash", title: "Undefined variable 'stellar_account_data' crashes the app", description: "Reference to undefined variable causes runtime error. public_api.py imports from non-existent module.", recommendation: "Define the variable or remove the reference. Fix the broken import." },
-  { id: "C-007", source: "Backend", file: "app/main.py", line: 326, category: "Rate Limiting Bypass", title: "Rate limiting bypassed by setting User-Agent header", description: "Rate limiter exempts 'testclient' user agent. Any attacker can bypass all rate limiting.", recommendation: "Remove the test client exemption in production." },
-  { id: "C-008", source: "Backend", file: "app/middleware/kyb.py", line: 95, category: "Fake KYC", title: "KYC check always returns completed: True", description: "KYC endpoint always returns completed without verifying actual Pi Network KYC status.", recommendation: "Integrate with Pi Network's actual KYC verification API." },
-  { id: "C-009", source: "Backend", file: "app/main.py", line: 430, category: "Custodial Architecture", title: "System is fundamentally custodial despite claiming non-custodial", description: "Backend derives ALL user Stellar secret keys from SHA256(SECRET_KEY:UID). If that key leaks, every wallet is compromised.", recommendation: "Implement true non-custodial architecture where private keys never leave the client." },
-  { id: "C-010", source: "Frontend", file: "static/js/pi-adapter.js", line: 37, category: "postMessage Vulnerability", title: "postMessage to parent with wildcard origin '*'", description: "window.parent.postMessage sends SDK communication to ANY parent frame.", recommendation: "Use specific Pi Network origin instead of '*'." },
-  { id: "C-011", source: "Frontend", file: "static/js/pi-adapter.js", line: 125, category: "Pi SDK Bug", title: "PiAdapter.currentUser vs .user mismatch breaks all payments", description: "authenticate() stores user as this.currentUser but ALL consumers reference this.user / this.accessToken.", recommendation: "Add this.user and this.accessToken properties in authenticate()." },
-  { id: "C-012", source: "Frontend", file: "static/js/b2b.js", line: 81, category: "XSS - Stored", title: "Unsanitized merchant data injected via innerHTML", description: "merchant.name, merchant.location, merchant.category directly interpolated into innerHTML.", recommendation: "Sanitize all fields using DOMPurify. Use addEventListener instead of inline onclick." },
-  { id: "C-013", source: "Frontend", file: "static/js/hardware.js", line: 161, category: "XSS - DOM", title: "Receipt HTML injection via unsanitized fields", description: "formatReceiptHTML() builds HTML via template literals with unsanitized shopName, customerName, invoiceId.", recommendation: "Use DOM API or sanitize all fields with DOMPurify." },
-  { id: "C-014", source: "Frontend", file: "static/js/invoice.js", line: 465, category: "XSS - DOM", title: "XSS in addItem() via DOMPurify fallback bypass", description: "If DOMPurify is unavailable, raw name is placed in an HTML attribute enabling injection.", recommendation: "Never use innerHTML for user input. Throw if DOMPurify unavailable." },
-  { id: "C-015", source: "Frontend", file: "static/js/auto-lock.js", line: 181, category: "Insecure Storage", title: "PIN stored and compared in plaintext in IndexedDB", description: "verifyPIN() compares user-entered PIN directly against stored plaintext PIN.", recommendation: "Hash PIN with PBKDF2/Argon2 before storing. Compare hashes." },
-  { id: "C-016", source: "Frontend", file: "static/js/pi-storage.js", line: 203, category: "Runtime Crash", title: "btoa(String.fromCharCode(...)) crashes on data >100KB", description: "Spread operator on large Uint8Array causes stack overflow.", recommendation: "Use TextDecoder or chunked approach instead of spread operator." },
-  { id: "C-017", source: "Frontend", file: "static/js/security.js", line: 16, category: "Weak Cryptography", title: "Fallback mnemonic: 24 words = ~55 bits vs required 128 bits", description: "WORD_LIST has only 24 words with modulo 24. A 12-word mnemonic has ~55 bits vs BIP-39's ~128 bits.", recommendation: "Refuse to generate mnemonics if ethers.js unavailable." },
-  { id: "C-018", source: "Frontend", file: "static/js/security.js", line: 244, category: "Weak Cryptography", title: "Hardcoded static salts for vault and device encryption", description: "PBKDF2 salts are fixed strings. All vaults with same password use same salt.", recommendation: "Generate random 16-byte salt for each encryption operation." },
-  { id: "C-019", source: "Frontend", file: "static/js/sw.js", line: 23, category: "Supply Chain", title: "CDN resources cached without Subresource Integrity (SRI)", description: "Service worker caches external resources without integrity checks. Compromised CDN would be cached indefinitely.", recommendation: "Add SRI checks before caching external resources." },
-  { id: "C-020", source: "Frontend", file: "static/js/invoice.js", line: 1527, category: "Authorization Bypass", title: "Refund authorization uses browser confirm() dialog only", description: "refundInvoice() for closed shifts uses confirm() for 'owner permission'. Any user can click OK.", recommendation: "Verify user role from session/backend before allowing refund." },
-  { id: "C-021", source: "Frontend", file: "static/js/subscription-manager.js", line: 197, category: "Runtime Error", title: "ReferenceError: closeUpgradeModal is not defined", description: "Lines 197-200 reference undefined function causing ReferenceError.", recommendation: "Remove lines 197-200 (function already on window)." },
-  { id: "C-022", source: "Pi Network", file: "static/.well-known/", line: 0, category: "Domain Verification", title: "validation-key.txt missing - domain verification impossible", description: "The validation-key.txt required for Pi Network domain verification does not exist.", recommendation: "Generate and place the validation key at static/.well-known/pi-app-verification." },
-  { id: "C-023", source: "Pi Network", file: "wrangler.toml", line: 0, category: "Deployment", title: "No backend deployment - all API endpoints return 404", description: "Cloudflare Pages only serves static files. All /api/* endpoints return 404 in production.", recommendation: "Deploy backend as Cloudflare Workers or separate hosting." },
-];
-
-const highIssues = [
-  { id: "H-001", source: "Frontend", file: "deep-linking.js", line: 141, category: "XSS - Reflected", title: "invoiceId from URL injected into innerHTML" },
-  { id: "H-002", source: "Frontend", file: "offline-sync.js", line: 8, category: "Insecure Storage", title: "Transaction data in localStorage unencrypted" },
-  { id: "H-003", source: "Frontend", file: "pi-storage.js", line: 75, category: "Insecure Storage", title: "Stellar key in localStorage without integrity protection" },
-  { id: "H-004", source: "Frontend", file: "ui-utils.js", line: 140, category: "XSS - Potential", title: "Modal allows iframe with arbitrary src" },
-  { id: "H-005", source: "Frontend", file: "ui-utils.js", line: 252, category: "XSS - Potential", title: "Modal.prompt() passes message as HTML" },
-  { id: "H-006", source: "Frontend", file: "invoice.js", line: 578, category: "Runtime Error", title: "Undefined variables in calculateTotals()" },
-  { id: "H-007", source: "Frontend", file: "invoice.js", line: 2031, category: "Runtime Error", title: "Reference to undefined variable 'date'" },
-  { id: "H-008", source: "Frontend", file: "invoice.js", line: 1218, category: "Info Disclosure", title: "Payment URL shown in alert() on error" },
-  { id: "H-009", source: "Frontend", file: "db.js", line: 229, category: "Insecure Fallback", title: "getCurrentMerchantId() falls back to 'anonymous'" },
-  { id: "H-010", source: "Frontend", file: "market-ticker.js", line: 12, category: "Supply Chain", title: "Direct WebSocket to Bitget without proxy" },
-  { id: "H-011", source: "Frontend", file: "sw.js", line: 72, category: "Data Staleness", title: "Financial API responses cached and served stale" },
-  { id: "H-012", source: "Frontend", file: "pi-storage.js", line: 206, category: "Deprecated API", title: "Use of deprecated escape()/unescape()" },
-  { id: "H-013", source: "Frontend", file: "hardware.js", line: 500, category: "Supply Chain", title: "Script from unpkg.com loaded without SRI" },
-  { id: "H-014", source: "Frontend", file: "security.js", line: 308, category: "XSS - Incomplete", title: "DOMPurify fallback regex insufficient" },
-  { id: "H-015", source: "Backend", file: "app/core/security.py", line: 120, category: "Insecure Crypto", title: "SHA256 instead of HMAC for signatures" },
-  { id: "H-016", source: "Backend", file: "app/main.py", line: 200, category: "CSP Misconfig", title: "CSP allows unsafe-inline and unsafe-eval" },
-  { id: "H-017", source: "Backend", file: "app/services/blockchain.py", line: 300, category: "Event Loop Block", title: "Blocking Stellar SDK calls in async functions" },
-  { id: "H-018", source: "Backend", file: "app/routers/blockchain.py", line: 45, category: "Auth Bypass", title: "No authorization on merchant data endpoints" },
-  { id: "H-019", source: "Backend", file: "app/core/cache.py", line: 80, category: "Cache Bug", title: "hash() for Redis keys defeats distributed caching" },
-  { id: "H-020", source: "Backend", file: "app/main.py", line: 150, category: "Circular Import", title: "Circular import between security.py and main.py" },
-  { id: "H-021", source: "Backend", file: "app/core/cache.py", line: 45, category: "Memory Leak", title: "Unbounded in-memory cache collections" },
-  { id: "H-022", source: "Backend", file: "app/routers/auth.py", line: 25, category: "Token Exposure", title: "Pi tokens stored raw in memory/Redis" },
-  { id: "H-023", source: "Backend", file: "app/services/blockchain.py", line: 430, category: "No Pooling", title: "New HTTP client created per request" },
-  { id: "H-024", source: "Backend", file: "app/main.py", line: 500, category: "Token Exposure", title: "Pi tokens embedded inside JWT payloads" },
-  { id: "H-025", source: "Pi Network", file: "manifest.json", line: 0, category: "Manifest", title: "Missing pi_sdk_version field" },
-  { id: "H-026", source: "Pi Network", file: "package.json", line: 0, category: "Deployment", title: "No start script or backend deployment config" },
-  { id: "H-027", source: "Frontend", file: "invoice.js", line: 887, category: "Code Dup", title: "generateInvoice() is near-copy of saveDraft()" },
-  { id: "H-028", source: "Frontend", file: "invoice.js", line: 0, category: "God Class", title: "invoice.js is 86KB/2054 lines monolith" },
-];
-
-const mediumIssues = [
-  { id: "M-001", source: "Frontend", file: "invoice.js", line: 0, category: "Weak Randomness", title: "Invoice ID uses Math.random() not crypto API" },
-  { id: "M-002", source: "Frontend", file: "security.js", line: 0, category: "Privacy", title: "Canvas fingerprinting for device identification" },
-  { id: "M-003", source: "Frontend", file: "db.js", line: 0, category: "Arch Bug", title: "String concatenation for table pluralization" },
-  { id: "M-004", source: "Frontend", file: "db.js", line: 0, category: "Performance", title: "Sync interval runs every 30s unconditionally" },
-  { id: "M-005", source: "Frontend", file: "lifecycle.js", line: 0, category: "Memory Leak", title: "setInterval never cleared" },
-  { id: "M-006", source: "Frontend", file: "market-ticker.js", line: 0, category: "Resource Leak", title: "WebSocket reconnection has no backoff" },
-  { id: "M-007", source: "Frontend", file: "offline-sync.js", line: 0, category: "Error Handling", title: "processQueue silently swallows errors" },
-  { id: "M-008", source: "Frontend", file: "audit-logs.js", line: 0, category: "XSS", title: "HTML entity encoding applied twice wrong" },
-  { id: "M-009", source: "Frontend", file: "account-settings.js", line: 0, category: "Race Condition", title: "deleteAccount sets href then reload()" },
-  { id: "M-010", source: "Frontend", file: "bug-reporting.js", line: 0, category: "Over-Sanitization", title: "Error regexes too broad, redacting legit data" },
-  { id: "M-011", source: "Frontend", file: "data-export.js", line: 0, category: "XSS Potential", title: "Shop name used in export unsanitized" },
-  { id: "M-012", source: "Frontend", file: "reports.js", line: 0, category: "Hardcoded Data", title: "Growth rate hardcoded to 15.4%" },
-  { id: "M-013", source: "Frontend", file: "shift-management.js", line: 0, category: "XSS Template", title: "Report text injected via innerHTML" },
-  { id: "M-014", source: "Frontend", file: "subscription-manager.js", line: 0, category: "Performance", title: "Quote polling every 15s while modal open" },
-  { id: "M-015", source: "Frontend", file: "csv-import.js", line: 0, category: "Incomplete", title: "File truncated at line 52" },
-  { id: "M-016", source: "Backend", file: "app/core/audit.py", line: 0, category: "Log Injection", title: "Audit log messages not sanitized" },
-  { id: "M-017", source: "Backend", file: "app/routers/telemetry.py", line: 0, category: "Privacy", title: "Telemetry sent without user consent" },
-  { id: "M-018", source: "Backend", file: "app/services/market.py", line: 0, category: "Error Handling", title: "Market price fetch has no timeout" },
-  { id: "M-019", source: "Backend", file: "app/main.py", line: 0, category: "Validation", title: "No input validation on several endpoints" },
-  { id: "M-020", source: "Backend", file: "app/routers/payments.py", line: 0, category: "Validation", title: "Payment amount not validated server-side" },
-];
-
-const lowIssues = [
-  { id: "L-001", source: "Frontend", file: "style.css", line: 0, category: "Code Style", title: "CSS file too large (980 lines) - needs modularization" },
-  { id: "L-002", source: "Frontend", file: "index.html", line: 0, category: "Bundle Size", title: "index.html is 134KB - scripts not bundled" },
-  { id: "L-003", source: "Frontend", file: "pi-storage.js", line: 0, category: "Error Handling", title: "Generic try-catch loses error context" },
-  { id: "L-004", source: "Frontend", file: "hardware.js", line: 0, category: "Compatibility", title: "Printer API not feature-detected before use" },
-  { id: "L-005", source: "Backend", file: "app/models/__init__.py", line: 0, category: "Empty File", title: "Empty __init__.py (0 bytes)" },
-  { id: "L-006", source: "Frontend", file: "invoice.js", line: 0, category: "Magic Numbers", title: "Hardcoded tax rate 0.19 throughout" },
-  { id: "L-007", source: "Frontend", file: "db.js", line: 0, category: "Naming", title: "Inconsistent function naming (camelCase vs snake_case)" },
-  { id: "L-008", source: "Backend", file: "app/routers/", line: 0, category: "Documentation", title: "Missing docstrings on router endpoints" },
-  { id: "L-009", source: "Frontend", file: "market-ticker.js", line: 0, category: "UX", title: "No loading state for price ticker" },
-  { id: "L-010", source: "Backend", file: "app/main.py", line: 0, category: "Config", title: "Environment variables not validated at startup" },
-  { id: "L-011", source: "Frontend", file: "sw.js", line: 0, category: "Service Worker", title: "No offline fallback page configured" },
-  { id: "L-012", source: "Frontend", file: "b2b.js", line: 0, category: "UI", title: "No empty state for B2B merchant list" },
-  { id: "L-013", source: "Backend", file: "app/services/", line: 0, category: "Structure", title: "Services not following single responsibility" },
-  { id: "L-014", source: "Frontend", file: "auto-lock.js", line: 0, category: "Accessibility", title: "No screen reader announcements for lock state" },
-  { id: "L-015", source: "Frontend", file: "account-settings.js", line: 0, category: "Validation", title: "Client-side form validation incomplete" },
-  { id: "L-016", source: "Backend", file: "app/routers/payments.py", line: 0, category: "Logging", title: "Payment processing lacks audit trail" },
-  { id: "L-017", source: "Frontend", file: "reports.js", line: 0, category: "Hardcoded Data", title: "Report date ranges not configurable" },
-  { id: "L-018", source: "Frontend", file: "ui-utils.js", line: 0, category: "i18n", title: "Currency formatting not locale-aware" },
-  { id: "L-019", source: "Backend", file: "app/core/security.py", line: 0, category: "Cryptography", title: "Key derivation iterations below recommended minimum" },
-  { id: "L-020", source: "Frontend", file: "subscription-manager.js", line: 0, category: "UX", title: "No retry mechanism for failed payments" },
-  { id: "L-021", source: "Frontend", file: "data-export.js", line: 0, category: "UX", title: "No progress indicator during CSV export" },
-  { id: "L-022", source: "Backend", file: "app/routers/auth.py", line: 0, category: "Security", title: "No rate limiting on auth endpoints" },
-  { id: "L-023", source: "Frontend", file: "offline-sync.js", line: 0, category: "Data Integrity", title: "Conflict resolution not implemented for sync" },
-  { id: "L-024", source: "Pi Network", file: "manifest.json", line: 0, category: "Compliance", title: "App category not specified in manifest" },
-];
-
-const recommendations = [
-  { priority: 1, title: "Fix authentication bypass in KYB middleware", effort: "Small", impact: "Critical" },
-  { priority: 2, title: "Remove all hardcoded secrets", effort: "Small", impact: "Critical" },
-  { priority: 3, title: "Fix PiAdapter property naming (currentUser vs user)", effort: "Small", impact: "Critical" },
-  { priority: 4, title: "Add authentication to SSE notification endpoint", effort: "Small", impact: "Critical" },
-  { priority: 5, title: "Hash PINs before storing in IndexedDB", effort: "Small", impact: "Critical" },
-  { priority: 6, title: "Fix postMessage origin from '*' to Pi Network domain", effort: "Small", impact: "High" },
-  { priority: 7, title: "Sanitize all innerHTML usage with DOMPurify", effort: "Medium", impact: "Critical" },
-  { priority: 8, title: "Add Subresource Integrity to all CDN resources", effort: "Small", impact: "High" },
-  { priority: 9, title: "Fix btoa stack overflow on large data", effort: "Small", impact: "High" },
-  { priority: 10, title: "Replace static PBKDF2 salts with random salts", effort: "Small", impact: "Critical" },
-  { priority: 11, title: "Implement real KYC verification via Pi Network API", effort: "Medium", impact: "Critical" },
-  { priority: 12, title: "Deploy backend API (Workers or separate host)", effort: "Large", impact: "Critical" },
-  { priority: 13, title: "Add domain verification key file", effort: "Small", impact: "Critical" },
-  { priority: 14, title: "Split invoice.js into separate modules", effort: "Large", impact: "Medium" },
-  { priority: 15, title: "Implement proper build system (Vite/webpack)", effort: "Large", impact: "Medium" },
-  { priority: 16, title: "Fix CSP to remove unsafe-inline and unsafe-eval", effort: "Medium", impact: "High" },
-  { priority: 17, title: "Add merchant authorization checks on all endpoints", effort: "Medium", impact: "Critical" },
-  { priority: 18, title: "Replace canvas fingerprinting with UUID", effort: "Small", impact: "Medium" },
-  { priority: 19, title: "Complete CSV import functionality", effort: "Medium", impact: "Medium" },
-  { priority: 20, title: "Implement proper offline sync with retry limits", effort: "Medium", impact: "Medium" },
-];
-
-function getRecommendation(issueId: string): { effort: string; impact: string } {
-  const rec = recommendations.find(r => r.title.toLowerCase().includes(issueId.split('-')[0].toLowerCase()));
-  return rec ? { effort: rec.effort, impact: rec.impact } : { effort: "Medium", impact: "Medium" };
-}
-
 async function seed() {
-  console.log("🌱 Seeding database with 114 audit issues...");
+  console.log('🌱 Seeding LedgerERP database...\n');
 
-  const allIssues = [
-    ...criticalFindings.map(i => ({ ...i, severity: "CRITICAL" as const, description: i.description || "", recommendation: i.recommendation || "", line: i.line || 0 })),
-    ...highIssues.map(i => ({ ...i, severity: "HIGH" as const, description: "", recommendation: "", line: i.line || 0 })),
-    ...mediumIssues.map(i => ({ ...i, severity: "MEDIUM" as const, description: "", recommendation: "", line: i.line || 0 })),
-    ...lowIssues.map(i => ({ ...i, severity: "LOW" as const, description: "", recommendation: "", line: i.line || 0 })),
-  ];
+  // ── 1. Create Demo User ──────────────────────────────────────────────
+  console.log('1️⃣  Creating demo user...');
+  const demoUser = await db.user.upsert({
+    where: { piUid: 'demo_user_pi_uid' },
+    update: {},
+    create: {
+      piUid: 'demo_user_pi_uid',
+      username: 'تاجر_تجريبي',
+      language: 'ar',
+      role: 'merchant',
+      kycVerified: true,
+    },
+  });
+  console.log(`   ✅ User: ${demoUser.username} (${demoUser.piUid})`);
 
-  let count = 0;
-  for (const issue of allIssues) {
-    const { effort, impact } = getRecommendation(issue.id);
-    await db.auditIssue.upsert({
-      where: { issueId: issue.id },
+  // ── 2. Create Demo Store ─────────────────────────────────────────────
+  console.log('2️⃣  Creating demo store...');
+  const demoStore = await db.store.upsert({
+    where: { piUid: 'demo_user_pi_uid' },
+    update: {},
+    create: {
+      piUid: 'demo_user_pi_uid',
+      name: 'متجر الأمانة للتجارة',
+      description: 'متجر إلكتروني متعدد المنتجات على شبكة Pi - نقبل الدفع بـ Pi والنقدي',
+      slug: 'amana-store',
+      currency: 'Pi',
+      taxRate: 15,
+      phone: '+966501234567',
+      address: 'الرياض، المملكة العربية السعودية',
+      isVerified: true,
+    },
+  });
+  console.log(`   ✅ Store: ${demoStore.name} (slug: ${demoStore.slug})`);
+
+  // ── 3. Create Categories (Hierarchical) ──────────────────────────────
+  console.log('3️⃣  Creating categories...');
+  const categories = await Promise.all([
+    db.category.upsert({
+      where: { slug: 'electronics' },
       update: {},
       create: {
-        issueId: issue.id,
-        severity: issue.severity,
-        source: issue.source,
-        file: issue.file,
-        line: issue.line,
-        category: issue.category,
-        title: issue.title,
-        description: issue.description,
-        recommendation: issue.recommendation,
-        status: "open",
-        priority: count + 1,
-        effort,
-        impact,
+        nameAr: 'إلكترونيات',
+        nameEn: 'Electronics',
+        slug: 'electronics',
+        icon: '💻',
+        color: 'text-blue-500',
+        sortOrder: 1,
+        isActive: true,
+      },
+    }),
+    db.category.upsert({
+      where: { slug: 'clothing' },
+      update: {},
+      create: {
+        nameAr: 'ملابس',
+        nameEn: 'Clothing',
+        slug: 'clothing',
+        icon: '👕',
+        color: 'text-purple-500',
+        sortOrder: 2,
+        isActive: true,
+      },
+    }),
+    db.category.upsert({
+      where: { slug: 'food' },
+      update: {},
+      create: {
+        nameAr: 'أغذية',
+        nameEn: 'Food',
+        slug: 'food',
+        icon: '🍕',
+        color: 'text-orange-500',
+        sortOrder: 3,
+        isActive: true,
+      },
+    }),
+    db.category.upsert({
+      where: { slug: 'services' },
+      update: {},
+      create: {
+        nameAr: 'خدمات',
+        nameEn: 'Services',
+        slug: 'services',
+        icon: '🛠️',
+        color: 'text-emerald-500',
+        sortOrder: 4,
+        isActive: true,
+      },
+    }),
+  ]);
+  console.log(`   ✅ Categories: ${categories.map(c => c.nameAr).join(', ')}`);
+
+  // ── 4. Create Products ───────────────────────────────────────────────
+  console.log('4️⃣  Creating products...');
+  const products = await Promise.all([
+    db.product.create({
+      data: {
+        storeId: demoStore.id,
+        name: 'هاتف ذكي Pi Phone',
+        description: 'هاتف ذكي متطور يدعم تطبيقات Pi Network',
+        price: 25.0,
+        costPrice: 18.0,
+        sku: 'ELEC-001',
+        stockQuantity: 50,
+        lowStockThreshold: 10,
+        trackInventory: true,
+        categoryId: categories[0].id,
+        unit: 'وحدة',
+        isActive: true,
+      },
+    }),
+    db.product.create({
+      data: {
+        storeId: demoStore.id,
+        name: 'سماعة بلوتوث لاسلكية',
+        description: 'سماعة لاسلكية عالية الجودة مع إلغاء الضوضاء',
+        price: 5.5,
+        costPrice: 3.0,
+        sku: 'ELEC-002',
+        stockQuantity: 120,
+        lowStockThreshold: 20,
+        trackInventory: true,
+        categoryId: categories[0].id,
+        unit: 'وحدة',
+        isActive: true,
+      },
+    }),
+    db.product.create({
+      data: {
+        storeId: demoStore.id,
+        name: 'شاحن سريع 65W',
+        description: 'شاحن سريع متوافق مع جميع الأجهزة',
+        price: 2.0,
+        costPrice: 1.2,
+        sku: 'ELEC-003',
+        stockQuantity: 200,
+        lowStockThreshold: 30,
+        trackInventory: true,
+        categoryId: categories[0].id,
+        unit: 'وحدة',
+        isActive: true,
+      },
+    }),
+    db.product.create({
+      data: {
+        storeId: demoStore.id,
+        name: 'قميص رجالي قطن',
+        description: 'قميص رسمي من القطن المصري الفاخر',
+        price: 3.0,
+        costPrice: 1.5,
+        sku: 'CLTH-001',
+        stockQuantity: 80,
+        lowStockThreshold: 15,
+        trackInventory: true,
+        categoryId: categories[1].id,
+        unit: 'وحدة',
+        isActive: true,
+      },
+    }),
+    db.product.create({
+      data: {
+        storeId: demoStore.id,
+        name: 'عباية نسائية مطرزة',
+        description: 'عباية فاخرة بتطريز يدوي مميز',
+        price: 8.0,
+        costPrice: 4.5,
+        sku: 'CLTH-002',
+        stockQuantity: 30,
+        lowStockThreshold: 5,
+        trackInventory: true,
+        categoryId: categories[1].id,
+        unit: 'وحدة',
+        isActive: true,
+      },
+    }),
+    db.product.create({
+      data: {
+        storeId: demoStore.id,
+        name: 'تمر عجوة المدينة',
+        description: 'تمر عجوة ممتاز من المدينة المنورة - 1 كجم',
+        price: 1.5,
+        costPrice: 0.8,
+        sku: 'FOOD-001',
+        stockQuantity: 300,
+        lowStockThreshold: 50,
+        trackInventory: true,
+        categoryId: categories[2].id,
+        unit: 'كجم',
+        isActive: true,
+      },
+    }),
+    db.product.create({
+      data: {
+        storeId: demoStore.id,
+        name: 'قهوة عربية فاخرة',
+        description: 'قهوة عربية بالهيل والزعفران - 500 جم',
+        price: 2.5,
+        costPrice: 1.0,
+        sku: 'FOOD-002',
+        stockQuantity: 150,
+        lowStockThreshold: 25,
+        trackInventory: true,
+        categoryId: categories[2].id,
+        unit: 'وحدة',
+        isActive: true,
+      },
+    }),
+    db.product.create({
+      data: {
+        storeId: demoStore.id,
+        name: 'خدمة توصيل سريع',
+        description: 'توصيل خلال ساعتين داخل المدينة',
+        price: 0.5,
+        costPrice: 0.2,
+        sku: 'SERV-001',
+        stockQuantity: 0,
+        lowStockThreshold: 0,
+        trackInventory: false,
+        categoryId: categories[3].id,
+        unit: 'خدمة',
+        isActive: true,
+      },
+    }),
+  ]);
+  console.log(`   ✅ Products: ${products.length} created`);
+
+  // ── 5. Create Inventory Records ──────────────────────────────────────
+  console.log('5️⃣  Creating inventory records...');
+  const inventoryRecords = await Promise.all(
+    products
+      .filter(p => p.trackInventory)
+      .map(p =>
+        db.inventory.create({
+          data: {
+            productId: p.id,
+            storeId: demoStore.id,
+            quantity: p.stockQuantity,
+            reservedQuantity: 0,
+            lowStockThreshold: p.lowStockThreshold,
+            trackInventory: true,
+            lastRestockedAt: new Date(),
+          },
+        })
+      )
+  );
+  console.log(`   ✅ Inventory records: ${inventoryRecords.length} created`);
+
+  // ── 6. Create Demo Customer ──────────────────────────────────────────
+  console.log('6️⃣  Creating demo customer...');
+  const demoCustomer = await db.customer.create({
+    data: {
+      storeId: demoStore.id,
+      name: 'أحمد بن محمد',
+      phone: '+966509876543',
+      email: 'ahmed@example.com',
+      address: 'جدة، حي الصفا، شارع الملك فهد',
+      piUid: 'customer_ahmed_pi_uid',
+      notes: 'عميل مميز - يشتري بانتظام',
+      totalSpent: 0,
+      totalOrders: 0,
+      isActive: true,
+    },
+  });
+  console.log(`   ✅ Customer: ${demoCustomer.name}`);
+
+  // ── 7. Create Sample Invoices ────────────────────────────────────────
+  console.log('7️⃣  Creating sample invoices...');
+
+  // Invoice 1: Pending
+  const invoice1 = await db.invoice.create({
+    data: {
+      invoiceNumber: 'INV-2025-001',
+      storeId: demoStore.id,
+      customerPiUid: 'customer_ahmed_pi_uid',
+      customerName: 'أحمد بن محمد',
+      subtotal: 30.5,
+      taxAmount: 4.575,
+      discountAmount: 0,
+      escrowFee: 0.305,
+      total: 35.38,
+      status: 'pending',
+      paymentMethod: 'pi',
+      notes: 'طلب إلكترونيات - هاتف وسماعة',
+      items: {
+        create: [
+          {
+            productId: products[0].id,
+            productName: products[0].name,
+            quantity: 1,
+            unitPrice: 25.0,
+            totalPrice: 25.0,
+          },
+          {
+            productId: products[1].id,
+            productName: products[1].name,
+            quantity: 1,
+            unitPrice: 5.5,
+            totalPrice: 5.5,
+          },
+        ],
+      },
+    },
+  });
+  console.log(`   ✅ Invoice 1: ${invoice1.invoiceNumber} (pending)`);
+
+  // Invoice 2: Paid Escrow
+  const invoice2 = await db.invoice.create({
+    data: {
+      invoiceNumber: 'INV-2025-002',
+      storeId: demoStore.id,
+      customerPiUid: 'customer_ahmed_pi_uid',
+      customerName: 'أحمد بن محمد',
+      subtotal: 8.0,
+      taxAmount: 1.2,
+      discountAmount: 0.5,
+      escrowFee: 0.08,
+      total: 8.78,
+      status: 'paid_escrow',
+      paymentMethod: 'pi',
+      notes: 'عباية مطرزة - خصم 0.5 Pi',
+      paidAt: new Date(),
+      items: {
+        create: [
+          {
+            productId: products[4].id,
+            productName: products[4].name,
+            quantity: 1,
+            unitPrice: 8.0,
+            totalPrice: 8.0,
+          },
+        ],
+      },
+    },
+  });
+  console.log(`   ✅ Invoice 2: ${invoice2.invoiceNumber} (paid_escrow)`);
+
+  // Invoice 3: Completed
+  const invoice3 = await db.invoice.create({
+    data: {
+      invoiceNumber: 'INV-2025-003',
+      storeId: demoStore.id,
+      customerPiUid: 'customer_ahmed_pi_uid',
+      customerName: 'أحمد بن محمد',
+      subtotal: 4.0,
+      taxAmount: 0.6,
+      discountAmount: 0,
+      escrowFee: 0,
+      total: 4.6,
+      status: 'completed',
+      paymentMethod: 'cash',
+      notes: 'شراء نقدي - تمر وقهوة',
+      paidAt: new Date(Date.now() - 86400000),
+      completedAt: new Date(),
+      items: {
+        create: [
+          {
+            productId: products[5].id,
+            productName: products[5].name,
+            quantity: 1,
+            unitPrice: 1.5,
+            totalPrice: 1.5,
+          },
+          {
+            productId: products[6].id,
+            productName: products[6].name,
+            quantity: 1,
+            unitPrice: 2.5,
+            totalPrice: 2.5,
+          },
+        ],
+      },
+    },
+  });
+  console.log(`   ✅ Invoice 3: ${invoice3.invoiceNumber} (completed)`);
+
+  // Update customer stats
+  await db.customer.update({
+    where: { id: demoCustomer.id },
+    data: {
+      totalSpent: 35.38 + 8.78 + 4.6,
+      totalOrders: 3,
+    },
+  });
+
+  // ── 8. Create Sample Local Sale ──────────────────────────────────────
+  console.log('8️⃣  Creating sample local sale...');
+  const localSale = await db.localSale.create({
+    data: {
+      storeId: demoStore.id,
+      customerId: demoCustomer.id,
+      invoiceNumber: 'LS-2025-001',
+      subtotal: 5.0,
+      taxAmount: 0.75,
+      discountAmount: 0,
+      total: 5.75,
+      paymentMethod: 'cash',
+      notes: 'بيع نقدي في المتجر - قميص وشاحن',
+      createdBy: 'demo_user_pi_uid',
+      items: {
+        create: [
+          {
+            productId: products[3].id,
+            productName: products[3].name,
+            quantity: 1,
+            unitPrice: 3.0,
+            totalPrice: 3.0,
+          },
+          {
+            productId: products[2].id,
+            productName: products[2].name,
+            quantity: 1,
+            unitPrice: 2.0,
+            totalPrice: 2.0,
+          },
+        ],
+      },
+    },
+  });
+  console.log(`   ✅ Local Sale: ${localSale.invoiceNumber} (cash)`);
+
+  // ── 9. Create Transaction Logs ───────────────────────────────────────
+  console.log('9️⃣  Creating transaction logs...');
+  await Promise.all([
+    db.transactionLog.create({
+      data: {
+        storeId: demoStore.id,
+        invoiceId: invoice2.id,
+        type: 'pi',
+        amount: 8.78,
+        currency: 'Pi',
+        description: 'دفعة Pi مقابل فاتورة INV-2025-002',
+        reference: 'pi_tx_abc123',
+        createdBy: 'demo_user_pi_uid',
+      },
+    }),
+    db.transactionLog.create({
+      data: {
+        storeId: demoStore.id,
+        invoiceId: invoice3.id,
+        type: 'cash',
+        amount: 4.6,
+        currency: 'Pi',
+        description: 'دفعة نقدية مقابل فاتورة INV-2025-003',
+        reference: 'cash_receipt_001',
+        createdBy: 'demo_user_pi_uid',
+      },
+    }),
+    db.transactionLog.create({
+      data: {
+        storeId: demoStore.id,
+        type: 'expense',
+        amount: 2.0,
+        currency: 'Pi',
+        description: 'إيجار الكهرباء الشهري',
+        reference: 'exp_util_001',
+        createdBy: 'demo_user_pi_uid',
+      },
+    }),
+  ]);
+  console.log(`   ✅ Transaction logs: 3 created`);
+
+  // ── 10. Create Expenses ──────────────────────────────────────────────
+  console.log('🔟 Creating expenses...');
+  await Promise.all([
+    db.expense.create({
+      data: {
+        storeId: demoStore.id,
+        category: 'utilities',
+        description: 'فاتورة الكهرباء - مارس 2025',
+        amount: 1.5,
+        date: new Date('2025-03-01'),
+        createdBy: 'demo_user_pi_uid',
+      },
+    }),
+    db.expense.create({
+      data: {
+        storeId: demoStore.id,
+        category: 'supplies',
+        description: 'أكياس وأغلفة تغليف',
+        amount: 0.3,
+        date: new Date('2025-03-05'),
+        createdBy: 'demo_user_pi_uid',
+      },
+    }),
+    db.expense.create({
+      data: {
+        storeId: demoStore.id,
+        category: 'marketing',
+        description: 'إعلان على وسائل التواصل',
+        amount: 0.5,
+        date: new Date('2025-03-10'),
+        createdBy: 'demo_user_pi_uid',
+      },
+    }),
+  ]);
+  console.log(`   ✅ Expenses: 3 created`);
+
+  // ── 11. Create Inventory Movements ───────────────────────────────────
+  console.log('1️⃣1️⃣  Creating inventory movements...');
+  if (inventoryRecords.length > 0) {
+    await db.inventoryMovement.create({
+      data: {
+        inventoryId: inventoryRecords[0].id,
+        type: 'in',
+        quantity: 50,
+        reason: 'استلام مخزون أولي',
+        referenceId: '',
+        createdBy: 'demo_user_pi_uid',
       },
     });
-    count++;
+    await db.inventoryMovement.create({
+      data: {
+        inventoryId: inventoryRecords[0].id,
+        type: 'sale',
+        quantity: -1,
+        reason: 'بيع عبر فاتورة INV-2025-001',
+        referenceId: invoice1.id,
+        createdBy: 'demo_user_pi_uid',
+      },
+    });
   }
+  console.log(`   ✅ Inventory movements: 2 created`);
 
-  console.log(`✅ Seeded ${count} issues successfully!`);
-  console.log(`   - CRITICAL: ${criticalFindings.length}`);
-  console.log(`   - HIGH: ${highIssues.length}`);
-  console.log(`   - MEDIUM: ${mediumIssues.length}`);
-  console.log(`   - LOW: ${lowIssues.length}`);
+  // ── 12. Create Notifications ─────────────────────────────────────────
+  console.log('1️⃣2️⃣  Creating notifications...');
+  await Promise.all([
+    db.notification.create({
+      data: {
+        userId: demoUser.id,
+        type: 'payment',
+        title: 'دفعة Pi واردة',
+        message: 'تم استلام دفعة Pi بقيمة 8.78 من أحمد بن محمد مقابل الفاتورة INV-2025-002',
+        severity: 'high',
+        read: false,
+        actionUrl: '/invoices/INV-2025-002',
+        invoiceId: invoice2.id,
+        storeId: demoStore.id,
+      },
+    }),
+    db.notification.create({
+      data: {
+        userId: demoUser.id,
+        type: 'order',
+        title: 'طلب جديد',
+        message: 'طلب جديد من أحمد بن محمد - فاتورة INV-2025-001 بقيمة 35.38 Pi',
+        severity: 'high',
+        read: false,
+        actionUrl: '/invoices/INV-2025-001',
+        invoiceId: invoice1.id,
+        storeId: demoStore.id,
+      },
+    }),
+    db.notification.create({
+      data: {
+        userId: demoUser.id,
+        type: 'escrow',
+        title: 'تم تأكيد الإيداع',
+        message: 'تم تأكيد إيداع Pi في الضمان للفاتورة INV-2025-002 - يمكنك الآن شحن الطلب',
+        severity: 'medium',
+        read: true,
+        actionUrl: '/invoices/INV-2025-002',
+        invoiceId: invoice2.id,
+        storeId: demoStore.id,
+      },
+    }),
+    db.notification.create({
+      data: {
+        userId: demoUser.id,
+        type: 'system',
+        title: 'مرحبًا بك في LedgerERP',
+        message: 'مرحبًا بك في منصة LedgerERP! يمكنك الآن إدارة منتجاتك وإنشاء فواتير وتتبع المدفوعات عبر شبكة Pi.',
+        severity: 'info',
+        read: false,
+        storeId: demoStore.id,
+      },
+    }),
+  ]);
+  console.log(`   ✅ Notifications: 4 created`);
+
+  // ── 13. Create User Settings ─────────────────────────────────────────
+  console.log('1️⃣3️⃣  Creating user settings...');
+  await Promise.all([
+    db.userSetting.create({
+      data: { userId: demoUser.id, key: 'theme', value: 'light' },
+    }),
+    db.userSetting.create({
+      data: { userId: demoUser.id, key: 'language', value: 'ar' },
+    }),
+    db.userSetting.create({
+      data: { userId: demoUser.id, key: 'notifications_enabled', value: 'true' },
+    }),
+    db.userSetting.create({
+      data: { userId: demoUser.id, key: 'escrow_auto_release', value: 'false' },
+    }),
+  ]);
+  console.log(`   ✅ User settings: 4 created`);
+
+  // ── Summary ──────────────────────────────────────────────────────────
+  console.log('\n' + '═'.repeat(50));
+  console.log('🎉 Seed completed successfully!');
+  console.log('═'.repeat(50));
+
+  const counts = {
+    users: await db.user.count(),
+    stores: await db.store.count(),
+    categories: await db.category.count(),
+    products: await db.product.count(),
+    customers: await db.customer.count(),
+    inventory: await db.inventory.count(),
+    inventoryMovements: await db.inventoryMovement.count(),
+    invoices: await db.invoice.count(),
+    invoiceItems: await db.invoiceItem.count(),
+    localSales: await db.localSale.count(),
+    localSaleItems: await db.localSaleItem.count(),
+    transactionLogs: await db.transactionLog.count(),
+    expenses: await db.expense.count(),
+    notifications: await db.notification.count(),
+    userSettings: await db.userSetting.count(),
+  };
+
+  console.log('\n📊 Database Summary:');
+  console.log(`   Users:              ${counts.users}`);
+  console.log(`   Stores:             ${counts.stores}`);
+  console.log(`   Categories:         ${counts.categories}`);
+  console.log(`   Products:           ${counts.products}`);
+  console.log(`   Customers:          ${counts.customers}`);
+  console.log(`   Inventory:          ${counts.inventory}`);
+  console.log(`   Inventory Movements:${counts.inventoryMovements}`);
+  console.log(`   Invoices:           ${counts.invoices}`);
+  console.log(`   Invoice Items:      ${counts.invoiceItems}`);
+  console.log(`   Local Sales:        ${counts.localSales}`);
+  console.log(`   Local Sale Items:   ${counts.localSaleItems}`);
+  console.log(`   Transaction Logs:   ${counts.transactionLogs}`);
+  console.log(`   Expenses:           ${counts.expenses}`);
+  console.log(`   Notifications:      ${counts.notifications}`);
+  console.log(`   User Settings:      ${counts.userSettings}`);
+  console.log(`   ────────────────────────`);
+  console.log(`   Total Records:      ${Object.values(counts).reduce((a, b) => a + b, 0)}`);
 }
 
 seed()
-  .catch((e) => { console.error("❌ Seed failed:", e); process.exit(1); })
+  .catch((e) => {
+    console.error('❌ Seed failed:', e);
+    process.exit(1);
+  })
   .finally(() => db.$disconnect());

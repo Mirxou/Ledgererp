@@ -15,6 +15,8 @@ datasource db {
 /// Invoice status enum (TypeScript-side validation, SQLite doesn't support DB enums)
 /// Valid values: pending | paid_escrow | shipped | delivered | completed | disputed | cancelled
 
+/// ─── Store ─────────────────────────────────────────────────────────────
+
 model Store {
   id          String   @id @default(cuid())
   piUid       String   @unique
@@ -28,12 +30,60 @@ model Store {
   piAppUrl    String   @default("")
   /// Human-readable slug for store URLs (?store=my-store)
   slug        String?  @unique
+  /// Default currency for the store (e.g., "Pi", "USD", "OUSD")
+  currency    String   @default("Pi")
+  /// Default tax rate percentage — use roundPi() for calculations
+  taxRate     Float    @default(0)
+  /// Contact phone number
+  phone       String   @default("")
+  /// Physical address
+  address     String   @default("")
+  /// Store logo URL (separate from avatar)
+  logo        String   @default("")
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  products  Product[]
-  invoices  Invoice[]
+  products   Product[]
+  invoices   Invoice[]
+  customers  Customer[]
+  inventory  Inventory[]
+  localSales LocalSale[]
+  expenses   Expense[]
+  transactionLogs TransactionLog[]
 }
+
+/// ─── Category (hierarchical product categories) ───────────────────────
+
+model Category {
+  id        String   @id @default(cuid())
+  /// Arabic name
+  nameAr    String
+  /// English name
+  nameEn    String
+  /// URL-safe slug
+  slug      String   @unique
+  /// Icon name (Lucide icon or emoji)
+  icon      String   @default("")
+  /// Tailwind color class (e.g., "text-emerald-500")
+  color     String   @default("")
+  /// Parent category ID for hierarchical categories
+  parentId  String?
+  /// Sort order for display
+  sortOrder Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  parent   Category?  @relation("CategoryHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
+  children Category[] @relation("CategoryHierarchy")
+  products Product[]
+
+  @@index([parentId])
+  @@index([sortOrder])
+  @@index([isActive])
+}
+
+/// ─── Product ──────────────────────────────────────────────────────────
 
 model Product {
   id          String   @id @default(cuid())
@@ -42,17 +92,117 @@ model Product {
   description String   @default("")
   /// Price in Pi — use roundPi() utility for all calculations to avoid Float rounding
   price       Float
+  /// Cost price in Pi — use roundPi() for profit calculations
+  costPrice   Float    @default(0)
+  /// Stock keeping unit identifier
+  sku         String   @default("")
+  /// Current stock quantity (denormalized for quick reads)
+  stockQuantity Int    @default(0)
+  /// Alert threshold when stock drops below this number
+  lowStockThreshold Int @default(5)
+  /// Whether to track inventory for this product
+  trackInventory Boolean @default(true)
+  /// Category ID for product classification
+  categoryId  String?
+  /// Unit of measurement (e.g., "unit", "kg", "liter", "piece")
+  unit        String   @default("unit")
   image       String   @default("")
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  items InvoiceItem[]
+  store    Store     @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  category Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  items    InvoiceItem[]
+  inventory Inventory[]
+  localSaleItems LocalSaleItem[]
 
   @@index([storeId])
   @@index([storeId, isActive])
+  @@index([categoryId])
+  @@index([sku])
 }
+
+/// ─── Customer (separate from User, supports non-Pi customers) ─────────
+
+model Customer {
+  id        String   @id @default(cuid())
+  storeId   String
+  name      String
+  phone     String   @default("")
+  email     String   @default("")
+  address   String   @default("")
+  /// Pi UID if customer is a Pi Network user
+  piUid     String?
+  notes     String   @default("")
+  /// Total amount spent in Pi — use roundPi() for calculations
+  totalSpent  Float  @default(0)
+  totalOrders Int    @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  store      Store        @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  localSales LocalSale[]
+
+  @@index([storeId])
+  @@index([storeId, isActive])
+  @@index([piUid])
+  @@index([phone])
+}
+
+/// ─── Inventory (stock tracking per product per store) ─────────────────
+
+model Inventory {
+  id                String   @id @default(cuid())
+  productId         String
+  storeId           String
+  /// Current quantity in stock
+  quantity          Int      @default(0)
+  /// Quantity reserved in pending escrow orders
+  reservedQuantity  Int      @default(0)
+  /// Alert threshold — notify when quantity drops below
+  lowStockThreshold Int      @default(5)
+  /// Whether to track inventory for this product
+  trackInventory    Boolean  @default(true)
+  lastRestockedAt   DateTime?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  product   Product             @relation(fields: [productId], references: [id], onDelete: Cascade)
+  store     Store               @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  movements InventoryMovement[]
+
+  @@unique([productId, storeId])
+  @@index([storeId])
+  @@index([quantity])
+}
+
+/// ─── Inventory Movement (stock movement log) ──────────────────────────
+
+model InventoryMovement {
+  id          String   @id @default(cuid())
+  inventoryId String
+  /// Type: 'in' | 'out' | 'adjustment' | 'return' | 'sale' | 'sale_return'
+  type        String
+  /// Quantity moved (positive for in, negative for out)
+  quantity    Int
+  /// Human-readable reason for the movement
+  reason      String   @default("")
+  /// Optional reference to related entity (invoice, sale, etc.)
+  referenceId String   @default("")
+  /// User who triggered the movement
+  createdBy   String   @default("")
+  createdAt   DateTime @default(now())
+
+  inventory Inventory @relation(fields: [inventoryId], references: [id], onDelete: Cascade)
+
+  @@index([inventoryId])
+  @@index([type])
+  @@index([createdAt])
+}
+
+/// ─── Invoice ──────────────────────────────────────────────────────────
 
 model Invoice {
   id             String    @id @default(cuid())
@@ -62,9 +212,15 @@ model Invoice {
   customerName   String
   /// All Pi amounts use roundPi() to prevent Float rounding errors
   subtotal       Float
+  /// Tax amount in Pi — use roundPi() for calculations
+  taxAmount      Float     @default(0)
+  /// Discount amount in Pi — use roundPi() for calculations
+  discountAmount Float     @default(0)
   escrowFee      Float     @default(0)
   total          Float
   status         String    @default("pending")
+  /// Payment method: 'pi' | 'cash' | 'card' | 'ousd'
+  paymentMethod  String    @default("pi")
   notes          String    @default("")
   paymentTxId    String    @default("")
   releaseTxId    String    @default("")
@@ -84,7 +240,10 @@ model Invoice {
   @@index([status])
   @@index([storeId, status])
   @@index([createdAt])
+  @@index([paymentMethod])
 }
+
+/// ─── Invoice Item ─────────────────────────────────────────────────────
 
 model InvoiceItem {
   id          String  @id @default(cuid())
@@ -92,7 +251,9 @@ model InvoiceItem {
   productId   String?
   productName String
   quantity    Int
+  /// Unit price in Pi — use roundPi() for calculations
   unitPrice   Float
+  /// Total price in Pi — use roundPi() for calculations
   totalPrice  Float
 
   invoice Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
@@ -100,6 +261,111 @@ model InvoiceItem {
 
   @@index([invoiceId])
   @@index([productId])
+}
+
+/// ─── Transaction Log (financial transaction tracking) ────────────────
+
+model TransactionLog {
+  id          String   @id @default(cuid())
+  storeId     String
+  /// Optional link to invoice
+  invoiceId   String?
+  /// Type: 'cash' | 'pi' | 'ousd' | 'refund' | 'expense'
+  type        String
+  /// Amount in Pi — use roundPi() for calculations
+  amount      Float
+  /// Currency: 'Pi' | 'USD' | 'OUSD'
+  currency    String   @default("Pi")
+  description String   @default("")
+  /// External reference or receipt number
+  reference   String   @default("")
+  /// User who created the transaction
+  createdBy   String   @default("")
+  createdAt   DateTime @default(now())
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@index([storeId])
+  @@index([invoiceId])
+  @@index([type])
+  @@index([createdAt])
+}
+
+/// ─── Local Sale (offline/cash sales, not through Pi escrow) ──────────
+
+model LocalSale {
+  id            String   @id @default(cuid())
+  storeId       String
+  /// Optional link to customer
+  customerId    String?
+  invoiceNumber String
+  /// Subtotal in Pi — use roundPi() for calculations
+  subtotal      Float
+  /// Tax amount in Pi — use roundPi() for calculations
+  taxAmount     Float    @default(0)
+  /// Discount amount in Pi — use roundPi() for calculations
+  discountAmount Float   @default(0)
+  /// Total in Pi — use roundPi() for calculations
+  total         Float
+  /// Payment method: 'cash' | 'card' | 'pi'
+  paymentMethod String   @default("cash")
+  notes         String   @default("")
+  createdBy     String   @default("")
+  createdAt     DateTime @default(now())
+
+  store    Store           @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  customer Customer?       @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  items    LocalSaleItem[]
+
+  @@index([storeId])
+  @@index([customerId])
+  @@index([paymentMethod])
+  @@index([createdAt])
+}
+
+/// ─── Local Sale Item ──────────────────────────────────────────────────
+
+model LocalSaleItem {
+  id          String  @id @default(cuid())
+  localSaleId String
+  /// Optional link to product (null for custom items)
+  productId   String?
+  productName String
+  quantity    Int
+  /// Unit price in Pi — use roundPi() for calculations
+  unitPrice   Float
+  /// Total price in Pi — use roundPi() for calculations
+  totalPrice  Float
+
+  localSale LocalSale @relation(fields: [localSaleId], references: [id], onDelete: Cascade)
+  product   Product?  @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  @@index([localSaleId])
+  @@index([productId])
+}
+
+/// ─── Expense (cost/profit tracking) ───────────────────────────────────
+
+model Expense {
+  id          String   @id @default(cuid())
+  storeId     String
+  /// Category: 'rent' | 'utilities' | 'salaries' | 'supplies' | 'marketing' | 'shipping' | 'other'
+  category    String
+  description String
+  /// Amount in Pi — use roundPi() for calculations
+  amount      Float
+  date        DateTime
+  /// URL to receipt image/document
+  receipt     String   @default("")
+  createdBy   String   @default("")
+  createdAt   DateTime @default(now())
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@index([storeId])
+  @@index([category])
+  @@index([date])
+  @@index([createdAt])
 }
 
 /// ─── User & Auth ───────────────────────────────────────────────────────
@@ -181,6 +447,7 @@ model EscrowTransaction {
   invoiceId     String
   /// Pi payment transaction ID
   txid          String   @default("")
+  /// Amount in Pi — use roundPi() for calculations
   amount        Float
   /// Pi UID of the sender (buyer for U2A, platform wallet for A2U)
   fromUid       String
@@ -203,7 +470,7 @@ model EscrowTransaction {
   @@index([createdAt])
 }
 
-/// ─── Audit Log (general app activity log, replaces security-only AuditLog) ──
+/// ─── Audit Log (general app activity log) ─────────────────────────────
 
 model AuditLog {
   id        String   @id @default(cuid())

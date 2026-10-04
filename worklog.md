@@ -922,3 +922,120 @@ Stage Summary:
 - **Shipping dialog** with tracking number + carrier, saved to invoice notes
 - **PATCH /api/invoices** now supports notes updates
 - Status "releasing" already handled in StatusBadge (Wallet icon, amber color)
+
+---
+Task ID: 1
+Agent: full-stack-developer
+Task: Redesign and push comprehensive Prisma database schema
+
+Work Log:
+- Read existing schema (9 models: Store, Product, Invoice, InvoiceItem, User, Notification, UserSetting, EscrowTransaction, AuditLog)
+- Read worklog.md to understand previous project context
+- Designed and wrote comprehensive Prisma schema with 15 models total
+- Added 7 new models: Category, Customer, Inventory, InventoryMovement, TransactionLog, LocalSale, LocalSaleItem, Expense
+- Enhanced Store model with: currency, taxRate, phone, address, logo fields + new relations
+- Enhanced Product model with: sku, costPrice, stockQuantity, lowStockThreshold, trackInventory, categoryId, unit fields + Category relation
+- Enhanced Invoice model with: paymentMethod, taxAmount, discountAmount fields
+- Added proper @@index declarations for query performance across all models
+- Added proper onDelete Cascade/SetNull policies on all relations
+- Added roundPi() comments on all Float price/amount fields
+- Ran `bun run db:push` — schema pushed successfully (24ms)
+- Ran `bun run db:generate` — Prisma Client generated successfully (v6.19.2)
+- Created comprehensive seed file at prisma/seed.ts with Arabic demo data
+- Seed creates: 1 user, 1 store, 4 categories (إلكترونيات, ملابس, أغذية, خدمات), 8 products, 7 inventory records, 1 customer, 3 invoices (pending/paid_escrow/completed), 1 local sale, 3 transaction logs, 3 expenses, 2 inventory movements, 4 notifications, 4 user settings
+- Ran `bun run prisma/seed.ts` — 49 total records seeded successfully
+
+Stage Summary:
+- Prisma schema now has 15 models (was 9, added 7 new + enhanced 3 existing)
+- New models: Category (hierarchical), Customer, Inventory, InventoryMovement, TransactionLog, LocalSale, LocalSaleItem, Expense
+- All models have proper relations, indexes, and cascade policies
+- Database is fully seeded with 49 Arabic demo records
+- All Float fields documented with roundPi() rounding guidance
+
+---
+Task ID: 3
+Agent: full-stack-developer
+Task: Create new API routes for all new database models
+
+Work Log:
+- Created /api/categories/route.ts with full CRUD: GET (with parentId/active filters, product count), POST (slug uniqueness check, parent validation), PATCH, DELETE (with child category check and product categoryId nullification)
+- Created /api/inventory/route.ts with GET (storeId filter, lowStock flag, isLowStock computed field, product/category info), POST (upsert behavior for existing inventory, auto-update Product.stockQuantity), PATCH (auto-creates InventoryMovement log on quantity change, auto-updates Product.stockQuantity)
+- Created /api/inventory/movement/route.ts with GET (inventoryId/type/storeId filters, product info), POST (validates movement type and sign convention, checks stock availability, auto-updates Inventory.quantity AND Product.stockQuantity)
+- Created /api/customers/route.ts with full CRUD: GET (storeId required, search across name/phone/email/piUid), POST, PATCH, DELETE (nullifies customerId on local sales)
+- Created /api/local-sales/route.ts with GET (list mode with storeId/customerId, stats mode with totalSales/totalRevenue/totalCash/totalCard/totalPi/avgSale), POST (auto-generates LS-YYYYMMDD-XXXXX invoice number, auto-creates TransactionLog, auto-creates InventoryMovement for each item, auto-updates Inventory quantity and Product.stockQuantity, auto-updates Customer.totalSpent and totalOrders)
+- Created /api/expenses/route.ts with GET (list with storeId/category/date range, stats mode with totalAmount/byCategory), POST (auto-creates TransactionLog), PATCH, DELETE
+- Created /api/transaction-logs/route.ts with GET (storeId/type/date range filters, pagination)
+- Updated /api/products/route.ts: added categoryId filter in GET, new fields (sku, costPrice, stockQuantity, lowStockThreshold, trackInventory, unit, categoryId) in POST/PATCH, include category relation in GET response, auto-create Inventory record when creating product with trackInventory=true, sync inventory on PATCH stockQuantity change, nullify productId on localSaleItem in DELETE
+- Updated /api/invoices/route.ts: added paymentMethod filter in GET, paymentMethod/taxAmount/discountAmount in POST/PATCH, auto-recalculate total when taxAmount/discountAmount changes in PATCH, validated paymentMethod values
+- Ran ESLint: 0 errors, 1 pre-existing warning (font in layout.tsx)
+
+Stage Summary:
+- 7 new API route files created covering all new database models
+- 2 existing API route files updated with new fields and functionality
+- All routes follow established patterns: verifyPiAuth for mutations, checkRateLimit for reads, sanitizeString for inputs, roundPi for amounts
+- Local sales auto-chain: TransactionLog + InventoryMovement + Inventory update + Product.stockQuantity + Customer totals
+- Inventory movements enforce sign convention (in=positive, out/sale=negative)
+- Expenses auto-create TransactionLog entries
+- Product creation auto-creates Inventory when trackInventory=true
+- ESLint passes with 0 errors
+
+---
+Task ID: 4+5+6
+Agent: Main UI Rebuilder
+Task: Rebuild entire LedgerERP UI with all new database-backed features
+
+Work Log:
+- Read worklog and analyzed current project state (10 API routes, 15 Prisma models, 7-tab UI)
+- Updated types.ts: Added CategoryData, InventoryData, InventoryMovementData, CustomerData, LocalSaleData, LocalSaleItemData, ExpenseData, TransactionLogData types; Enhanced ProductData with costPrice, sku, stockQuantity, lowStockThreshold, trackInventory, categoryId, unit, category
+- Created inventory-view.tsx: Stock levels table with color-coded status (Good/Low/Critical), Restock dialog (via /api/inventory/movement), Adjust dialog (via /api/inventory PATCH), Low stock filter, Movements log (collapsible), Summary cards (total products, low stock, total units)
+- Created customers-view.tsx: Customer card grid with name/phone/email/address/Pi UID, Search bar, Add/Edit/Delete customer dialogs, Sort by Name/Spent/Orders, Pi UID badge for Pi Network customers
+- Created local-sales-view.tsx: Table with Invoice #/Customer/Subtotal/Tax/Discount/Total/Method/Date, New Sale dialog with customer selector, product selector, auto-calculate totals, payment method (cash/card/pi), Detail dialog showing items and totals
+- Created expenses-view.tsx: Summary cards (total expenses, this month, count), Category breakdown visualization, Add expense dialog with 7 categories (rent/utilities/salaries/supplies/marketing/shipping/other), Category filter, Delete with confirmation
+- Created sales-view.tsx: Merged Sales view with Pi Invoices and Local Sales sub-tabs
+- Updated dashboard-view.tsx: Added 6 stat cards (invoices, products, escrowed Pi, completed Pi, customers, low stock alerts), Revenue & Expenses cards, Profit estimate card (revenue - expenses), Recent activity from TransactionLog
+- Updated products-view.tsx: Added category filter dropdown, SKU badge, category badge, low stock badge, cost price & profit display, Unit selector, Category selector in create/edit dialogs, Enhanced form fields (costPrice, SKU, unit, categoryId)
+- Updated page.tsx: 10 tabs (Dashboard/Products/Inventory/Sales/Orders/Customers/Expenses/Shop/Settings/Pi Setup), All new TanStack Query data fetching (categories, inventory, customers, localSales, expenses, expenses-stats, transaction-logs), Enhanced stats computation with all new data, Responsive tab grid (5 cols mobile, 10 cols desktop), Version bumped to v3.0
+- Ran ESLint: 0 errors, 1 pre-existing warning (font)
+- Verified dev server: Page loads with 200, no runtime errors
+- Tested all API endpoints: categories, inventory, customers, expenses, local-sales, transaction-logs all responding correctly
+
+Stage Summary:
+- 7 files created/updated: types.ts, inventory-view.tsx, customers-view.tsx, local-sales-view.tsx, expenses-view.tsx, sales-view.tsx, dashboard-view.tsx, products-view.tsx, page.tsx
+- 10-tab UI fully functional with real database data
+- All new features (inventory, customers, local sales, expenses) work through API
+- Enhanced dashboard with revenue/expenses/profit/recent activity
+- Enhanced products with categories, SKU, stock tracking, cost price
+- Merged Sales view with Pi Invoices + Local Sales sub-tabs
+- RTL Arabic interface maintained throughout
+- Responsive design with mobile-first approach
+---
+Task ID: rebuild-complete
+Agent: Main Orchestrator
+Task: Complete LedgerERP rebuild from scratch — Database-first architecture
+
+Work Log:
+- Analyzed current state: DB existed but was empty (0 records), seed file broken
+- Redesigned Prisma schema: 9 → 15 models (added Category, Customer, Inventory, InventoryMovement, TransactionLog, LocalSale, LocalSaleItem, Expense)
+- Enhanced existing models: Store (+currency, taxRate, phone, address, logo), Product (+sku, costPrice, stockQuantity, lowStockThreshold, trackInventory, categoryId, unit), Invoice (+paymentMethod, taxAmount, discountAmount)
+- Pushed schema to SQLite and generated Prisma Client v6.19.2
+- Created proper seed file with 49 records of Arabic demo data
+- Created 7 new API routes: categories, inventory, inventory/movement, customers, local-sales, expenses, transaction-logs
+- Updated 2 existing API routes: products (+categoryId, +new fields, auto-create Inventory), invoices (+paymentMethod, taxAmount, discountAmount)
+- Rebuilt page.tsx with 10 tabs (was 7): الرئيسية, المنتجات, المخزون, المبيعات, الطلبات, الزبائن, المصروفات, تسوق, الإعدادات, إعداد Pi
+- Created 5 new components: inventory-view, customers-view, local-sales-view, expenses-view, sales-view
+- Enhanced 3 existing components: dashboard-view (revenue/expenses/profit/alerts), products-view (categories/SKU/stock/cost)
+- Added 8 new type definitions to types.ts
+- Verified all tabs work with agent-browser
+- Tested full data flow: UI → API → Database → UI (created product successfully)
+- Lint: 0 errors
+- Dev server: All API routes returning 200 with real database data
+
+Stage Summary:
+- Complete architectural rebuild from database-first approach
+- 15 database models with proper relations and indexes
+- 49 seed records with Arabic demo data
+- 10 functional tabs all connected to real SQLite database
+- No mock data — everything persists across page refreshes
+- Core ERP features: Products, Inventory, Categories, Customers, Local Sales, Expenses
+- Escrow features preserved: Pi payments, U2A/A2U, invoice lifecycle
+- New financial tracking: TransactionLog, profit estimation, expense categories
