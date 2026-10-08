@@ -1,0 +1,14 @@
+node_modules
+.next
+.git
+.gitignore
+db/backups
+*.db
+*.log
+*.png
+*.jpg
+*.pdf
+upload/
+agent-ctx/
+dev.log
+server.log

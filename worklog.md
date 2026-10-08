@@ -1307,3 +1307,89 @@ Stage Summary:
 - Payment Dashboard: Transaction management with state actions, Pi/OUSD flow visualization, create new transactions
 - Financial View: P&L summary, revenue/expense breakdown, 6-month cash flow, top customers, health indicators
 - All 12 tabs verified working: الرئيسية، المنتجات، المخزون، المبيعات، الطلبات، الزبائن، المصروفات، المالية، المعاملات، تسوق، الإعدادات، إعداد Pi
+
+---
+Task ID: 3
+Agent: Backup + Docker Builder
+Task: Build Auto Database Backup System and Docker Deployment
+
+Work Log:
+- Created /api/backup route.ts with GET (trigger + list), POST (restore), DELETE operations
+- Implemented backup creation with fs.copyFileSync, naming: ledgererp-backup-YYYY-MM-DD-HHmmss.db
+- Added backup directory auto-creation (db/backups/)
+- Implemented max 10 backups pruning (delete oldest automatically)
+- Added 1-minute cooldown rate limit for backup creation
+- Implemented auth (verifyPiAuth) on all endpoints
+- Added role-based access for restore (POST) — requires manager or admin role via X-User-Role header
+- Restore creates a safety backup before overwriting current DB
+- Delete endpoint validates filename pattern to prevent path traversal
+- Created backup-view.tsx component with create, list, restore (with confirmation), delete UI
+- Integrated BackupView into settings-view.tsx (النسخ الاحتياطي section before danger zone)
+- Added X-User-Role to CORS allowed headers in next.config.ts
+- Created Dockerfile with multi-stage build (deps → builder → runner) for bun project
+- Created docker-compose.yml with volume mounts for SQLite db/ directory, health check
+- Created .dockerignore to exclude node_modules, .next, .git, backups, logs
+- Added output: "standalone" to next.config.ts for Docker deployment
+- All API endpoints tested successfully (200, 401, 403, 429 responses verified)
+- ESLint passes with 0 errors
+
+Stage Summary:
+- Backup API fully functional with all CRUD operations and security
+- Backup UI integrated into Settings tab with Arabic labels
+- Docker deployment setup production-ready with standalone output
+- Files created: src/app/api/backup/route.ts, src/components/backup-view.tsx, Dockerfile, docker-compose.yml, .dockerignore
+- Files modified: src/components/settings-view.tsx, next.config.ts
+
+---
+Task ID: 1
+Agent: RBAC + Cashier POS Builder
+Task: Build Role-Based Access Control and Cashier POS Interface
+
+Work Log:
+- Created new component `/src/components/cashier-pos-view.tsx` — a full POS-style interface optimized for cashier use
+- POS view features: product quick-search/grid (categorized), cart builder with quantity controls, payment method selection (cash/card/Pi), customer lookup dialog, sale confirmation, print receipt support, recent sales list with reprint
+- POS view deliberately hides costPrice, profit margins, and all financial data from cashier
+- Added role state management in `page.tsx` — role persisted in localStorage as "ledgererp_role" (default: "manager")
+- Defined role-based tab filtering: Manager sees all 12 tabs; Cashier sees only sales, orders, customers, shop
+- Added role switcher badge in header — prominent clickable badge showing "مدير" (emerald) or "كاشير" (amber)
+- Role switcher shows confirmation dialog with clear Arabic description of what changes when switching roles
+- When role is "cashier", CashierPOSView is rendered instead of the full tabbed interface
+- When role is "manager", the full 12-tab interface is rendered as before
+- Notification bell and theme toggle hidden for cashier role (simplified header)
+- Dynamic TabsList grid-cols adapts based on number of visible tabs
+- All code follows existing patterns: function expressions, Arabic UI, RTL layout, shadcn/ui components, Lucide icons
+- ESLint passes with 0 errors (1 pre-existing warning about font)
+- Dev server returns 200 for main page
+
+Stage Summary:
+- New file: `src/components/cashier-pos-view.tsx` (~350 lines) — Full POS interface for cashiers
+- Modified: `src/app/page.tsx` — Added RBAC with role state, tab filtering, role switcher UI, confirmation dialog, conditional rendering
+- Role system: manager (all 12 tabs) / cashier (POS view only, no financial data)
+- Cashier POS: Product grid, cart, payment, customer lookup, sale creation, receipt printing
+- Role persisted in localStorage, confirmation dialog prevents accidental role switch
+
+---
+Task ID: 5
+Agent: Main Orchestrator
+Task: Build RBAC + Cashier POS + Backup System + Docker Deployment
+
+Work Log:
+- Implemented Role-Based Access Control with manager/cashier roles
+- Added role switcher badge in header (مدير/كاشير) with confirmation dialog
+- Built CashierPOSView component: product quick-grid, cart builder, payment method selector, customer lookup, recent sales
+- Cashier role hides: Dashboard, Products, Inventory, Expenses, Finance, Payments, Settings, Pi Setup
+- Manager role sees all 12 tabs as before
+- Built Backup API: GET (create backup), GET?list=true (list), POST (restore), DELETE
+- Backup API features: auth required, 1-min cooldown, max 10 backups, safety backup before restore
+- Built BackupView component integrated into Settings tab
+- Created Dockerfile (multi-stage bun-based build), docker-compose.yml, .dockerignore
+- Added output: "standalone" to next.config.ts for Docker optimization
+- Verified all features with Agent Browser
+- 0 ESLint errors, dev server running clean
+
+Stage Summary:
+- RBAC: Manager (full access) vs Cashier (POS-only) with localStorage persistence
+- Cashier POS: Touch-optimized interface with product grid, cart, payment methods, no financial data
+- Backup: SQLite file backup/restore with max 10 retention, safety backup on restore
+- Docker: Production-ready multi-stage build with volume mounts for db persistence
+- All features verified: role switching, cashier view, backup creation, Docker files present

@@ -18,9 +18,10 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { copyText } from "@/lib/helpers";
 import type { StoreData } from "@/lib/types";
+import { BackupView } from "@/components/backup-view";
 
 /* ═══ Settings ═══ */
-export function SettingsView({ store, onUpdate, onDelete, updating, deleting, piUid: _piUid }: {
+export function SettingsView({ store, onUpdate, onDelete, updating, deleting, piUid }: {
   store: StoreData; onUpdate: (d: { id: string; name?: string; description?: string; avatar?: string; piAppUrl?: string }) => void;
   onDelete: () => void; updating: boolean; deleting: boolean; piUid: string;
 }) {
@@ -131,6 +132,9 @@ export function SettingsView({ store, onUpdate, onDelete, updating, deleting, pi
           <div className="flex justify-between"><span>إجمالي الفواتير</span><span className="text-foreground">{store._count ? store._count.invoices : "—"}</span></div>
         </CardContent>
       </Card>
+
+      {/* Backup Section */}
+      <BackupView piUid={piUid} />
 
       <Card className="border-0 shadow-sm border-t-2 border-t-red-500/20">
         <CardHeader className="pb-3 pt-4 px-4"><CardTitle className="text-xs font-bold text-red-500 flex items-center gap-2"><AlertTriangle className="h-3.5 w-3" />منطقة الخطر</CardTitle></CardHeader>

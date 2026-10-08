@@ -10,10 +10,15 @@ import {
   Shield, BarChart3, Package, FileText, ShoppingCart,
   Settings, Zap, CircleDot, Sun, Moon, Copy, Bell,
   ShoppingBag, LogOut, Warehouse, Users, Wallet, TrendingDown,
+  UserCog, AlertTriangle,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
+} from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useTheme } from "next-themes";
 import { copyText } from "@/lib/helpers";
@@ -40,6 +45,7 @@ import { StoreBuyerView } from "@/components/store-buyer-view";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { MerchantBuyerView } from "@/components/merchant-buyer-view";
 import { PaymentsView } from "@/components/payments-view";
+import { CashierPOSView } from "@/components/cashier-pos-view";
 
 /* ═══ App Entry ═══ */
 export default function LedgererpApp() {
@@ -96,6 +102,22 @@ function AuthenticatedApp({ piUid, username }: { piUid: string; username: string
   const toast = useToast().toast;
   const { theme, setTheme } = useTheme();
   const [tab, setTab] = useState("dashboard");
+
+  /* Role: 'manager' | 'cashier' — persisted in localStorage */
+  const [role, setRole] = useState<string>(function() {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("ledgererp_role") || "manager";
+    }
+    return "manager";
+  });
+
+  useEffect(function() {
+    localStorage.setItem("ledgererp_role", role);
+  }, [role]);
+
+  /* Role switcher confirmation state */
+  const [showRoleConfirm, setShowRoleConfirm] = useState(false);
+  const [pendingRole, setPendingRole] = useState("manager");
 
   /* Store — persist store ID in localStorage for reload resilience */
   const [createdStore, setCreatedStore] = useState<StoreData | null>(null);
@@ -366,8 +388,8 @@ function AuthenticatedApp({ piUid, username }: { piUid: string; username: string
   }, [qc, toast, piUid]);
   const handleCancel = useCallback(function(inv: InvoiceData) { updateInvoiceMut.mutate({ id: inv.id, status: "cancelled" }); toast({ title: "تم إلغاء الطلب" }); }, [updateInvoiceMut, toast]);
 
-  /* ── 10 Tabs ── */
-  const tabList = [
+  /* ── 12 Tabs ── */
+  const allTabList = [
     ["dashboard", BarChart3, "الرئيسية"],
     ["products", Package, "المنتجات"],
     ["inventory", Warehouse, "المخزون"],
@@ -381,6 +403,12 @@ function AuthenticatedApp({ piUid, username }: { piUid: string; username: string
     ["settings", Settings, "الإعدادات"],
     ["pisetup", Zap, "إعداد Pi"],
   ] as const;
+
+  /* Cashier can only see: sales, orders, customers, shop */
+  const cashierAllowedTabs = ["sales", "orders", "customers", "shop"];
+  const tabList = role === "cashier"
+    ? allTabList.filter(function(t) { return cashierAllowedTabs.indexOf(t[0] as string) !== -1; })
+    : allTabList;
 
   /* ── Render ────────────────────────────────────────── */
   return (
@@ -399,7 +427,7 @@ function AuthenticatedApp({ piUid, username }: { piUid: string; username: string
           </div>
           <div className="flex items-center gap-2">
             {/* Active invoices notification bell */}
-            {function() {
+            {role === "manager" && function() {
               const mi = ((merchantInvRes.data as Record<string, unknown>)?.data || []) as InvoiceData[];
               const activeCount = mi.filter(function(inv) { return inv.status === "paid_escrow" || inv.status === "shipped" || inv.status === "delivered"; }).length;
               return activeCount > 0 ? (
@@ -409,12 +437,30 @@ function AuthenticatedApp({ piUid, username }: { piUid: string; username: string
                 </button>
               ) : null;
             }()}
+            {/* Role Badge / Switcher */}
+            <button
+              onClick={function() {
+                setPendingRole(role === "manager" ? "cashier" : "manager");
+                setShowRoleConfirm(true);
+              }}
+              className={"flex items-center gap-1.5 px-2.5 py-1 rounded-md border transition-all hover:opacity-80 " + (
+                role === "manager"
+                  ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-600"
+                  : "bg-amber-500/10 border-amber-500/30 text-amber-600"
+              )}
+              aria-label={"الدور الحالي: " + (role === "manager" ? "مدير" : "كاشير") + " — اضغط للتبديل"}
+            >
+              <UserCog className="h-3.5 w-3.5" />
+              <span className="text-xs font-bold">{role === "manager" ? "مدير" : "كاشير"}</span>
+            </button>
             <Badge variant="outline" className="text-xs gap-1.5 bg-emerald-500/10 text-emerald-600 border-emerald-500/20">
               <CircleDot className="h-3 w-3" />{username}
             </Badge>
-            <button className="p-1.5 rounded-md hover:bg-muted" onClick={function() { setTheme(theme === "dark" ? "light" : "dark"); }} aria-label={theme === "dark" ? "تفعيل الوضع الفاتح" : "تفعيل الوضع الداكن"}>
-              {theme === "dark" ? <Sun className="h-3.5 w-3.5 text-muted-foreground" /> : <Moon className="h-3.5 w-3.5 text-muted-foreground" />}
-            </button>
+            {role === "manager" && (
+              <button className="p-1.5 rounded-md hover:bg-muted" onClick={function() { setTheme(theme === "dark" ? "light" : "dark"); }} aria-label={theme === "dark" ? "تفعيل الوضع الفاتح" : "تفعيل الوضع الداكن"}>
+                {theme === "dark" ? <Sun className="h-3.5 w-3.5 text-muted-foreground" /> : <Moon className="h-3.5 w-3.5 text-muted-foreground" />}
+              </button>
+            )}
             <button className="p-1.5 rounded-md hover:bg-muted" onClick={function() { copyText(piUid, toast, "تم نسخ المعرف"); }} aria-label="نسخ المعرف">
               <Copy className="h-3.5 w-3.5 text-muted-foreground" />
             </button>
@@ -436,9 +482,20 @@ function AuthenticatedApp({ piUid, username }: { piUid: string; username: string
             loading={createStoreMut.isPending}
             username={username}
           />
+        ) : role === "cashier" ? (
+          /* ═══ Cashier POS View ═══ */
+          <CashierPOSView
+            store={myStore}
+            products={products}
+            piUid={piUid}
+            customers={customers}
+            inventory={inventory}
+            localSales={localSales}
+          />
         ) : (
+          /* ═══ Manager Tabbed View ═══ */
           <Tabs value={tab} onValueChange={setTab} className="space-y-5">
-            <TabsList className="grid grid-cols-4 sm:grid-cols-12 w-full h-auto p-1 bg-muted/50">
+            <TabsList className={"grid w-full h-auto p-1 bg-muted/50 " + (tabList.length <= 4 ? "grid-cols-" + tabList.length : "grid-cols-4 sm:grid-cols-" + tabList.length)}>
               {tabList.map(function(t) {
                 const Ic = t[1] as React.ElementType;
                 return (
@@ -525,6 +582,50 @@ function AuthenticatedApp({ piUid, username }: { piUid: string; username: string
           </Tabs>
         )}
       </main>
+
+      {/* ═══ Role Switch Confirmation Dialog ═══ */}
+      <Dialog open={showRoleConfirm} onOpenChange={setShowRoleConfirm}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="text-sm flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 text-amber-500" />
+              تبديل الدور
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              {pendingRole === "cashier"
+                ? "سيتم التبديل إلى وضع الكاشير. لن تتمكن من رؤية البيانات المالية أو إدارة المنتجات أو الإعدادات."
+                : "سيتم التبديل إلى وضع المدير. سيكون لديك صلاحية الوصول الكامل لجميع الأقسام والبيانات المالية."}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-3">
+            <div className={"flex items-center gap-2 p-3 rounded-lg border " + (
+              pendingRole === "cashier"
+                ? "bg-amber-500/5 border-amber-500/30"
+                : "bg-emerald-500/5 border-emerald-500/30"
+            )}>
+              <UserCog className={"h-5 w-5 " + (pendingRole === "cashier" ? "text-amber-500" : "text-emerald-500")} />
+              <div>
+                <p className="font-bold text-sm">{pendingRole === "cashier" ? "كاشير" : "مدير"}</p>
+                <p className="text-[10px] text-muted-foreground">
+                  {pendingRole === "cashier" ? "نقطة بيع — مبيعات وزبائن فقط" : "جميع الصلاحيات — إدارة كاملة"}
+                </p>
+              </div>
+            </div>
+          </div>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" size="sm" onClick={function() { setShowRoleConfirm(false); }}>إلغاء</Button>
+            <Button size="sm" onClick={function() {
+              setRole(pendingRole);
+              if (pendingRole === "cashier") setTab("sales");
+              else setTab("dashboard");
+              setShowRoleConfirm(false);
+            }} className={"gap-1.5 " + (pendingRole === "cashier" ? "bg-amber-600 hover:bg-amber-700" : "bg-emerald-600 hover:bg-emerald-700")}>
+              <UserCog className="h-3.5 w-3.5" />
+              تبديل إلى {pendingRole === "cashier" ? "كاشير" : "مدير"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Footer */}
       <footer className="border-t mt-auto py-3 bg-muted/30">

@@ -30,6 +30,8 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  // Standalone output for Docker deployment (reduces image size)
+  output: "standalone",
   // Allow Preview Panel cross-origin access
   allowedDevOrigins: ["http://127.0.0.1:81", "http://localhost:3000"],
   async headers() {
@@ -45,7 +47,7 @@ const nextConfig: NextConfig = {
         source: "/api/:path*",
         headers: [
           { key: "Access-Control-Allow-Methods", value: "GET, POST, PATCH, DELETE, OPTIONS" },
-          { key: "Access-Control-Allow-Headers", value: "Content-Type, Authorization, X-Demo-Uid" },
+          { key: "Access-Control-Allow-Headers", value: "Content-Type, Authorization, X-Demo-Uid, X-User-Role" },
           { key: "Access-Control-Max-Age", value: "86400" },
         ],
       },
