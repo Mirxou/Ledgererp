@@ -7,10 +7,9 @@ datasource db {
   url      = "file:../db/ledgererp.db"
 }
 
-/// NOTE: SQLite does not support native DECIMAL type.
-/// All Pi price fields use Float + roundPi() utility (src/lib/pi-amount.ts)
-/// to prevent rounding errors (e.g., 0.1 + 0.2 ≠ 0.3 in JS).
-/// Always use roundPi() for all price calculations in API routes.
+/// All Pi amounts stored as Int in microPi units (1 Pi = 10_000_000 microPi).
+/// Use piToMicro()/microToPi() helpers in src/lib/pi-amount.ts
+/// NOTE: taxRate remains Float (it's a percentage, not money).
 
 /// Invoice status enum (TypeScript-side validation, SQLite doesn't support DB enums)
 /// Valid values: pending | paid_escrow | shipped | delivered | completed | disputed | cancelled
@@ -90,10 +89,10 @@ model Product {
   storeId     String
   name        String
   description String   @default("")
-  /// Price in Pi — use roundPi() utility for all calculations to avoid Float rounding
-  price       Float
-  /// Cost price in Pi — use roundPi() for profit calculations
-  costPrice   Float    @default(0)
+  /// Price in microPi (1 Pi = 10,000,000 microPi)
+  price       Int
+  /// Cost price in microPi
+  costPrice   Int      @default(0)
   /// Stock keeping unit identifier
   sku         String   @default("")
   /// Current stock quantity (denormalized for quick reads)
@@ -135,8 +134,8 @@ model Customer {
   /// Pi UID if customer is a Pi Network user
   piUid     String?
   notes     String   @default("")
-  /// Total amount spent in Pi — use roundPi() for calculations
-  totalSpent  Float  @default(0)
+  /// Total amount spent in microPi
+  totalSpent  Int    @default(0)
   totalOrders Int    @default(0)
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
@@ -212,14 +211,16 @@ model Invoice {
   storeId        String
   customerPiUid  String
   customerName   String
-  /// All Pi amounts use roundPi() to prevent Float rounding errors
-  subtotal       Float
-  /// Tax amount in Pi — use roundPi() for calculations
-  taxAmount      Float     @default(0)
-  /// Discount amount in Pi — use roundPi() for calculations
-  discountAmount Float     @default(0)
-  escrowFee      Float     @default(0)
-  total          Float
+  /// Subtotal in microPi
+  subtotal       Int
+  /// Tax amount in microPi
+  taxAmount      Int     @default(0)
+  /// Discount amount in microPi
+  discountAmount Int     @default(0)
+  /// Escrow fee in microPi
+  escrowFee      Int     @default(0)
+  /// Total in microPi
+  total          Int
   status         String    @default("pending")
   /// Payment method: 'pi' | 'cash' | 'card' | 'ousd'
   paymentMethod  String    @default("pi")
@@ -234,7 +235,7 @@ model Invoice {
   completedAt    DateTime?
   cancelledAt    DateTime?
 
-  store Store          @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  store Store          @relation(fields: [storeId], references: [id], onDelete: Restrict)
   items InvoiceItem[]
 
   @@index([storeId])
@@ -253,10 +254,10 @@ model InvoiceItem {
   productId   String?
   productName String
   quantity    Int
-  /// Unit price in Pi — use roundPi() for calculations
-  unitPrice   Float
-  /// Total price in Pi — use roundPi() for calculations
-  totalPrice  Float
+  /// Unit price in microPi
+  unitPrice   Int
+  /// Total price in microPi
+  totalPrice  Int
 
   invoice Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
   product Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
@@ -274,8 +275,8 @@ model TransactionLog {
   invoiceId   String?
   /// Type: 'cash' | 'pi' | 'ousd' | 'refund' | 'expense'
   type        String
-  /// Amount in Pi — use roundPi() for calculations
-  amount      Float
+  /// Amount in microPi
+  amount      Int
   /// Currency: 'Pi' | 'USD' | 'OUSD'
   currency    String   @default("Pi")
   description String   @default("")
@@ -285,7 +286,7 @@ model TransactionLog {
   createdBy   String   @default("")
   createdAt   DateTime @default(now())
 
-  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  store Store @relation(fields: [storeId], references: [id], onDelete: Restrict)
 
   @@index([storeId])
   @@index([invoiceId])
@@ -301,21 +302,21 @@ model LocalSale {
   /// Optional link to customer
   customerId    String?
   invoiceNumber String
-  /// Subtotal in Pi — use roundPi() for calculations
-  subtotal      Float
-  /// Tax amount in Pi — use roundPi() for calculations
-  taxAmount     Float    @default(0)
-  /// Discount amount in Pi — use roundPi() for calculations
-  discountAmount Float   @default(0)
-  /// Total in Pi — use roundPi() for calculations
-  total         Float
+  /// Subtotal in microPi
+  subtotal      Int
+  /// Tax amount in microPi
+  taxAmount     Int    @default(0)
+  /// Discount amount in microPi
+  discountAmount Int   @default(0)
+  /// Total in microPi
+  total         Int
   /// Payment method: 'cash' | 'card' | 'pi'
   paymentMethod String   @default("cash")
   notes         String   @default("")
   createdBy     String   @default("")
   createdAt     DateTime @default(now())
 
-  store    Store           @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  store    Store           @relation(fields: [storeId], references: [id], onDelete: Restrict)
   customer Customer?       @relation(fields: [customerId], references: [id], onDelete: SetNull)
   items    LocalSaleItem[]
 
@@ -334,10 +335,10 @@ model LocalSaleItem {
   productId   String?
   productName String
   quantity    Int
-  /// Unit price in Pi — use roundPi() for calculations
-  unitPrice   Float
-  /// Total price in Pi — use roundPi() for calculations
-  totalPrice  Float
+  /// Unit price in microPi
+  unitPrice   Int
+  /// Total price in microPi
+  totalPrice  Int
 
   localSale LocalSale @relation(fields: [localSaleId], references: [id], onDelete: Cascade)
   product   Product?  @relation(fields: [productId], references: [id], onDelete: SetNull)
@@ -354,15 +355,15 @@ model Expense {
   /// Category: 'rent' | 'utilities' | 'salaries' | 'supplies' | 'marketing' | 'shipping' | 'other'
   category    String
   description String
-  /// Amount in Pi — use roundPi() for calculations
-  amount      Float
+  /// Amount in microPi
+  amount      Int
   date        DateTime
   /// URL to receipt image/document
   receipt     String   @default("")
   createdBy   String   @default("")
   createdAt   DateTime @default(now())
 
-  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  store Store @relation(fields: [storeId], references: [id], onDelete: Restrict)
 
   @@index([storeId])
   @@index([category])
@@ -449,8 +450,8 @@ model EscrowTransaction {
   invoiceId     String
   /// Pi payment transaction ID
   txid          String   @default("")
-  /// Amount in Pi — use roundPi() for calculations
-  amount        Float
+  /// Amount in microPi
+  amount        Int
   /// Pi UID of the sender (buyer for U2A, platform wallet for A2U)
   fromUid       String
   /// Pi UID of the receiver (platform wallet for U2A, seller for A2U)
@@ -461,8 +462,8 @@ model EscrowTransaction {
   createdAt     DateTime @default(now())
   completedAt   DateTime?
 
-  fromUser User @relation("TxFrom", fields: [fromUid], references: [piUid], onDelete: Cascade)
-  toUser   User @relation("TxTo", fields: [toUid], references: [piUid], onDelete: Cascade)
+  fromUser User @relation("TxFrom", fields: [fromUid], references: [piUid], onDelete: Restrict)
+  toUser   User @relation("TxTo", fields: [toUid], references: [piUid], onDelete: Restrict)
 
   @@index([invoiceId])
   @@index([fromUid])

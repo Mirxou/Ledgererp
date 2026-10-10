@@ -69,6 +69,15 @@ screenshot-*.png
 # Bun
 bun.lock
 
+# Worklog (contains sensitive info)
+worklog.md
+
+# Uploads
+upload/
+
+# Logs
+*.log
+
 # Sandbox-specific (not part of the audit dashboard)
 skills/
 examples/

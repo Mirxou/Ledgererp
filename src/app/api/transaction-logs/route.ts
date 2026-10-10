@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { verifyPiAuth, sanitizeString, checkRateLimit } from "@/lib/api-auth";
+import { verifyPiAuth, verifyStoreOwnership, sanitizeString, checkRateLimit } from "@/lib/api-auth";
 import { roundPi } from "@/lib/pi-amount";
 
 const VALID_TRANSACTION_TYPES = ["cash", "pi", "ousd", "refund", "expense"];
@@ -46,13 +46,28 @@ const VALID_TRANSITIONS: Record<string, string[]> = {
 // ─── GET /api/transaction-logs ──────────────────────────────────────────
 
 // GET /api/transaction-logs?storeId=xxx&type=xxx&from=xxx&to=xxx&stats=true
+// SECURITY: Auth required + storeId is required for GET
 export async function GET(req: NextRequest) {
   try {
     const rateLimitErr = checkRateLimit(req);
     if (rateLimitErr) return rateLimitErr;
 
+    // ── SECURITY: Auth required for GET ──
+    const auth = await verifyPiAuth(req);
+    if (!auth.ok) return auth.response;
+
     const { searchParams } = new URL(req.url);
     const storeId = searchParams.get("storeId");
+
+    // ── SECURITY: storeId is REQUIRED for GET ──
+    if (!storeId) {
+      return NextResponse.json({ error: "storeId is required" }, { status: 400 });
+    }
+
+    // ── SECURITY: Verify store ownership ──
+    const ownership = await verifyStoreOwnership(req, storeId, auth.user.uid);
+    if (!ownership.ok) return ownership.response!;
+
     const type = searchParams.get("type");
     const from = searchParams.get("from");
     const to = searchParams.get("to");
@@ -60,10 +75,6 @@ export async function GET(req: NextRequest) {
 
     // ── Stats mode ──
     if (stats) {
-      if (!storeId) {
-        return NextResponse.json({ error: "storeId required for stats" }, { status: 400 });
-      }
-
       const transactions = await db.transactionLog.findMany({
         where: { storeId },
       });
@@ -101,8 +112,7 @@ export async function GET(req: NextRequest) {
     }
 
     // ── List mode ──
-    const where: Record<string, unknown> = {};
-    if (storeId) where.storeId = storeId;
+    const where: Record<string, unknown> = { storeId };
     if (type) {
       if (!VALID_TRANSACTION_TYPES.includes(type)) {
         return NextResponse.json({ error: "Invalid transaction type" }, { status: 400 });
@@ -122,14 +132,12 @@ export async function GET(req: NextRequest) {
 
     const [transactions, total] = await Promise.all([
       db.transactionLog.findMany({
-        where: Object.keys(where).length > 0 ? where : undefined,
+        where,
         orderBy: { createdAt: "desc" },
         skip,
         take: limit,
       }),
-      db.transactionLog.count({
-        where: Object.keys(where).length > 0 ? where : undefined,
-      }),
+      db.transactionLog.count({ where }),
     ]);
 
     const totalPages = Math.ceil(total / limit);

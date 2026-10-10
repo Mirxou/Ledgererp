@@ -1,17 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { sanitizeString, validateNonNegativeNumber, checkRateLimit } from "@/lib/api-auth";
-import { roundPi } from "@/lib/pi-amount";
+import { verifyPiAuth, sanitizeString, validateNonNegativeNumber, checkRateLimit } from "@/lib/api-auth";
+import { roundPi, calcEscrowFee } from "@/lib/pi-amount";
+
+/** Maximum allowed price for custom items (without productId) */
+const MAX_CUSTOM_ITEM_PRICE = 10000;
 
 /**
  * POST /api/invoices/buyer-create
  *
- * PUBLIC endpoint for creating invoices from the store buyer view.
- * Does NOT require auth — anyone can create an invoice as a buyer.
- * This is safe because:
- * - The invoice starts in "pending" status (no money moves)
- * - The buyer must still pay through Pi SDK (which requires auth)
- * - Store ownership is NOT checked (buyer is creating, not merchant)
+ * Buyer-facing endpoint for creating invoices from the store buyer view.
+ * SECURITY: Auth required — buyer must be authenticated via Pi.
+ * - customerPiUid comes from auth token (NOT client-provided)
+ * - Product prices come from DB (NOT client-provided) for items with productId
+ * - Custom items (no productId) allow client price but capped at MAX_CUSTOM_ITEM_PRICE
+ * - escrowFee is calculated server-side from store settings
  */
 function genInvoiceNumber(): string {
   const d = new Date();
@@ -26,47 +29,120 @@ export async function POST(req: NextRequest) {
     const rateLimitErr = checkRateLimit(req);
     if (rateLimitErr) return rateLimitErr;
 
+    // ── SECURITY: Auth required — buyer must be authenticated ──
+    const auth = await verifyPiAuth(req);
+    if (!auth.ok) return auth.response;
+
+    // ── SECURITY: customerPiUid from auth token (ignore client-provided) ──
+    const customerPiUid = auth.user.uid;
+
     const body = await req.json();
-    const { storeId, items, notes, escrowFee } = body;
-    const customerPiUid = sanitizeString(body.customerPiUid, 100);
+    const { storeId, items, notes } = body;
     const customerName = sanitizeString(body.customerName, 100);
 
-    if (!storeId || !customerPiUid || !items || !Array.isArray(items) || items.length === 0) {
+    if (!storeId || !items || !Array.isArray(items) || items.length === 0) {
       return NextResponse.json(
-        { error: "storeId, customerPiUid, and items array required" },
+        { error: "storeId and items array required" },
         { status: 400 }
       );
     }
 
-    // Verify the store exists
+    // Verify the store exists and is active
     const store = await db.store.findUnique({
       where: { id: storeId },
-      select: { id: true, name: true, piUid: true },
+      select: { id: true, name: true, piUid: true, taxRate: true },
     });
 
     if (!store) {
       return NextResponse.json({ error: "Store not found" }, { status: 404 });
     }
 
-    // Validate items
-    const validatedItems = items.map((i: { productId?: string; productName?: string; quantity?: number; unitPrice?: number }) => {
+    // ── SECURITY: Server-side price resolution ──
+    const validatedItems: {
+      productId: string | null;
+      productName: string;
+      quantity: number;
+      unitPrice: number;
+      totalPrice: number;
+    }[] = [];
+
+    for (const i of items) {
+      const rawProductId = i.productId ? sanitizeString(i.productId, 100) : null;
       const productName = sanitizeString(i.productName, 100);
       const quantity = Number(i.quantity);
-      const unitPrice = Number(i.unitPrice);
-      if (!productName || !Number.isInteger(quantity) || quantity < 1 || isNaN(unitPrice) || unitPrice <= 0) {
-        throw new Error("Invalid item: productName, quantity (positive int), and unitPrice (positive) required");
+
+      if (!productName || !Number.isInteger(quantity) || quantity < 1) {
+        return NextResponse.json(
+          { error: "Invalid item: productName and quantity (positive int) required" },
+          { status: 400 }
+        );
       }
-      return {
-        productId: i.productId || null,
+
+      let unitPrice: number;
+
+      if (rawProductId) {
+        // ── Item with productId: look up price from DB (ignore client price) ──
+        const product = await db.product.findUnique({
+          where: { id: rawProductId },
+          select: { price: true, isActive: true, storeId: true },
+        });
+
+        if (!product) {
+          return NextResponse.json(
+            { error: `Product ${rawProductId} not found` },
+            { status: 400 }
+          );
+        }
+
+        if (!product.isActive) {
+          return NextResponse.json(
+            { error: `Product '${productName}' is no longer available` },
+            { status: 400 }
+          );
+        }
+
+        if (product.storeId !== storeId) {
+          return NextResponse.json(
+            { error: `Product '${productName}' does not belong to this store` },
+            { status: 400 }
+          );
+        }
+
+        unitPrice = product.price;
+      } else {
+        // ── Custom item (no productId): validate client-provided price ──
+        const clientPrice = Number(i.unitPrice);
+        if (isNaN(clientPrice) || !isFinite(clientPrice) || clientPrice <= 0) {
+          return NextResponse.json(
+            { error: "Custom item unitPrice must be a positive number" },
+            { status: 400 }
+          );
+        }
+
+        if (clientPrice > MAX_CUSTOM_ITEM_PRICE) {
+          return NextResponse.json(
+            { error: `Custom item price cannot exceed ${MAX_CUSTOM_ITEM_PRICE}π` },
+            { status: 400 }
+          );
+        }
+
+        unitPrice = roundPi(clientPrice);
+      }
+
+      validatedItems.push({
+        productId: rawProductId,
         productName,
         quantity,
         unitPrice,
         totalPrice: roundPi(unitPrice * quantity),
-      };
-    });
+      });
+    }
 
-    const subtotal = roundPi(validatedItems.reduce((sum: number, i) => sum + i.totalPrice, 0));
-    const fee = roundPi(validateNonNegativeNumber(escrowFee) || 0);
+    const subtotal = roundPi(validatedItems.reduce((sum, i) => sum + i.totalPrice, 0));
+
+    // ── SECURITY: Calculate escrowFee server-side from store settings ──
+    const escrowFeeRate = store.taxRate > 0 ? store.taxRate / 100 : 0.02; // Default 2% if no tax rate
+    const fee = calcEscrowFee(subtotal, escrowFeeRate);
     const total = roundPi(subtotal + fee);
 
     const invoice = await db.invoice.create({
@@ -74,7 +150,7 @@ export async function POST(req: NextRequest) {
         invoiceNumber: genInvoiceNumber(),
         storeId,
         customerPiUid,
-        customerName: customerName || "",
+        customerName: customerName || auth.user.username || "",
         subtotal,
         escrowFee: fee,
         total,

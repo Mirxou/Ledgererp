@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { verifyPiAuth, verifyStoreOwnership, sanitizeString, validateNonNegativeNumber, isValidInvoiceStatus, checkRateLimit } from "@/lib/api-auth";
-import { roundPi } from "@/lib/pi-amount";
+import { roundPi, calcEscrowFee } from "@/lib/pi-amount";
 import { reserveStock, deductStock, releaseReservedStock } from "@/lib/inventory-guard";
 
 /** Invoice status transition rules — enforces the escrow flow */
@@ -22,6 +22,40 @@ function isValidTransition(current: string, next: string): boolean {
   return allowed.includes(next);
 }
 
+/**
+ * Merchant-allowed state transitions for PATCH.
+ * Excludes transitions that should only happen via other secure paths:
+ * - pending → paid_escrow: must come via Pi payment verification (webhook)
+ * - shipped → delivered: must come from buyer confirmation
+ */
+const MERCHANT_ALLOWED_TRANSITIONS: Record<string, string[]> = {
+  pending:      ["cancelled"],
+  paid_escrow:  ["shipped", "disputed", "cancelled"],
+  shipped:      ["disputed"],
+  delivered:    ["completed"],
+  completed:    [],
+  disputed:    [],
+  cancelled:   [],
+  releasing:   ["completed", "cancelled"],
+};
+
+function isMerchantAllowedTransition(current: string, next: string): boolean {
+  const allowed = MERCHANT_ALLOWED_TRANSITIONS[current];
+  if (!allowed) return false;
+  return allowed.includes(next);
+}
+
+// Pi API for payment verification
+const PI_API_BASE = process.env.NODE_ENV === "development"
+  ? "https://api.sandbox.minepi.com/v2"
+  : "https://api.minepi.com/v2";
+
+function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutMs: number = 10_000): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  return fetch(url, { ...options, signal: controller.signal }).finally(() => clearTimeout(timer));
+}
+
 function genInvoiceNumber(): string {
   const d = new Date();
   const prefix = "INV";
@@ -34,6 +68,7 @@ const VALID_PAYMENT_METHODS = ["pi", "cash", "card", "ousd"];
 
 // GET /api/invoices?storeId=xxx&customerPiUid=xxx&status=xxx&invoiceNumber=INV-xxx&paymentMethod=xxx
 // invoiceNumber is a PUBLIC endpoint for buyers — no auth required
+// All other list modes REQUIRE auth
 export async function GET(req: NextRequest) {
   try {
     const rateLimitErr = checkRateLimit(req);
@@ -61,6 +96,15 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ data: [invoice], total: 1, page: 1, limit: 1, totalPages: 1 });
     }
 
+    // ── SECURITY: For list mode (non-invoiceNumber), auth is REQUIRED ──
+    // At least one filter must be provided (no unfiltered access)
+    if (!storeId && !customerPiUid) {
+      return NextResponse.json(
+        { error: "At least one filter (storeId or customerPiUid) is required" },
+        { status: 400 }
+      );
+    }
+
     // Validate status if provided
     if (status && !isValidInvoiceStatus(status)) {
       return NextResponse.json({ error: "Invalid status filter" }, { status: 400 });
@@ -69,6 +113,26 @@ export async function GET(req: NextRequest) {
     // Validate paymentMethod if provided
     if (paymentMethod && !VALID_PAYMENT_METHODS.includes(paymentMethod)) {
       return NextResponse.json({ error: "Invalid paymentMethod filter" }, { status: 400 });
+    }
+
+    // ── SECURITY: Auth required for list mode ──
+    const auth = await verifyPiAuth(req);
+    if (!auth.ok) return auth.response;
+
+    // ── SECURITY: Ownership check based on filter type ──
+    if (storeId) {
+      // Store filter: verify the user owns this store
+      const ownership = await verifyStoreOwnership(req, storeId, auth.user.uid);
+      if (!ownership.ok) return ownership.response!;
+    } else if (customerPiUid) {
+      // Customer filter: verify the authenticated user is the customer
+      // Users can only see their own invoices
+      if (auth.user.uid !== customerPiUid) {
+        return NextResponse.json(
+          { error: "You can only view your own invoices" },
+          { status: 403 }
+        );
+      }
     }
 
     const where: Record<string, unknown> = {};
@@ -83,13 +147,13 @@ export async function GET(req: NextRequest) {
 
     const [invoices, total] = await Promise.all([
       db.invoice.findMany({
-        where: Object.keys(where).length > 0 ? where : undefined,
+        where,
         include: { items: true, store: { select: { name: true, piUid: true } } },
         orderBy: { createdAt: "desc" },
         skip,
         take: limit,
       }),
-      db.invoice.count({ where: Object.keys(where).length > 0 ? where : undefined }),
+      db.invoice.count({ where }),
     ]);
     const totalPages = Math.ceil(total / limit);
     return NextResponse.json({ data: invoices, total, page, limit, totalPages });
@@ -183,7 +247,9 @@ export async function POST(req: NextRequest) {
 }
 
 // PATCH /api/invoices — update invoice status (auth + ownership required)
-// Supports paymentMethod, taxAmount, discountAmount
+// SECURITY: Restricts merchant state transitions:
+// - pending → paid_escrow is BLOCKED (must come from Pi payment verification)
+// - shipped → delivered is BLOCKED (must come from buyer confirmation)
 export async function PATCH(req: NextRequest) {
   try {
     const rateLimitErr = checkRateLimit(req);
@@ -215,7 +281,80 @@ export async function PATCH(req: NextRequest) {
     const ownership = await verifyStoreOwnership(req, invoice.storeId, auth.user.uid);
     if (!ownership.ok) return ownership.response!;
 
-    // Validate status transition (enforce escrow flow)
+    // ── SECURITY: Check merchant-allowed transitions ──
+    if (status && status !== invoice.status) {
+      // Block pending → paid_escrow via PATCH (must come from Pi payment verification)
+      if (invoice.status === "pending" && status === "paid_escrow") {
+        // If a paymentTxId is provided, verify it with Pi API
+        if (paymentTxId) {
+          const apiKey = process.env.PI_API_KEY;
+          if (!apiKey) {
+            return NextResponse.json(
+              { error: "Payment verification not available (PI_API_KEY not configured). Use Pi SDK payment flow instead." },
+              { status: 503 }
+            );
+          }
+
+          try {
+            const piRes = await fetchWithTimeout(`${PI_API_BASE}/payments/${sanitizeString(paymentTxId, 200)}`, {
+              method: "GET",
+              headers: { Authorization: `Key ${apiKey}` },
+            });
+
+            if (!piRes.ok) {
+              console.error(`[invoices/PATCH] Pi payment verification failed for ${paymentTxId}: ${piRes.status}`);
+              return NextResponse.json(
+                { error: "Payment verification failed. Transition pending→paid_escrow must come from verified Pi payment." },
+                { status: 403 }
+              );
+            }
+
+            const paymentData = await piRes.json();
+            // Verify payment is actually completed/in escrow
+            if (paymentData.status !== "completed" && paymentData.status !== "paid_escrow" && paymentData.status !== "approved") {
+              console.error(`[invoices/PATCH] Pi payment ${paymentTxId} status is '${paymentData.status}', not verified as paid`);
+              return NextResponse.json(
+                { error: "Payment not verified as paid on Pi servers" },
+                { status: 403 }
+              );
+            }
+            // Payment verified — allow the transition
+            console.log(`[invoices/PATCH] Payment ${paymentTxId} verified with Pi API, allowing pending→paid_escrow`);
+          } catch (err) {
+            console.error(`[invoices/PATCH] Pi API verification error:`, err);
+            return NextResponse.json(
+              { error: "Payment verification service unavailable. Try again later." },
+              { status: 503 }
+            );
+          }
+        } else {
+          return NextResponse.json(
+            { error: "Transition pending→paid_escrow must come from Pi payment verification. Provide a valid paymentTxId or use the Pi SDK payment flow." },
+            { status: 403 }
+          );
+        }
+      }
+
+      // Block shipped → delivered via PATCH (must come from buyer)
+      if (invoice.status === "shipped" && status === "delivered") {
+        return NextResponse.json(
+          { error: "Delivery confirmation must come from the buyer" },
+          { status: 403 }
+        );
+      }
+
+      // For all other transitions, check merchant-allowed list
+      if (invoice.status !== "pending" || status !== "paid_escrow") { // already handled above
+        if (!isMerchantAllowedTransition(invoice.status, status)) {
+          return NextResponse.json(
+            { error: `Merchant cannot transition from '${invoice.status}' to '${status}'. Allowed: ${MERCHANT_ALLOWED_TRANSITIONS[invoice.status]?.join(", ") || "none"}` },
+            { status: 403 }
+          );
+        }
+      }
+    }
+
+    // Also validate against the general transition rules
     if (status && !isValidTransition(invoice.status, status)) {
       return NextResponse.json(
         { error: `Cannot transition from '${invoice.status}' to '${status}'. Allowed: ${VALID_TRANSITIONS[invoice.status]?.join(", ") || "none"}` },
@@ -270,10 +409,7 @@ export async function PATCH(req: NextRequest) {
 
         if (!reserveResult.success) {
           return NextResponse.json(
-            {
-              error: "مخزون غير كاف للحجز",
-              details: reserveResult.conflicts,
-            },
+            { error: "Insufficient stock for reservation" },
             { status: 409 }
           );
         }

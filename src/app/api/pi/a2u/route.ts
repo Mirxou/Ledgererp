@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { verifyPiAuth, verifyStoreOwnership, sanitizeString, validatePositiveNumber, checkRateLimit } from "@/lib/api-auth";
+import { verifyPiAuth, verifyStoreOwnership, sanitizeString, checkRateLimit } from "@/lib/api-auth";
 
 // Switch between sandbox and mainnet based on NODE_ENV
 const PI_API_BASE = process.env.NODE_ENV === "development"
@@ -44,7 +44,8 @@ function piHeaders(): HeadersInit {
 
 // POST /api/pi/a2u
 // Creates an App-to-User payment for escrow release.
-// REQUIRES AUTH: Only the store owner can release escrow.
+// REQUIRES AUTH + invoiceId: Only the store owner can release escrow.
+// Amount and recipient (uid) are taken from DB — not client-provided.
 export async function POST(req: NextRequest) {
   try {
     // Rate limit (stricter for payments: 10/min)
@@ -60,47 +61,49 @@ export async function POST(req: NextRequest) {
       paymentId,
       memo,
       metadata,
-      uid,         // Recipient's Pi UID
-      invoiceId,   // Our invoice ID
+      invoiceId,   // REQUIRED — we no longer accept A2U without an invoice
     } = body;
-    const amount = validatePositiveNumber(body.amount);
 
-    if (!amount || !uid) {
+    // ── SECURITY: invoiceId is now REQUIRED ──
+    if (!invoiceId || typeof invoiceId !== "string") {
       return NextResponse.json(
-        { error: "amount (positive number) and uid are required" },
+        { error: "invoiceId is required for A2U payments" },
         { status: 400 },
       );
     }
 
-    // OWNERSHIP CHECK: If invoiceId provided, verify the authenticated user owns the store
-    if (invoiceId) {
-      const invoice = await db.invoice.findUnique({
-        where: { id: invoiceId },
-        select: { storeId: true, status: true, total: true },
-      });
+    // ── Get invoice from DB — amount and recipient come from DB, not client ──
+    const invoice = await db.invoice.findUnique({
+      where: { id: invoiceId },
+      select: { storeId: true, status: true, total: true, subtotal: true, customerPiUid: true, invoiceNumber: true },
+    });
 
-      if (!invoice) {
-        return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
-      }
+    if (!invoice) {
+      return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
+    }
 
-      const ownership = await verifyStoreOwnership(req, invoice.storeId, auth.user.uid);
-      if (!ownership.ok) return ownership.response!;
+    // ── OWNERSHIP CHECK: Verify the authenticated user owns the store ──
+    const ownership = await verifyStoreOwnership(req, invoice.storeId, auth.user.uid);
+    if (!ownership.ok) return ownership.response!;
 
-      // Verify invoice is in a releasable state
-      if (invoice.status !== "delivered" && invoice.status !== "paid_escrow" && invoice.status !== "shipped") {
-        return NextResponse.json(
-          { error: `Cannot release escrow for invoice in '${invoice.status}' status. Must be delivered, shipped, or paid_escrow.` },
-          { status: 400 }
-        );
-      }
+    // ── Verify invoice is in a releasable state ──
+    if (invoice.status !== "delivered" && invoice.status !== "paid_escrow" && invoice.status !== "shipped") {
+      return NextResponse.json(
+        { error: `Cannot release escrow for invoice in '${invoice.status}' status. Must be delivered, shipped, or paid_escrow.` },
+        { status: 400 }
+      );
+    }
 
-      // Sanity check: amount should not exceed invoice total
-      if (amount > invoice.total * 1.01) { // 1% tolerance for rounding
-        return NextResponse.json(
-          { error: `Amount ${amount}π exceeds invoice total ${invoice.total}π` },
-          { status: 400 }
-        );
-      }
+    // ── SECURITY: Get amount and uid from DB (ignore client-provided values) ──
+    const amount = invoice.total;
+    const uid = invoice.customerPiUid;
+
+    if (!amount || amount <= 0) {
+      return NextResponse.json({ error: "Invoice total is invalid" }, { status: 400 });
+    }
+
+    if (!uid) {
+      return NextResponse.json({ error: "Invoice has no customer Pi UID" }, { status: 400 });
     }
 
     // Verify wallet is configured
@@ -123,7 +126,7 @@ export async function POST(req: NextRequest) {
       paymentId: paymentId || undefined,
     };
 
-    console.log(`[pi/a2u] Creating A2U payment: ${amount}π to ${uid}, from wallet ${walletAddress.substring(0, 8)}...`);
+    console.log(`[pi/a2u] Creating A2U payment: ${amount}π to ${uid} (invoice ${invoice.invoiceNumber}), from wallet ${walletAddress.substring(0, 8)}...`);
 
     // Call Pi API to create an A2U payment
     const piRes = await fetchWithTimeout(`${PI_API_BASE}/payments`, {
@@ -135,69 +138,66 @@ export async function POST(req: NextRequest) {
     if (!piRes.ok) {
       const errText = await piRes.text();
       console.error(`[pi/a2u] Pi API error ${piRes.status}:`, errText);
+      // SECURITY: Don't leak Pi API error details
       return NextResponse.json(
-        { error: `A2U payment failed: ${piRes.status}`, details: errText },
-        { status: piRes.status },
+        { error: `A2U payment failed: ${piRes.status}` },
+        { status: piRes.status >= 500 ? 502 : piRes.status },
       );
     }
 
     const paymentDTO = await piRes.json();
 
-    // Update invoice with release txid if we have an invoiceId
-    if (invoiceId) {
-      const txid =
-        paymentDTO?.transaction?.txid ||
-        paymentDTO?.txid ||
-        "";
+    // ── SECURITY: Atomic status update to prevent double-processing ──
+    // Only update if invoice is still in "delivered" (or appropriate) state
+    const txid = paymentDTO?.transaction?.txid || paymentDTO?.txid || "";
 
-      // C3 fix: Use intermediate 'releasing' status instead of 'completed'
-      // The invoice will be marked 'completed' after Pi confirms the payment settled
-      await db.invoice.update({
-        where: { id: invoiceId },
-        data: {
-          releaseTxId: txid,
-          status: "releasing",
-        },
-      });
+    // Determine which statuses are valid for atomic transition
+    const releasableStatuses = ["delivered", "paid_escrow", "shipped"];
+    const result = await db.invoice.updateMany({
+      where: { id: invoiceId, status: { in: releasableStatuses } },
+      data: { status: "releasing", releaseTxId: txid },
+    });
 
-      // Record A2U EscrowTransaction in DB
-      const invoice = await db.invoice.findUnique({
-        where: { id: invoiceId },
-        select: { subtotal: true, customerPiUid: true },
-      });
-
-      if (invoice) {
-        try {
-          await db.escrowTransaction.create({
-            data: {
-              type: "A2U",
-              invoiceId,
-              txid: txid || paymentDTO?.identifier || "",
-              amount: invoice.subtotal,
-              fromUid: auth.user.uid,
-              toUid: sanitizeString(uid, 100),
-              memo: sanitizeString(memo, 200) || `إطلاق ضمان فاتورة`,
-              status: "pending",
-            },
-          });
-        } catch (txErr) {
-          console.warn("[pi/a2u] Could not record EscrowTransaction:", txErr);
-        }
-      }
-
-      // Create audit log
-      await db.auditLog.create({
-        data: {
-          action: "escrow_release",
-          userId: auth.user.uid,
-          entity: "invoice",
-          entityId: invoiceId,
-          details: `إطلاق ضمان: ${invoice?.subtotal || amount}π — txid: ${txid}`,
-        },
-      });
-
-      console.log(`[pi/a2u] Invoice ${invoiceId} updated: releasing, txid=${txid}`);
+    if (result.count === 0) {
+      console.error(`[pi/a2u] SECURITY: Double-processing detected for invoice ${invoiceId} — A2U payment created but invoice no longer in releasable state`);
+      // The A2U payment was created on Pi's side but we can't update the invoice.
+      // This is a race condition — log for manual reconciliation.
+      return NextResponse.json(
+        { error: "Invoice not in deliverable state or already being released" },
+        { status: 409 }
+      );
     }
+
+    // Record A2U EscrowTransaction in DB
+    try {
+      await db.escrowTransaction.create({
+        data: {
+          type: "A2U",
+          invoiceId,
+          txid: txid || paymentDTO?.identifier || "",
+          amount: invoice.subtotal,
+          fromUid: auth.user.uid,
+          toUid: sanitizeString(uid, 100),
+          memo: sanitizeString(memo, 200) || "Escrow release",
+          status: "pending",
+        },
+      });
+    } catch (txErr) {
+      console.warn("[pi/a2u] Could not record EscrowTransaction:", txErr);
+    }
+
+    // Create audit log
+    await db.auditLog.create({
+      data: {
+        action: "escrow_release",
+        userId: auth.user.uid,
+        entity: "invoice",
+        entityId: invoiceId,
+        details: `Escrow release: ${invoice.subtotal}π to ${uid} — txid: ${txid}`,
+      },
+    });
+
+    console.log(`[pi/a2u] Invoice ${invoiceId} (${invoice.invoiceNumber}) updated: releasing, txid=${txid}`);
 
     return NextResponse.json({
       success: true,
@@ -207,7 +207,7 @@ export async function POST(req: NextRequest) {
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
     console.error("[pi/a2u]", message);
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json({ error: "A2U payment processing failed" }, { status: 500 });
   }
 }
 
