@@ -60,11 +60,20 @@ repo_dir_*.json
 repo_main.json
 repo_tree*.json
 
-# Screenshots (QA artifacts)
-qa_screenshot_*.png
-v2_*.png
-v3_*.png
-screenshot-*.png
+# Screenshots & QA artifacts (all PNG/JPG in root)
+*.png
+*.jpg
+*.jpeg
+!public/**/*.png
+!public/**/*.jpg
+!public/**/*.jpeg
+
+# Junk JSON files (page*.json, search*.json)
+page*.json
+search*.json
+
+# Audit reports (generated)
+AUDIT_REPORT.md
 
 # Bun
 bun.lock

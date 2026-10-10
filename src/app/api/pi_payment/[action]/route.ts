@@ -168,8 +168,9 @@ async function handleApprove(body: { paymentId?: string; invoiceId?: string }, u
   if (!piRes.ok) {
     const errText = await piRes.text();
     console.error(`[pi_payment/approve] Pi API error ${piRes.status}:`, errText);
+    // SECURITY: Don't leak Pi API error details to client
     return NextResponse.json(
-      { error: `Pi approval failed: ${piRes.status}`, details: errText },
+      { error: `Pi approval failed: ${piRes.status}` },
       { status: piRes.status },
     );
   }
@@ -230,8 +231,9 @@ async function handleComplete(body: {
   if (!piRes.ok) {
     const errText = await piRes.text();
     console.error(`[pi_payment/complete] Pi API error ${piRes.status}:`, errText);
+    // SECURITY: Don't leak Pi API error details to client
     return NextResponse.json(
-      { error: `Pi completion failed: ${piRes.status}`, details: errText },
+      { error: `Pi completion failed: ${piRes.status}` },
       { status: piRes.status },
     );
   }
@@ -375,10 +377,13 @@ async function handleIncomplete(body: {
   console.log("[pi_payment/incomplete] Found incomplete payment:", paymentId);
 
   if (paymentId) {
-    const updated = await db.invoice.updateMany({
+    // SECURITY: Only cancel PENDING invoices.
+    // paid_escrow invoices have approved payments in escrow — cancelling them
+    // would destroy legitimate transactions. Log a warning instead.
+    const cancelled = await db.invoice.updateMany({
       where: {
         paymentTxId: paymentId,
-        status: { in: ["pending", "paid_escrow"] },
+        status: "pending",
       },
       data: {
         status: "cancelled",
@@ -387,18 +392,31 @@ async function handleIncomplete(body: {
       },
     });
 
-    if (updated.count > 0) {
+    // Warn about paid_escrow invoices with this paymentId (DO NOT cancel them)
+    const paidEscrow = await db.invoice.count({
+      where: {
+        paymentTxId: paymentId,
+        status: "paid_escrow",
+      },
+    });
+
+    if (paidEscrow > 0) {
+      console.warn(
+        `[pi_payment/incomplete] SECURITY: Found ${paidEscrow} paid_escrow invoice(s) for incomplete payment ${paymentId} — NOT cancelling (payment may still be processing on blockchain)`
+      );
+    }
+
+    if (cancelled.count > 0) {
       return NextResponse.json({
         success: true,
-        message: `Updated ${updated.count} invoice(s) to cancelled`,
-        payment,
+        message: `Cancelled ${cancelled.count} pending invoice(s)`,
+        warnings: paidEscrow > 0 ? [`${paidEscrow} paid_escrow invoice(s) not cancelled (payment may still be processing)`] : [],
       });
     }
   }
 
   return NextResponse.json({
     success: true,
-    message: "Incomplete payment acknowledged, no matching invoice found",
-    payment,
+    message: "Incomplete payment acknowledged, no matching pending invoice found",
   });
 }

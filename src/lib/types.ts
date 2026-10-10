@@ -53,8 +53,8 @@ export interface InvoiceData {
   total: number;
   status: InvoiceStatus;
   notes: string;
-  paymentTxId: string;
-  releaseTxId: string;
+  paymentTxId: string | null;
+  releaseTxId: string | null;
   createdAt: string;
   updatedAt: string;
   paidAt?: string | null;

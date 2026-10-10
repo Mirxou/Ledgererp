@@ -1693,3 +1693,37 @@ Stage Summary:
 - Insecure endpoints removed (pi/payment)
 - Secrets redacted and .gitignore updated
 - System still fully functional after security hardening
+
+---
+Task ID: security-hardening-final
+Agent: Main Orchestrator
+Task: Complete security hardening — unique constraints, handleIncomplete fix, error leaking fix, repo cleanup
+
+Work Log:
+- Verified all 7 critical security vulnerabilities were already fixed in previous sessions:
+  - webhook: verifyWebhookSignature() fetches from Pi API (✅)
+  - a2u: invoiceId mandatory, amount/uid from DB, atomic update (✅)
+  - transaction-logs: verifyPiAuth + storeId required (✅)
+  - buyer-create: auth + prices from DB + fees server-side (✅)
+  - invoices: auth for GET list, merchant transition restrictions (✅)
+  - pi/payment: deleted (✅)
+  - Prisma: Int microPi, Restrict on Invoice (✅)
+- Added unique constraint on Invoice.paymentTxId (String? @unique) — prevents double-payment processing
+- Added unique constraint on EscrowTransaction.txid (String? @unique) — prevents double-escrow recording
+- Made releaseTxId nullable (String?) — cleaner null semantics
+- Fixed handleIncomplete: only cancels PENDING invoices, NOT paid_escrow (critical fix — was destroying legitimate escrowed payments)
+- Removed Pi API error detail leaking in handleApprove and handleComplete (details: errText removed)
+- Updated types.ts: paymentTxId and releaseTxId changed to string | null
+- Cleaned repo: deleted 44 root screenshot files (~10MB), page*.json, search*.json, vlm-*.json, AUDIT_REPORT.md
+- Enhanced .gitignore: comprehensive PNG/JPG patterns, page/search JSON patterns, AUDIT_REPORT.md
+- Pushed Prisma schema to database (db:push succeeded)
+- Lint: 0 errors, 1 warning (font — expected)
+- Agent-browser verification: all 12 tabs working, no errors
+
+Stage Summary:
+- All critical security vulnerabilities from the static audit are now fixed
+- Unique constraints prevent double-processing of payments
+- handleIncomplete no longer destroys paid_escrow invoices
+- Pi API error details no longer leaked to clients
+- Repository cleaned of ~10MB of junk files
+- Application fully functional and verified

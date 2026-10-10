@@ -225,8 +225,10 @@ model Invoice {
   /// Payment method: 'pi' | 'cash' | 'card' | 'ousd'
   paymentMethod  String    @default("pi")
   notes          String    @default("")
-  paymentTxId    String    @default("")
-  releaseTxId    String    @default("")
+  /// Pi payment transaction ID — unique to prevent double-processing
+  paymentTxId    String?   @unique
+  /// A2U release transaction ID
+  releaseTxId    String?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
   paidAt         DateTime?
@@ -448,8 +450,8 @@ model EscrowTransaction {
   /// U2A = user-to-app (payment into escrow), A2U = app-to-user (release to seller)
   type          String
   invoiceId     String
-  /// Pi payment transaction ID
-  txid          String   @default("")
+  /// Pi payment transaction ID — unique to prevent double-processing
+  txid          String?   @unique
   /// Amount in microPi
   amount        Int
   /// Pi UID of the sender (buyer for U2A, platform wallet for A2U)
