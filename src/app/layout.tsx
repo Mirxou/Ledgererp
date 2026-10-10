@@ -6,6 +6,7 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { QueryProvider } from "@/components/QueryProvider";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { ServiceWorkerRegistrar } from "@/components/ServiceWorkerRegistrar";
+import { OfflineIndicator } from "@/components/offline-indicator";
 
 export const viewport: Viewport = {
   width: "device-width",
@@ -59,6 +60,7 @@ export default function RootLayout({
         <ThemeProvider attribute="class" defaultTheme="dark" enableSystem disableTransitionOnChange>
           <QueryProvider>
             <ErrorBoundary>
+              <OfflineIndicator />
               {children}
             </ErrorBoundary>
           </QueryProvider>

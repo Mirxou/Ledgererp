@@ -1,0 +1,47 @@
+version: "3.8"
+
+# ─── Ledgererp Development Docker Compose ──────────────────────
+# Mounts source code as volume for hot reload with Bun
+# Usage: docker compose -f docker-compose.dev.yml up
+
+services:
+  ledgererp-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: ledgererp-dev
+    ports:
+      - "3000:3000"
+    volumes:
+      # Mount source code for hot reload (excluding node_modules and .next)
+      - ./src:/app/src
+      - ./public:/app/public
+      - ./prisma:/app/prisma
+      - ./package.json:/app/package.json
+      - ./next.config.ts:/app/next.config.ts
+      - ./tailwind.config.ts:/app/tailwind.config.ts:ro
+      - ./tsconfig.json:/app/tsconfig.json:ro
+      - ./postcss.config.mjs:/app/postcss.config.mjs:ro
+      # Persist database
+      - ./db:/app/db
+    environment:
+      - NODE_ENV=development
+      - NEXT_PUBLIC_DEMO_MODE=true
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - ledgererp-net
+
+networks:
+  ledgererp-net:
+    driver: bridge

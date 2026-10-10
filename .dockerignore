@@ -1,14 +1,51 @@
+# ─── Ledgererp Docker Ignore ───────────────────────────────────
+# Reduces Docker build context size for faster builds
+
+# Dependencies (installed inside container)
 node_modules
+
+# Build output (generated inside container)
 .next
+
+# Git
 .git
 .gitignore
+
+# Database & Backups (mounted as volumes)
 db/backups
 *.db
+*.db-journal
+
+# Logs
 *.log
+dev.log
+server.log
+
+# Media & Uploads (mounted as volumes or generated at runtime)
 *.png
 *.jpg
 *.pdf
 upload/
+
+# Development & CI
 agent-ctx/
-dev.log
-server.log
+.env
+.env.local
+.env.*.local
+
+# Docker files (no need to copy into image)
+docker-compose.dev.yml
+Dockerfile.dev
+deploy.sh
+
+# IDE
+.vscode
+.idea
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Misc
+README.md
+worklog.md

@@ -1,0 +1,22 @@
+# ─── Ledgererp Development Dockerfile ──────────────────────────
+# Single-stage build with Bun for fast development with hot reload
+
+FROM oven/bun:1 AS dev
+WORKDIR /app
+
+# Copy dependency manifests
+COPY package.json bun.lockb ./
+
+# Install all dependencies (including devDependencies)
+RUN bun install --frozen-lockfile
+
+# Copy application source (will be overridden by volume mount in dev)
+COPY . .
+
+# Expose Next.js dev server port
+EXPOSE 3000
+ENV PORT=3000
+ENV HOSTNAME="0.0.0.0"
+
+# Run Next.js in development mode with hot reload
+CMD ["bun", "run", "dev"]

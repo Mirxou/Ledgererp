@@ -1,16 +1,47 @@
 {
   "name": "Ledgererp — نظام الفواتير والضمان",
   "short_name": "Ledgererp",
-  "description": "منصة الفواتير والضمان الآمن على شبكة Pi",
+  "description": "منصة الفواتير والضمان الآمن على شبكة Pi — نقطة بيع العمل دون اتصال",
   "start_url": "/",
   "display": "standalone",
   "orientation": "any",
-  "background_color": "#ffffff",
+  "background_color": "#0f172a",
   "theme_color": "#10b981",
   "lang": "ar",
   "dir": "rtl",
   "scope": "/",
-  "categories": ["business", "finance", "utilities"],
+  "categories": ["business", "finance", "utilities", "shopping"],
+  "prefer_related_applications": false,
+  "shortcuts": [
+    {
+      "name": "نقطة البيع",
+      "short_name": "POS",
+      "description": "فتح واجهة نقطة البيع",
+      "url": "/?tab=pos",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "الفواتير",
+      "short_name": "الفواتير",
+      "description": "عرض وإدارة الفواتير",
+      "url": "/?tab=invoices",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "المنتجات",
+      "short_name": "المنتجات",
+      "description": "إدارة المنتجات والأسعار",
+      "url": "/?tab=products",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "الضمان",
+      "short_name": "الضمان",
+      "description": "إدارة معاملات الضمان",
+      "url": "/?tab=escrow",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    }
+  ],
   "icons": [
     {
       "src": "/icon-192.png",
