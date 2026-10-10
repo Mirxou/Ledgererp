@@ -5,6 +5,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { ThemeProvider } from "@/components/theme-provider";
 import { QueryProvider } from "@/components/QueryProvider";
 import { ErrorBoundary } from "@/components/error-boundary";
+import { ServiceWorkerRegistrar } from "@/components/ServiceWorkerRegistrar";
 
 export const viewport: Viewport = {
   width: "device-width",
@@ -12,8 +13,8 @@ export const viewport: Viewport = {
   maximumScale: 5,
   userScalable: true,
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
-    { media: "(prefers-color-scheme: dark)", color: "#0a0a0a" },
+    { media: "(prefers-color-scheme: light)", color: "#10b981" },
+    { media: "(prefers-color-scheme: dark)", color: "#10b981" },
   ],
 };
 
@@ -43,6 +44,8 @@ export default function RootLayout({
   return (
     <html lang="ar" dir="rtl" suppressHydrationWarning>
       <head>
+        <link rel="manifest" href="/manifest.json" />
+        <meta name="theme-color" content="#10b981" />
         <link
           href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800&display=swap"
           rel="stylesheet"
@@ -60,6 +63,7 @@ export default function RootLayout({
             </ErrorBoundary>
           </QueryProvider>
         </ThemeProvider>
+        <ServiceWorkerRegistrar />
         <Toaster />
       </body>
     </html>

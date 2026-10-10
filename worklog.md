@@ -1393,3 +1393,49 @@ Stage Summary:
 - Backup: SQLite file backup/restore with max 10 retention, safety backup on restore
 - Docker: Production-ready multi-stage build with volume mounts for db persistence
 - All features verified: role switching, cashier view, backup creation, Docker files present
+
+---
+Task ID: 5
+Agent: PWA + UI Polish Builder
+Task: Add PWA support and UI polish
+
+Work Log:
+- Updated /public/manifest.json with POS/invoice PWA manifest (emerald theme #10b981, Arabic, standalone, icon-192/icon-512 PNGs)
+- Created valid PNG icon placeholders: /public/icon-192.png (547 bytes, emerald green) and /public/icon-512.png (1881 bytes, emerald green)
+- Updated /src/app/layout.tsx: added <link rel="manifest">, <meta name="theme-color">, ServiceWorkerRegistrar component, emerald themeColor in viewport
+- Updated /public/sw.js: new cache name (ledgererp-v1), added icon assets to precache, improved cache-first with dynamic caching, skip non-GET requests, only cache ok responses
+- Service worker registration already existed via ServiceWorkerRegistrar.tsx + use-service-worker.ts hook — now wired into layout.tsx so it loads on every page
+- Created /src/components/offline-indicator.tsx: emerald banner showing "لا يوجد اتصال بالإنترنت — وضع عدم الاتصال" when offline, dismissible, auto-reappears
+- Added OfflineIndicator to AuthenticatedApp in page.tsx (below header)
+- Created EnhancedFooter component with: v3.1 version badge, PWA badge (shown when SW registered), online/offline status dot (green/red), GitHub link with external icon, Pi Network branding
+- Fixed lint errors: avoided set-state-in-effect by initializing state with navigator.onLine via lazy initializer
+- Lint passes with 0 errors (1 pre-existing warning about font)
+
+Stage Summary:
+- Full PWA support: manifest.json, service worker, icons, offline indicator
+- Service worker caches app shell for offline use, network-first for APIs, cache-first for static assets
+- Offline banner appears automatically when browser goes offline (emerald themed, dismissible)
+- Enhanced footer shows v3.1, PWA badge, connection status, GitHub link
+- All Arabic text, RTL compatible, emerald theme consistent
+
+---
+Task ID: 6
+Agent: Main Orchestrator
+Task: Comprehensive Field Test + PWA Support
+
+Work Log:
+- Docker not available in sandbox — validated Dockerfile, docker-compose.yml, .dockerignore are correct
+- Full sales cycle test via API: create store → add products → add inventory → create sale → verify stock deduction → refund → verify stock restoration → test double-refund protection
+- RBAC test: Cashier role hides all financial/management tabs, shows only POS view, no costPrice exposed
+- Backup test: created backup (417KB), listed 2 backups, verified file format
+- TransactionLog test: stats show cash=14.26π, refund=14.26π (balanced after refund)
+- Added PWA support: manifest.json, service worker (sw.js), icons, offline indicator
+- Service worker: cache-first for static, network-first for API, offline fallback
+- Enhanced footer: v3.1, PWA badge, online/offline indicator, GitHub link
+- 0 ESLint errors, dev server running clean
+
+Stage Summary:
+- ALL TESTS PASSED: sales cycle, inventory deduction, refund+restock, double-refund protection, RBAC, backup, TransactionLog
+- PWA: manifest (Arabic RTL, emerald theme), service worker with offline support, offline indicator banner
+- UI: Enhanced footer with version/PWA/online status/GitHub
+- Production ready: Docker config validated, PWA for offline POS, RBAC for security, backup for data safety

@@ -43,6 +43,7 @@ import { BuyerInvoiceView } from "@/components/buyer-invoice-view";
 import { StoreDirectoryView } from "@/components/store-directory-view";
 import { StoreBuyerView } from "@/components/store-buyer-view";
 import { ErrorBoundary } from "@/components/error-boundary";
+import { OfflineIndicator } from "@/components/offline-indicator";
 import { MerchantBuyerView } from "@/components/merchant-buyer-view";
 import { PaymentsView } from "@/components/payments-view";
 import { CashierPOSView } from "@/components/cashier-pos-view";
@@ -471,6 +472,9 @@ function AuthenticatedApp({ piUid, username }: { piUid: string; username: string
         </div>
       </header>
 
+      {/* Offline Banner */}
+      <OfflineIndicator />
+
       {/* Main */}
       <main id="main-content" className="flex-1 max-w-5xl mx-auto w-full px-4 py-5 space-y-5">
         {storesRes.isLoading && !myStore ? (
@@ -628,12 +632,82 @@ function AuthenticatedApp({ piUid, username }: { piUid: string; username: string
       </Dialog>
 
       {/* Footer */}
-      <footer className="border-t mt-auto py-3 bg-muted/30">
-        <div className="max-w-5xl mx-auto px-4 flex items-center justify-between text-[11px] text-muted-foreground">
-          <span>Ledgererp — منصة الفواتير والضمان الآمن</span>
-          <span>v3.0</span>
-        </div>
-      </footer>
+      <EnhancedFooter />
     </div>
+  );
+}
+
+/* ═══ Enhanced Footer — v3.1, PWA badge, online/offline, GitHub ═══ */
+function EnhancedFooter() {
+  const [isOnline, setIsOnline] = useState(function() {
+    if (typeof window !== "undefined") return navigator.onLine;
+    return true;
+  });
+  const [swRegistered, setSwRegistered] = useState(false);
+
+  useEffect(function() {
+    const onOnline = function() { setIsOnline(true); };
+    const onOffline = function() { setIsOnline(false); };
+    window.addEventListener("online", onOnline);
+    window.addEventListener("offline", onOffline);
+
+    // Check if service worker is registered
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.getRegistration().then(function(reg) {
+        setSwRegistered(!!reg);
+      }).catch(function() {});
+    }
+
+    return function() {
+      window.removeEventListener("online", onOnline);
+      window.removeEventListener("offline", onOffline);
+    };
+  }, []);
+
+  return (
+    <footer className="border-t mt-auto py-3 bg-muted/30">
+      <div className="max-w-5xl mx-auto px-4 flex flex-wrap items-center justify-between gap-2 text-[11px] text-muted-foreground">
+        <div className="flex items-center gap-3">
+          <span className="flex items-center gap-1.5">
+            <Shield className="h-3 w-3 text-emerald-500" />
+            Ledgererp — منصة الفواتير والضمان الآمن
+          </span>
+          <span className="text-muted-foreground/50">|</span>
+          <span className="font-mono">v3.1</span>
+          {swRegistered && (
+            <>
+              <span className="text-muted-foreground/50">|</span>
+              <Badge variant="outline" className="h-4 px-1.5 text-[9px] gap-1 bg-emerald-500/10 text-emerald-600 border-emerald-500/20 font-bold">
+                <Zap className="h-2.5 w-2.5" />PWA
+              </Badge>
+            </>
+          )}
+        </div>
+        <div className="flex items-center gap-3">
+          {/* Online/Offline indicator */}
+          <span className="flex items-center gap-1.5">
+            <span className={"w-1.5 h-1.5 rounded-full " + (isOnline ? "bg-emerald-500" : "bg-red-500")} />
+            <span>{isOnline ? "متصل" : "غير متصل"}</span>
+          </span>
+          <span className="text-muted-foreground/50">|</span>
+          <a
+            href="https://github.com/Mirxou/Ledgererp"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="hover:text-primary transition-colors flex items-center gap-1"
+          >
+            GitHub
+            <svg className="w-2.5 h-2.5 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+            </svg>
+          </a>
+          <span className="text-muted-foreground/50">|</span>
+          <span className="flex items-center gap-1">
+            <span className="text-emerald-500 font-bold">π</span>
+            Pi Network
+          </span>
+        </div>
+      </div>
+    </footer>
   );
 }

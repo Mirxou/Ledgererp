@@ -1,11 +1,12 @@
-const CACHE_NAME = 'ledgererp-audit-v2';
+const CACHE_NAME = 'ledgererp-v1';
 const STATIC_ASSETS = [
   '/',
   '/manifest.json',
-  '/pi-shield-logo.svg',
+  '/icon-192.png',
+  '/icon-512.png',
 ];
 
-// Install — cache static assets
+// Install — cache static assets for offline use
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => cache.addAll(STATIC_ASSETS))
@@ -28,13 +29,19 @@ self.addEventListener('fetch', (event) => {
   const { request } = event;
   const url = new URL(request.url);
 
-  // API requests — network first
+  // Skip non-GET requests
+  if (request.method !== 'GET') return;
+
+  // API requests — network first, fall back to cache
   if (url.pathname.startsWith('/api/')) {
     event.respondWith(
       fetch(request)
         .then((response) => {
-          const clone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
+          // Only cache successful responses
+          if (response.ok) {
+            const clone = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
+          }
           return response;
         })
         .catch(() => caches.match(request))
@@ -42,8 +49,18 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Static assets — cache first
+  // Static assets — cache first, fall back to network
   event.respondWith(
-    caches.match(request).then((cached) => cached || fetch(request))
+    caches.match(request).then((cached) => {
+      if (cached) return cached;
+      return fetch(request).then((response) => {
+        // Cache successful responses for future offline use
+        if (response.ok) {
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
+        }
+        return response;
+      });
+    })
   );
 });
