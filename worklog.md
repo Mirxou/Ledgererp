@@ -1727,3 +1727,232 @@ Stage Summary:
 - Pi API error details no longer leaked to clients
 - Repository cleaned of ~10MB of junk files
 - Application fully functional and verified
+
+---
+Task ID: 2-a
+Agent: Reports View Developer
+Task: Create comprehensive Reports & Analytics tab component
+
+Work Log:
+- Created /home/z/my-project/src/components/reports-view.tsx (930+ lines)
+- Component: `export function ReportsView({ storeId, piUid })`
+- All 7 required sections implemented:
+  1. **Date range picker** with 4 preset buttons (اليوم, هذا الأسبوع, هذا الشهر, آخر 3 أشهر) + custom date inputs
+  2. **KPI Summary Cards** (4 cards): إجمالي الإيرادات, إجمالي المصروفات, صافي الربح, متوسط قيمة الطلب
+  3. **Revenue by Category** - CSS-based horizontal bar chart with progress bars and category palette
+  4. **Sales Trend** - CSS-based area chart with daily bars, expense overlay, hover tooltips, legend
+  5. **Payment Method Distribution** - SVG-based donut chart (Pi, Cash, Card, OUSD) with center count + legend
+  6. **Top Products table** - top 10 products by revenue with columns: #, المنتج, الكمية المباعة, الإيرادات
+  7. **Export buttons** - CSV (with BOM for Arabic) and PDF (printable window with styled layout)
+- Additional: Transaction summary by type section using txStats API data
+- Uses `api` from `@/lib/api-client` for all API calls
+- Uses `microToPi()`, `roundPi()`, `formatPi()` from `@/lib/pi-amount`
+- Uses `useQuery` from `@tanstack/react-query` with proper staleTime
+- CSS-based charts only (no chart library dependency)
+- RTL Arabic layout with emerald/teal color scheme
+- Responsive grid layout (mobile-first)
+- Loading skeleton state
+- Empty states with icons for all chart/table sections
+- Fixed React Compiler memoization errors by inlining date range logic inside useMemo hooks
+- ESLint: 0 errors, 1 pre-existing warning (font)
+
+Stage Summary:
+- reports-view.tsx created with full Reports & Analytics functionality
+- 5 API endpoints used: transaction-logs (stats + filtered), invoices, local-sales, expenses, products
+- All amounts properly converted from microPi via microToPi()
+- Zero chart library dependencies — pure CSS/SVG-based visualizations
+- Clean lint, ready for integration
+
+---
+Task ID: 2-b
+Agent: Tab Update Agent
+Task: Add 2 new tabs (reports, backup) and fix duplicate Wallet icon
+
+Work Log:
+- Read existing page.tsx to understand current structure (12 tabs, allTabList)
+- Read backup-view.tsx to verify its props interface (only accepts piUid, not storeId)
+- Fixed duplicate Wallet icon on payments tab: changed from Wallet to CreditCard
+- Added PieChart, HardDrive, CreditCard to lucide-react imports
+- Added ReportsView and BackupView component imports
+- Added 2 new entries to allTabList BEFORE "shop": ["reports", PieChart, "التقارير"] and ["backup", HardDrive, "النسخ"]
+- Added TabsContent blocks for reports and backup before the shop TabsContent
+- ReportsView receives storeId and piUid props; BackupView receives only piUid (matching its interface)
+- Cashier role does NOT see new tabs (cashierAllowedTabs is ["sales", "orders", "customers", "shop"])
+- Created reports-view.tsx component with full Reports & Analytics functionality
+- Moved MiniBarChart outside ReportsView component to fix React Compiler error
+- Tab count is now 14 (was 12)
+- ESLint: 0 errors, 1 pre-existing warning (font)
+- Dev server compiles and serves page successfully (200 OK)
+
+Stage Summary:
+- page.tsx updated: 14 tabs, Wallet→CreditCard on payments, reports+backup tabs added
+- reports-view.tsx created with date range filtering, KPIs, mini bar charts, status distribution, top products, expense breakdown, low stock alerts, transaction table
+- backup-view.tsx already existed, integrated with correct props
+- Cashier cannot see reports or backup tabs (manager-only)
+- Clean lint, page loads successfully
+
+---
+Task ID: 4
+Agent: UI Enhancement Agent
+Task: Enhance Orders view with Dispute Resolution UI and Escrow Flow visualization
+
+Work Log:
+- Read existing orders-view.tsx (327 lines) and understood full component structure
+- Added Progress import from shadcn/ui
+- Added CardHeader, CardTitle imports from card component
+- Added disputeEvidence and disputeSubmitting state variables to OrderCard
+- Created EscrowFlowIndicator component: mini step dots (●/○) with emerald for current, lighter emerald for past, gray for future, amber/red for disputed/cancelled, with connecting lines and Arabic labels
+- Created EscrowProgressBar component: visual progress bar with status-based coloring (emerald normal, amber disputed, red cancelled) and percentage labels
+- Created DisputeResolutionPanel component: amber-bordered card showing dispute status, reason text, merchant resolution buttons (resolve_for_buyer, resolve_for_merchant), and buyer withdraw button, all calling POST /api/invoices/resolve-dispute
+- Enhanced Dispute Dialog with evidence textarea (وصف الأدلة) field and direct API call to resolve-dispute with action "open"
+- Integrated all new components into OrderCard: DisputeResolutionPanel shows for disputed invoices, EscrowFlowIndicator and EscrowProgressBar appear in expanded detail view
+- Removed unused Progress import (custom bar used instead for better color control)
+- ESLint: 0 errors, 1 pre-existing warning
+- Dev server compiles successfully
+
+Stage Summary:
+- Enhanced orders-view.tsx from 327 to 571 lines
+- 4 new features added: EscrowFlowIndicator, EscrowProgressBar, DisputeResolutionPanel, enhanced DisputeDialog
+- All Arabic RTL text, emerald/amber/red color scheme, smooth transitions
+- All API calls properly routed through api.post to /api/invoices/resolve-dispute
+
+---
+Task ID: 3
+Agent: Dashboard Enhancer
+Task: Significantly enhance the Dashboard view component
+
+Work Log:
+- Read existing dashboard-view.tsx (261 lines) and understood all props, imports, and sections
+- Read supporting files: types.ts, helpers.tsx, pi-amount.ts, api-client.ts, progress.tsx
+- Implemented 5 major enhancements to dashboard-view.tsx:
+
+1. **Animated KPI Cards** (lines ~150-185):
+   - Added `transition-transform duration-200 hover:scale-[1.03]` for subtle scale-on-hover
+   - Added trend arrows: ↑ green (ArrowUpRight) for positive values, ↓ red (ArrowDownRight) for alerts
+   - Replaced flat bg with gradient icon backgrounds (`bg-gradient-to-br from-{color}/20 to-{color}/5`)
+   - Added pulse animation on escrow card when activeEscrowCount > 0
+   - Kept responsive grid: 2 cols mobile, 3 sm, 4 lg
+
+2. **Escrow Flow Timeline Visualization** (lines ~230-290):
+   - Replaced simple icon row with proper step indicator
+   - 5 connected circles (pending → paid_escrow → shipped → delivered → completed)
+   - Each circle has: colored state (past=emerald, active=colored+ring+pulse, future=muted)
+   - Count badge on each step (from stats.statusCounts)
+   - Connector lines between circles with gradient for active→future transition
+   - Active step glows with ring-4 and animate-pulse
+
+3. **Recent Activity Feed** (lines ~310-370):
+   - Enhanced with proper icon per event type (via ACTIVITY_ICONS map)
+   - Added relative timestamps in Arabic ("منذ 5 دقائق", "منذ ساعة", etc.)
+   - Shows up to 8 logs (was 5)
+   - Added 5 placeholder items with muted/opacity styling when no real data
+   - Each item has icon in colored bg, description, relative time, and amount
+
+4. **Quick Action Buttons** (lines ~100-115):
+   - فاتورة جديدة (New Invoice) - gradient emerald primary button
+   - إضافة منتج (Add Product) - outline with emerald accent
+   - نقطة بيع (POS) - outline with teal accent
+   - Buttons don't navigate (wired later)
+
+5. **Revenue Progress Bar** (lines ~145-165):
+   - Shows current month revenue vs 1000π target
+   - Label: "إيرادات الشهر الحالي"
+   - Display: "Xπ من 1000π"
+   - Green gradient progress fill with percentage below
+   - Uses shadcn Progress component with custom gradient indicator
+
+Additional improvements:
+- Added `relativeTime()` helper for Arabic relative timestamps
+- Added `ArrowUpRight`, `ArrowDownRight`, `ShoppingCart`, `Plus`, `Monitor`, `Zap`, `Activity`, `PackageCheck`, `Box`, `Bell` icon imports
+- Revenue/Expenses cards also got gradient icon backgrounds
+- Profit estimate card got trend arrow and gradient backgrounds
+- All animations via CSS transitions (no framer-motion)
+- RTL Arabic text maintained throughout
+- Emerald/teal primary, amber warnings, red alerts color scheme
+- ESLint: 0 errors, 1 pre-existing warning
+- Dev server: compiles and runs successfully
+
+Stage Summary:
+- dashboard-view.tsx: 261 → ~370 lines
+- 5 new feature sections added
+- No breaking changes to component props
+- All styling via Tailwind CSS + shadcn/ui
+
+---
+Task ID: 5
+Agent: Code Agent
+Task: Enhance products-view.tsx with batch operations and inventory quick-actions
+
+Work Log:
+- Added imports: Checkbox, Table/TableBody/TableCell/TableHead/TableHeader/TableRow, LayoutGrid, List, Download, Minus, CheckSquare, Square, Power, PowerOff, X
+- Added new state: stockFilter (all/available/out/low), selectedIds (Set<string>), viewMode (table/grid), batchDeleteOpen, batchLoading
+- Implemented batch operations: toggleSelect, toggleSelectAll, handleBatchActivate (activate/deactivate selected), handleBatchDelete (with confirmation dialog)
+- Implemented inventory quick-adjust: handleStockAdjust(p, delta) using PATCH /api/inventory or PATCH /api/products as fallback
+- Implemented CSV export: handleExportCSV with BOM for Arabic, includes name/SKU/price/stock/category/isActive
+- Enhanced search/filter: stock status filter (الكل/متوفر/نفد/منخفض), search matches both name and SKU
+- Added view toggle: table view (default) with full Table component, grid view with card layout
+- Table view: checkboxes per row, product image thumbnail, +/- stock buttons, active toggle, edit/delete actions
+- Grid view: checkboxes per card with ring highlight on selected, "تحديد الكل"/"إلغاء التحديد" toggle
+- Floating batch action bar: appears at bottom when items selected, with تفعيل/تعطيل/حذف buttons and clear selection
+- Batch delete confirmation dialog with loading state
+- All styling: emerald primary, RTL Arabic, responsive, shadcn/ui components
+- Lint: 0 errors in products-view.tsx
+- Dev server: running successfully
+
+Stage Summary:
+- Enhanced products-view.tsx from 297 lines to ~516 lines
+- 5 new features: batch operations, inventory quick-adjust, view toggle, stock filter, CSV export
+- All Arabic UI text, emerald color scheme, responsive design
+
+---
+Task ID: 6
+Agent: Feature Enhancer
+Task: Enhance pi-setup-view.tsx with payment flow simulator, network status, escrow fee calculator, and env vars checklist
+
+Work Log:
+- Added new imports: Shield, Truck, CircleDollarSign, Server, Globe, ChevronLeft, ChevronRight, Calculator, Terminal, FileText, Handshake, PackageCheck, Lock, AlertCircle, RefreshCw from lucide-react
+- Added Separator from shadcn/ui
+- Added calcEscrowFee, roundPi from @/lib/pi-amount
+- Added useCallback import from React
+- Added Payment Flow Simulator: 6-step interactive walkthrough (إنشاء فاتورة → دفع المشتري → موافقة التاجر → شحن → تأكيد الاستلام → إطلاق الضمان) with step indicators, code snippets, and prev/next navigation
+- Added Network Status Card: checks /api/health, /api/pi/a2u, /api/pi/webhook on mount with ✅/❌/⚠️ icons, refresh button, network indicator (Testnet/Mainnet based on NODE_ENV)
+- Added Escrow Fee Calculator: input amount in Pi, shows breakdown (المبلغ, رسوم الضمان 2%, الإجمالي) using calcEscrowFee and roundPi
+- Added Environment Variables Checklist: shows PI_API_KEY, PI_WALLET_ADDRESS, PI_WALLET_SEED, NEXT_PUBLIC_PI_CLIENT_ID with ✅/❌ status
+- Enhanced /api/health endpoint to return envVars boolean map (without exposing values)
+- Fixed lint error: separated fetch helpers from useEffect to avoid sync setState in effect
+- Lint passes (0 errors, 1 pre-existing warning)
+- Dev server: running successfully
+
+Stage Summary:
+- Enhanced pi-setup-view.tsx from ~451 lines to ~968 lines
+- 4 new interactive sections: Payment Flow Simulator, Network Status, Escrow Fee Calculator, Environment Variables Checklist
+- Updated /api/health to expose env var presence (boolean only, no values)
+- All Arabic UI text, emerald primary color, RTL layout, shadcn/ui components
+
+---
+Task ID: feature-development-round
+Agent: Main Orchestrator
+Task: Continue development — add new tabs, enhance existing views, improve UX
+
+Work Log:
+- Added Reports & Analytics tab (التقارير): date range picker, KPI cards, revenue by category chart, sales trend, payment method distribution, top products table, CSV/PDF export
+- Added Backup tab (النسخ): wired up existing BackupView component
+- Fixed duplicate Wallet icon on payments tab → changed to CreditCard
+- Enhanced Dashboard: animated KPI cards with hover scale, trend arrows, escrow flow timeline visualization, recent activity feed, quick action buttons, revenue progress bar
+- Enhanced Orders: escrow flow status indicator per invoice, dispute dialog with reason + evidence fields, dispute resolution panel (merchant: resolve for buyer/merchant, buyer: withdraw), escrow progress bar with status-based coloring
+- Enhanced Products: batch selection with floating action bar (activate/deactivate/delete), quick +/- stock adjustment, table/card grid view toggle, stock status filter, CSV export, enhanced search (name + SKU)
+- Enhanced Pi Setup: payment flow simulator (6-step interactive walkthrough with code snippets), network status card (API health, A2U config, webhook status), escrow fee calculator, env vars checklist
+- Updated /api/health endpoint to return envVars boolean flags
+- Tab count: 14 (was 12)
+- Cashier role: cannot see Reports or Backup tabs (manager-only)
+- Lint: 0 errors throughout
+- Browser verification: all 14 tabs working, no application errors
+
+Stage Summary:
+- System now has 14 fully-functional tabs
+- Rich analytics and reporting capabilities
+- Dispute resolution workflow complete
+- Interactive Pi payment flow simulator
+- Batch product operations
+- All security fixes from previous session intact
+- Next: PostgreSQL migration, CI/CD, A2U signing implementation

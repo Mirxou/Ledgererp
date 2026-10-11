@@ -18,7 +18,7 @@ import {
   CommandSeparator,
   CommandShortcut,
 } from "@/components/ui/command";
-import { useIssueStore, type IssueWithStatus } from "@/lib/store";
+import { useIssueStore, type InvoiceIssue } from "@/lib/store";
 import { SeverityBadge } from "@/components/ui/SeverityBadge";
 
 /* ════════════════════════════════════════════════════════════════════════════
@@ -94,7 +94,7 @@ interface CommandPaletteProps {
 export function CommandPalette({ onNavigate, onAction }: CommandPaletteProps) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const { issues, setSelectedIssue, setAiDialogIssue } = useIssueStore();
+  const { issues, setSelectedIssue } = useIssueStore();
   const { theme, setTheme } = useTheme();
   /* Recent searches — recomputed each render when open (lightweight localStorage read) */
   const recentSearches = open ? getRecentSearches() : [];
@@ -140,14 +140,13 @@ export function CommandPalette({ onNavigate, onAction }: CommandPaletteProps) {
 
   /* ── Handlers ─────────────────────────────────────────────────────── */
   const handleSelectIssue = useCallback(
-    (issue: IssueWithStatus) => {
+    (issue: InvoiceIssue) => {
       setSelectedIssue(issue);
-      setAiDialogIssue(issue);
       addRecentSearch(query);
       setOpen(false);
       setQuery("");
     },
-    [setSelectedIssue, setAiDialogIssue, query]
+    [setSelectedIssue, query]
   );
 
   const handleNavigate = useCallback(

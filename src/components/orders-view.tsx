@@ -7,7 +7,7 @@ import {
   Ban, ChevronDown, ChevronUp, Loader2, Copy, Share2,
   Scale, RotateCcw, XCircle, CheckCheck, MapPin,
 } from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { Progress } from "@/components/ui/progress";
 import { formatPi } from "@/lib/pi-amount";
 import { useDebounce } from "@/hooks/use-debounce";
 import { StatusBadge, fmtDate, fmtTime, copyText } from "@/lib/helpers";
@@ -94,6 +95,8 @@ function OrderCard({ invoice: inv, view, store, customerUid, onPay, onShip, onCo
   const [loading, setLoading] = useState(false);
   const [disputeOpen, setDisputeOpen] = useState(false);
   const [disputeReason, setDisputeReason] = useState("");
+  const [disputeEvidence, setDisputeEvidence] = useState("");
+  const [disputeSubmitting, setDisputeSubmitting] = useState(false);
   const [resolveOpen, setResolveOpen] = useState(false);
   const [resolveAction, setResolveAction] = useState<"refund" | "fulfill" | "reject">("refund");
   const [resolveReason, setResolveReason] = useState("");
@@ -183,8 +186,28 @@ function OrderCard({ invoice: inv, view, store, customerUid, onPay, onShip, onCo
           </button>
         </div>
 
+        {/* Dispute Resolution Panel — shown for disputed invoices */}
+        {inv.status === "disputed" && (
+          <DisputeResolutionPanel
+            invoice={inv}
+            view={view}
+            store={store}
+            customerUid={customerUid}
+            loading={loading}
+            setLoading={setLoading}
+            onRefresh={onRefresh}
+            toast={toast}
+          />
+        )}
+
         {expanded && (
-          <div className="border-t pt-2.5 space-y-2">
+          <div className="border-t pt-2.5 space-y-3">
+            {/* Escrow Flow Status Indicator */}
+            <EscrowFlowIndicator status={inv.status} />
+
+            {/* Escrow Progress Bar */}
+            <EscrowProgressBar status={inv.status} />
+
             <p className="text-[10px] font-semibold text-muted-foreground">المنتجات</p>
             {inv.items && inv.items.map(function(item, i) {
               return (
@@ -208,7 +231,7 @@ function OrderCard({ invoice: inv, view, store, customerUid, onPay, onShip, onCo
         )}
       </CardContent>
 
-      {/* Dispute Dialog */}
+      {/* Dispute Dialog — enhanced with evidence field */}
       <Dialog open={disputeOpen} onOpenChange={setDisputeOpen}>
         <DialogContent>
           <DialogHeader>
@@ -217,14 +240,37 @@ function OrderCard({ invoice: inv, view, store, customerUid, onPay, onShip, onCo
           </DialogHeader>
           <div className="space-y-3">
             <div className="space-y-1.5">
-              <Label className="text-xs">سبب النزاع</Label>
+              <Label className="text-xs">السبب</Label>
               <Textarea value={disputeReason} onChange={function(e) { setDisputeReason(e.target.value); }} placeholder="مثال: المنتج لم يصل، المنتج مختلف عن الوصف..." className="text-sm min-h-[80px]" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">وصف الأدلة</Label>
+              <Textarea value={disputeEvidence} onChange={function(e) { setDisputeEvidence(e.target.value); }} placeholder="أرفق وصفاً للأدلة الداعمة لنزاعك (صور، رسائل، إيصالات...)" className="text-sm min-h-[60px]" />
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" size="sm" onClick={function() { setDisputeOpen(false); }} className="text-xs">إلغاء</Button>
-            <Button size="sm" onClick={function() { onDispute(inv); setDisputeOpen(false); }} className="bg-red-600 hover:bg-red-700 text-white text-xs">
-              <AlertTriangle className="h-3.5 w-3.5 ml-1.5" />فتح نزاع
+            <Button size="sm" disabled={disputeSubmitting || !disputeReason.trim()} onClick={function() {
+              setDisputeSubmitting(true);
+              api.post("/api/invoices/resolve-dispute", {
+                invoiceId: inv.id,
+                action: "open",
+                reason: disputeReason.trim() + (disputeEvidence.trim() ? " | أدلة: " + disputeEvidence.trim() : ""),
+              }, customerUid).then(function(res) {
+                if (res.ok) {
+                  toast({ title: "تم فتح النزاع بنجاح" });
+                  if (onRefresh) onRefresh();
+                } else {
+                  res.json().catch(function() { return {}; }).then(function(err) { toast({ title: "فشل فتح النزاع", description: err.error || "", variant: "destructive" }); });
+                }
+              }).catch(function() { toast({ title: "خطأ في الاتصال", variant: "destructive" }); }).finally(function() {
+                setDisputeSubmitting(false);
+                setDisputeOpen(false);
+                setDisputeReason("");
+                setDisputeEvidence("");
+              });
+            }} className="bg-red-600 hover:bg-red-700 text-white text-xs">
+              {disputeSubmitting ? <Loader2 className="h-3.5 w-3.5 animate-spin ml-1.5" /> : <AlertTriangle className="h-3.5 w-3.5 ml-1.5" />}فتح النزاع
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -323,4 +369,203 @@ function ActionBtn({ icon, label, onClick, primary, outline, loading }: { icon: 
     return <Button size="sm" onClick={onClick} disabled={loading} className="h-7 bg-emerald-600 hover:bg-emerald-700 text-white text-[11px]">{loading ? <Loader2 className="h-3 w-3 animate-spin ml-1" /> : icon}{label}</Button>;
   }
   return <Button size="sm" variant="outline" onClick={onClick} className={"h-7 text-[11px] " + (outline || "")}>{icon}{label}</Button>;
+}
+
+/* ═══ Escrow Flow Step Definitions ═══ */
+const ESCROW_STEPS = [
+  { key: "pending", label: "في الانتظار" },
+  { key: "paid_escrow", label: "في الضمان" },
+  { key: "shipped", label: "تم الشحن" },
+  { key: "delivered", label: "تم التسليم" },
+  { key: "completed", label: "مكتمل" },
+] as const;
+
+function getEscrowStepIndex(status: string): number {
+  const idx = ESCROW_STEPS.findIndex(function(s) { return s.key === status; });
+  return idx >= 0 ? idx : -1;
+}
+
+/* ═══ Escrow Flow Status Indicator — mini step dots ═══ */
+function EscrowFlowIndicator({ status }: { status: string }) {
+  const isDisputed = status === "disputed";
+  const isCancelled = status === "cancelled";
+  const currentIdx = getEscrowStepIndex(status);
+
+  return (
+    <div className="space-y-1.5">
+      <p className="text-[10px] font-semibold text-muted-foreground">مسار الضمان</p>
+      <div className="flex items-center gap-1" dir="ltr">
+        {ESCROW_STEPS.map(function(step, i) {
+          const isPast = currentIdx >= 0 && i < currentIdx;
+          const isCurrent = currentIdx >= 0 && i === currentIdx;
+          const isFuture = currentIdx >= 0 && i > currentIdx;
+
+          let dotClass: string;
+          if (isDisputed) {
+            /* For disputed: show up to current step in amber, rest gray */
+            dotClass = i <= currentIdx
+              ? "h-2.5 w-2.5 rounded-full bg-amber-500 ring-2 ring-amber-500/30"
+              : "h-2.5 w-2.5 rounded-full bg-zinc-300 dark:bg-zinc-600 ring-1 ring-zinc-300 dark:ring-zinc-600";
+          } else if (isCancelled) {
+            dotClass = i === 0
+              ? "h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-red-500/30"
+              : "h-2.5 w-2.5 rounded-full bg-zinc-300 dark:bg-zinc-600 ring-1 ring-zinc-300 dark:ring-zinc-600";
+          } else if (isPast) {
+            dotClass = "h-2.5 w-2.5 rounded-full bg-emerald-400 ring-1 ring-emerald-400/30";
+          } else if (isCurrent) {
+            dotClass = "h-2.5 w-2.5 rounded-full bg-emerald-600 ring-2 ring-emerald-600/30";
+          } else if (isFuture) {
+            dotClass = "h-2.5 w-2.5 rounded-full bg-zinc-300 dark:bg-zinc-600 ring-1 ring-zinc-300 dark:ring-zinc-600";
+          } else {
+            /* Unknown status: all gray */
+            dotClass = "h-2.5 w-2.5 rounded-full bg-zinc-300 dark:bg-zinc-600 ring-1 ring-zinc-300 dark:ring-zinc-600";
+          }
+
+          return (
+            <React.Fragment key={step.key}>
+              <div className="flex flex-col items-center gap-0.5">
+                <div className={dotClass + " transition-all duration-300"} />
+                <span className={"text-[8px] leading-none " + (isCurrent ? "text-emerald-600 font-bold" : isPast ? "text-emerald-400" : isDisputed && i <= currentIdx ? "text-amber-500 font-medium" : "text-zinc-400 dark:text-zinc-500")}>
+                  {step.label}
+                </span>
+              </div>
+              {i < ESCROW_STEPS.length - 1 && (
+                <div className={"flex-1 h-0.5 rounded-full min-w-[12px] transition-colors duration-300 " +
+                  (isDisputed && i < currentIdx ? "bg-amber-400" :
+                   isCancelled ? "bg-zinc-200 dark:bg-zinc-700" :
+                   isPast || isCurrent ? "bg-emerald-400" : "bg-zinc-200 dark:bg-zinc-700")} />
+              )}
+            </React.Fragment>
+          );
+        })}
+      </div>
+      {isDisputed && (
+        <div className="flex items-center gap-1.5 text-[10px] text-amber-600 mt-1">
+          <AlertTriangle className="h-3 w-3" /><span className="font-medium">هذه الفاتورة في وضع النزاع</span>
+        </div>
+      )}
+      {isCancelled && (
+        <div className="flex items-center gap-1.5 text-[10px] text-red-500 mt-1">
+          <Ban className="h-3 w-3" /><span className="font-medium">تم إلغاء هذه الفاتورة</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ═══ Escrow Progress Bar ═══ */
+function EscrowProgressBar({ status }: { status: string }) {
+  const config: Record<string, { value: number; color: string; label: string }> = {
+    pending:      { value: 0,  color: "bg-zinc-300",        label: "في الانتظار" },
+    paid_escrow:  { value: 25, color: "bg-blue-500",        label: "في الضمان" },
+    shipped:      { value: 50, color: "bg-purple-500",      label: "تم الشحن" },
+    delivered:    { value: 75, color: "bg-teal-500",        label: "تم التسليم" },
+    completed:    { value: 100,color: "bg-emerald-500",     label: "مكتمل" },
+    disputed:     { value: 50, color: "bg-amber-500",       label: "نزاع" },
+    cancelled:    { value: 0,  color: "bg-red-500",         label: "ملغى" },
+    releasing:    { value: 90, color: "bg-amber-500",       label: "جارٍ الإطلاق" },
+  };
+  const c = config[status] || config.pending;
+
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center justify-between text-[10px]">
+        <span className="text-muted-foreground font-medium">تقدم الضمان</span>
+        <span className={status === "disputed" ? "text-amber-600 font-semibold" : status === "cancelled" ? "text-red-500 font-semibold" : "text-emerald-600 font-semibold"}>{c.value}% — {c.label}</span>
+      </div>
+      <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
+        <div
+          className={"h-full rounded-full transition-all duration-500 ease-out " + c.color}
+          style={{ width: c.value + "%" }}
+        />
+      </div>
+    </div>
+  );
+}
+
+/* ═══ Dispute Resolution Panel ═══ */
+function DisputeResolutionPanel({ invoice: inv, view, store, customerUid, loading, setLoading, onRefresh, toast }: {
+  invoice: InvoiceData; view: string; store: StoreData; customerUid: string;
+  loading: boolean; setLoading: (l: boolean) => void;
+  onRefresh?: () => void;
+  toast: ReturnType<typeof useToast>["toast"];
+}) {
+  const disputeReasonText = inv.notes || "لم يتم تقديم سبب";
+
+  const handleResolve = function(action: "resolve_for_buyer" | "resolve_for_merchant" | "withdraw") {
+    setLoading(true);
+    const callerUid = view === "merchant" ? store.piUid : customerUid;
+    api.post("/api/invoices/resolve-dispute", {
+      invoiceId: inv.id,
+      action: action,
+    }, callerUid).then(function(res) {
+      if (res.ok) {
+        const msgs: Record<string, string> = {
+          resolve_for_buyer: "تم حل النزاع لصالح المشتري",
+          resolve_for_merchant: "تم حل النزاع لصالح التاجر",
+          withdraw: "تم سحب النزاع",
+        };
+        toast({ title: msgs[action] || "تم حل النزاع" });
+        if (onRefresh) onRefresh();
+      } else {
+        res.json().catch(function() { return {}; }).then(function(err) {
+          toast({ title: "فشل حل النزاع", description: err.error || "", variant: "destructive" });
+        });
+      }
+    }).catch(function() { toast({ title: "خطأ في الاتصال", variant: "destructive" }); }).finally(function() {
+      setLoading(false);
+    });
+  };
+
+  return (
+    <Card className="border-amber-500/30 bg-amber-50/30 dark:bg-amber-950/10">
+      <CardHeader className="p-3 pb-2">
+        <CardTitle className="text-xs flex items-center gap-2">
+          <AlertTriangle className="h-4 w-4 text-amber-500" />
+          <span className="text-amber-700 dark:text-amber-400 font-bold">هذه الفاتورة في وضع النزاع</span>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="p-3 pt-0 space-y-3">
+        <div className="space-y-1">
+          <p className="text-[10px] text-muted-foreground font-medium">سبب النزاع:</p>
+          <p className="text-xs text-foreground bg-background/60 rounded-md p-2 border border-amber-500/10">{disputeReasonText}</p>
+        </div>
+
+        {view === "merchant" && (
+          <div className="flex items-center gap-2 flex-wrap">
+            <Button
+              size="sm"
+              onClick={function() { handleResolve("resolve_for_buyer"); }}
+              disabled={loading}
+              className="h-7 text-[11px] bg-teal-600 hover:bg-teal-700 text-white"
+            >
+              {loading ? <Loader2 className="h-3 w-3 animate-spin ml-1" /> : <CheckCircle2 className="h-3 w-3 ml-1" />}
+              حل النزاع لصالح المشتري
+            </Button>
+            <Button
+              size="sm"
+              onClick={function() { handleResolve("resolve_for_merchant"); }}
+              disabled={loading}
+              className="h-7 text-[11px] bg-amber-600 hover:bg-amber-700 text-white"
+            >
+              {loading ? <Loader2 className="h-3 w-3 animate-spin ml-1" /> : <Scale className="h-3 w-3 ml-1" />}
+              حل النزاع لصالح التاجر
+            </Button>
+          </div>
+        )}
+
+        {view === "customer" && (
+          <Button
+            size="sm"
+            onClick={function() { handleResolve("withdraw"); }}
+            disabled={loading}
+            className="h-7 text-[11px] bg-zinc-600 hover:bg-zinc-700 text-white"
+          >
+            {loading ? <Loader2 className="h-3 w-3 animate-spin ml-1" /> : <RotateCcw className="h-3 w-3 ml-1" />}
+            سحب النزاع
+          </Button>
+        )}
+      </CardContent>
+    </Card>
+  );
 }

@@ -80,7 +80,7 @@ export async function GET(req: NextRequest) {
     }
 
     // ── Weekly trend (last 4 weeks) ──────────────────────────────────
-    const weeklyTrend = [];
+    const weeklyTrend: Array<{ date: string; invoices: number; escrowed: number; completed: number }> = [];
     for (let i = 3; i >= 0; i--) {
       const weekStart = new Date();
       weekStart.setDate(weekStart.getDate() - (i + 1) * 7);

@@ -10,7 +10,7 @@ import {
   Shield, BarChart3, Package, FileText, ShoppingCart,
   Settings, Zap, CircleDot, Sun, Moon, Copy, Bell,
   ShoppingBag, LogOut, Warehouse, Users, Wallet, TrendingDown,
-  UserCog, AlertTriangle,
+  UserCog, AlertTriangle, PieChart, HardDrive, CreditCard,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -47,9 +47,13 @@ import { OfflineIndicator } from "@/components/offline-indicator";
 import { MerchantBuyerView } from "@/components/merchant-buyer-view";
 import { PaymentsView } from "@/components/payments-view";
 import { CashierPOSView } from "@/components/cashier-pos-view";
+import { ReportsView } from "@/components/reports-view";
+import { BackupView } from "@/components/backup-view";
 
 /* ═══ App Entry ═══ */
-export default function LedgererpApp() {
+import { Suspense } from "react";
+
+function LedgererpAppInner() {
   const searchParams = useSearchParams();
   const invoiceParam = searchParams.get("invoice");
   const storeParam = searchParams.get("store");
@@ -399,7 +403,9 @@ function AuthenticatedApp({ piUid, username }: { piUid: string; username: string
     ["customers", Users, "الزبائن"],
     ["expenses", TrendingDown, "المصروفات"],
     ["finance", Wallet, "المالية"],
-    ["payments", Wallet, "المعاملات"],
+    ["payments", CreditCard, "المعاملات"],
+    ["reports", PieChart, "التقارير"],
+    ["backup", HardDrive, "النسخ"],
     ["shop", ShoppingBag, "تسوق"],
     ["settings", Settings, "الإعدادات"],
     ["pisetup", Zap, "إعداد Pi"],
@@ -563,7 +569,17 @@ function AuthenticatedApp({ piUid, username }: { piUid: string; username: string
               <PaymentsView storeId={myStore.id} piUid={piUid} />
             </TabsContent>
 
-            {/* 9. Shop */}
+            {/* 10. Reports */}
+            <TabsContent value="reports">
+              <ReportsView storeId={myStore.id} piUid={piUid} />
+            </TabsContent>
+
+            {/* 11. Backup */}
+            <TabsContent value="backup">
+              <BackupView piUid={piUid} />
+            </TabsContent>
+
+            {/* 12. Shop */}
             <TabsContent value="shop">
               <MerchantBuyerView
                 buyerPiUid={piUid}
@@ -709,5 +725,13 @@ function EnhancedFooter() {
         </div>
       </div>
     </footer>
+  );
+}
+
+export default function LedgererpApp() {
+  return (
+    <Suspense fallback={<FullPageLoader />}>
+      <LedgererpAppInner />
+    </Suspense>
   );
 }

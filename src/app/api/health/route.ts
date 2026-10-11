@@ -24,6 +24,12 @@ export async function GET(req: NextRequest) {
         database: "connected",
         pi_integration: !!(process.env.PI_API_KEY && process.env.PI_WALLET_ADDRESS),
       },
+      envVars: {
+        PI_API_KEY: !!process.env.PI_API_KEY,
+        PI_WALLET_ADDRESS: !!process.env.PI_WALLET_ADDRESS,
+        PI_WALLET_SEED: !!process.env.PI_WALLET_SEED,
+        NEXT_PUBLIC_PI_CLIENT_ID: !!process.env.NEXT_PUBLIC_PI_CLIENT_ID,
+      },
     });
   } catch (error) {
     return NextResponse.json(

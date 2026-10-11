@@ -1,9 +1,13 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   Zap, CheckCircle2, Wallet, Loader2, Send, FileCheck,
   XCircle, Trash2, Copy, ExternalLink, Info,
+  Shield, Truck, CircleDollarSign, Server, Globe,
+  ChevronLeft, ChevronRight, Calculator, Terminal,
+  FileText, Handshake, PackageCheck, Lock,
+  AlertCircle, RefreshCw,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -11,9 +15,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
+import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { api } from "@/lib/api-client";
 import { copyText } from "@/lib/helpers";
+import { calcEscrowFee, roundPi } from "@/lib/pi-amount";
 
 interface TestPaymentRecord {
   uid: string;
@@ -37,6 +43,156 @@ export function PiSetupView({ piUid }: { piUid: string }) {
   const [walletCheck, setWalletCheck] = useState<{ checked: boolean; configured: boolean; walletAddress: string; message: string; hasSimulated?: boolean }>({
     checked: false, configured: false, walletAddress: "", message: "", hasSimulated: false,
   });
+
+  // ── Payment Flow Simulator ──
+  const [flowStep, setFlowStep] = useState(0);
+  const flowSteps = [
+    {
+      title: "إنشاء فاتورة",
+      desc: "التاجر ينشئ فاتورة بمبلغ وملاحظة. النظام يسجّل الفاتورة في حالة «في الانتظار».",
+      apiCode: `POST /api/invoices
+{
+  "storeId": "store_abc",
+  "subtotal": 10.5,
+  "memo": "طلب منتج #123"
+}`,
+      icon: FileText,
+    },
+    {
+      title: "دفع المشتري",
+      desc: "المشتري يوافق على الدفع عبر Pi SDK. يتم إنشاء دفعة U2A (User-to-App) في الضمان.",
+      apiCode: `pi.createPayment({
+  amount: 10.5,
+  memo: "فاتورة #INV-001",
+  metadata: { invoiceId: "inv_123" }
+});`,
+      icon: Wallet,
+    },
+    {
+      title: "موافقة التاجر",
+      desc: "الخادم يوافق على الدفعة عبر Pi API. الضمان ينتقل إلى حالة «معتمد».",
+      apiCode: `POST /api/pi_payment/approve
+{
+  "paymentId": "pi_pay_abc123"
+}`,
+      icon: Handshake,
+    },
+    {
+      title: "شحن المنتج",
+      desc: "التاجر يشحن المنتج ويحدّث حالة الفاتورة إلى «تم الشحن».",
+      apiCode: `PATCH /api/invoices
+{
+  "invoiceId": "inv_123",
+  "action": "ship"
+}`,
+      icon: Truck,
+    },
+    {
+      title: "تأكيد الاستلام",
+      desc: "المشتري يؤكد استلام المنتج. الفاتورة تنتقل إلى «تم التسليم».",
+      apiCode: `POST /api/invoices/buyer-action
+{
+  "invoiceId": "inv_123",
+  "action": "delivered"
+}`,
+      icon: PackageCheck,
+    },
+    {
+      title: "إطلاق الضمان",
+      desc: "النظام ينفّذ دفعة A2U (App-to-User) لتحرير مبلغ الضمان إلى محفظة التاجر.",
+      apiCode: `POST /api/pi/a2u
+{
+  "invoiceId": "inv_123",
+  "memo": "تحرير ضمان فاتورة #INV-001"
+}`,
+      icon: Lock,
+    },
+  ];
+
+  // ── Network Status ──
+  const [netStatus, setNetStatus] = useState<{
+    health: "loading" | "ok" | "fail";
+    a2u: "loading" | "ok" | "fail";
+    webhook: "loading" | "ok" | "fail";
+    a2uConfigured: boolean;
+    envVars: { PI_API_KEY: boolean; PI_WALLET_ADDRESS: boolean; PI_WALLET_SEED: boolean; NEXT_PUBLIC_PI_CLIENT_ID: boolean };
+  }>({
+    health: "loading",
+    a2u: "loading",
+    webhook: "loading",
+    a2uConfigured: false,
+    envVars: { PI_API_KEY: false, PI_WALLET_ADDRESS: false, PI_WALLET_SEED: false, NEXT_PUBLIC_PI_CLIENT_ID: false },
+  });
+
+  // Fetch helpers for individual status checks (async, no sync setState)
+  function fetchHealth() {
+    fetch("/api/health")
+      .then(function(res) { return res.json(); })
+      .then(function(data) {
+        const piIntegration = data.services && data.services.pi_integration;
+        const envKeys = data.envVars || {};
+        setNetStatus(function(prev) {
+          return Object.assign({}, prev, {
+            health: data.status === "healthy" ? "ok" : "fail",
+            envVars: {
+              PI_API_KEY: !!envKeys.PI_API_KEY || !!piIntegration,
+              PI_WALLET_ADDRESS: !!envKeys.PI_WALLET_ADDRESS,
+              PI_WALLET_SEED: !!envKeys.PI_WALLET_SEED,
+              NEXT_PUBLIC_PI_CLIENT_ID: !!envKeys.NEXT_PUBLIC_PI_CLIENT_ID,
+            },
+          });
+        });
+      })
+      .catch(function() {
+        setNetStatus(function(prev) { return Object.assign({}, prev, { health: "fail" }); });
+      });
+  }
+
+  function fetchA2U() {
+    fetch("/api/pi/a2u")
+      .then(function(res) { return res.json(); })
+      .then(function(data) {
+        setNetStatus(function(prev) {
+          return Object.assign({}, prev, {
+            a2u: "ok",
+            a2uConfigured: !!data.configured,
+          });
+        });
+      })
+      .catch(function() {
+        setNetStatus(function(prev) { return Object.assign({}, prev, { a2u: "fail" }); });
+      });
+  }
+
+  function fetchWebhook() {
+    fetch("/api/pi/webhook")
+      .then(function(res) { return res.json(); })
+      .then(function(data) {
+        setNetStatus(function(prev) {
+          return Object.assign({}, prev, { webhook: data.status === "active" ? "ok" : "fail" });
+        });
+      })
+      .catch(function() {
+        setNetStatus(function(prev) { return Object.assign({}, prev, { webhook: "fail" }); });
+      });
+  }
+
+  const refreshNetworkStatus = useCallback(function() {
+    setNetStatus(function(prev) { return Object.assign({}, prev, { health: "loading", a2u: "loading", webhook: "loading" }); });
+    fetchHealth();
+    fetchA2U();
+    fetchWebhook();
+  }, []);
+
+  // ── Escrow Fee Calculator ──
+  const [escrowInput, setEscrowInput] = useState("10");
+
+  // Check network status on mount (async fetches only, no sync setState)
+  useEffect(function() {
+    fetchHealth();
+    fetchA2U();
+    fetchWebhook();
+  }, []);
 
   // Count unique UIDs from completed payments
   const completedPayments = payments.filter(function(p) { return p.status === "completed"; });
@@ -479,6 +635,335 @@ export function PiSetupView({ piUid }: { piUid: string }) {
             <p className="text-[11px] text-amber-700 dark:text-amber-400 leading-relaxed">
               💡 <span className="font-medium">ملاحظة:</span> المدفوعات تتم على شبكة الاختبار (Sandbox) وليس الشبكة الرئيسية.
               لا يتم خصم Pi حقيقي. استخدم API Key نفسه من ملف .env.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* ═══ Payment Flow Simulator ═══ */}
+      <Card className="border-0 shadow-sm border-t-2 border-t-emerald-500/30">
+        <CardHeader className="pb-3 pt-4 px-4">
+          <CardTitle className="text-xs font-bold flex items-center gap-2">
+            <Shield className="h-3.5 w-3.5 text-emerald-500" />
+            محاكاة مسار الدفع بالضمان
+            <Badge variant="outline" className="text-[10px] ml-auto">
+              {flowStep + 1} / {flowSteps.length}
+            </Badge>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="px-4 pb-4 space-y-4">
+          {/* Step indicators */}
+          <div className="flex items-center justify-between gap-1">
+            {flowSteps.map(function(s, idx) {
+              const StepIcon = s.icon;
+              const isCompleted = idx < flowStep;
+              const isCurrent = idx === flowStep;
+              const isFuture = idx > flowStep;
+              return (
+                <React.Fragment key={idx}>
+                  <button
+                    onClick={function() { setFlowStep(idx); }}
+                    className={
+                      "flex flex-col items-center gap-1 transition-all duration-200 " +
+                      (isCurrent ? "scale-110" : "scale-100 opacity-" + (isFuture ? "50" : "100"))
+                    }
+                  >
+                    <div className={
+                      "w-9 h-9 rounded-full flex items-center justify-center transition-all duration-200 " +
+                      (isCompleted ? "bg-emerald-500 text-white shadow-sm" :
+                       isCurrent ? "bg-blue-500/10 text-blue-600 ring-2 ring-blue-500" :
+                       "bg-muted text-muted-foreground")
+                    }>
+                      {isCompleted ? (
+                        <CheckCircle2 className="h-4 w-4" />
+                      ) : (
+                        <StepIcon className="h-4 w-4" />
+                      )}
+                    </div>
+                    <span className={
+                      "text-[9px] font-medium leading-tight text-center max-w-[52px] " +
+                      (isCompleted ? "text-emerald-600" :
+                       isCurrent ? "text-blue-600" :
+                       "text-muted-foreground")
+                    }>
+                      {s.title}
+                    </span>
+                  </button>
+                  {idx < flowSteps.length - 1 && (
+                    <div className={
+                      "flex-1 h-0.5 rounded-full mt-[-12px] transition-colors duration-300 " +
+                      (idx < flowStep ? "bg-emerald-500" : "bg-border")
+                    } />
+                  )}
+                </React.Fragment>
+              );
+            })}
+          </div>
+
+          <Separator />
+
+          {/* Current step detail */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <div className={
+                "w-7 h-7 rounded-lg flex items-center justify-center " +
+                "bg-emerald-500/10 text-emerald-600"
+              }>
+                {React.createElement(flowSteps[flowStep].icon, { className: "h-4 w-4" })}
+              </div>
+              <div>
+                <p className="text-sm font-bold">{flowSteps[flowStep].title}</p>
+                <p className="text-[11px] text-muted-foreground leading-relaxed">{flowSteps[flowStep].desc}</p>
+              </div>
+            </div>
+
+            {/* Code snippet */}
+            <div className="bg-zinc-900 dark:bg-zinc-950 rounded-lg p-3 border border-zinc-800">
+              <div className="flex items-center gap-1.5 mb-2">
+                <Terminal className="h-3 w-3 text-zinc-500" />
+                <span className="text-[10px] text-zinc-500 font-mono">API Call</span>
+              </div>
+              <pre className="text-[11px] text-emerald-400 font-mono leading-relaxed whitespace-pre-wrap" dir="ltr">
+                {flowSteps[flowStep].apiCode}
+              </pre>
+            </div>
+          </div>
+
+          {/* Navigation buttons */}
+          <div className="flex items-center justify-between gap-3">
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-xs h-8 gap-1"
+              disabled={flowStep === 0}
+              onClick={function() { setFlowStep(Math.max(0, flowStep - 1)); }}
+            >
+              <ChevronRight className="h-3.5 w-3.5" />
+              السابق
+            </Button>
+            <div className="flex gap-1">
+              {flowSteps.map(function(_, idx) {
+                return (
+                  <button
+                    key={idx}
+                    onClick={function() { setFlowStep(idx); }}
+                    className={
+                      "w-2 h-2 rounded-full transition-all duration-200 " +
+                      (idx === flowStep ? "bg-emerald-500 w-4" :
+                       idx < flowStep ? "bg-emerald-500/40" : "bg-muted-foreground/20")
+                    }
+                  />
+                );
+              })}
+            </div>
+            <Button
+              size="sm"
+              className="text-xs h-8 gap-1 bg-emerald-600 hover:bg-emerald-700 text-white"
+              disabled={flowStep === flowSteps.length - 1}
+              onClick={function() { setFlowStep(Math.min(flowSteps.length - 1, flowStep + 1)); }}
+            >
+              التالي
+              <ChevronLeft className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* ═══ Network Status Card ═══ */}
+      <Card className="border-0 shadow-sm border-t-2 border-t-blue-500/20">
+        <CardHeader className="pb-3 pt-4 px-4">
+          <CardTitle className="text-xs font-bold flex items-center gap-2">
+            <Globe className="h-3.5 w-3.5 text-blue-500" />
+            حالة الشبكة والاتصال
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-[10px] ml-auto h-6 gap-1 text-muted-foreground"
+              onClick={refreshNetworkStatus}
+            >
+              <RefreshCw className="h-3 w-3" />
+              تحديث
+            </Button>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="px-4 pb-4 space-y-3">
+          {/* Current network */}
+          <div className="flex items-center justify-between py-2 border-b border-border/30">
+            <div className="flex items-center gap-2">
+              <Server className="h-4 w-4 text-muted-foreground" />
+              <span className="text-xs">الشبكة الحالية</span>
+            </div>
+            <Badge variant="outline" className={
+              "text-[10px] " +
+              (process.env.NODE_ENV === "development"
+                ? "bg-amber-500/10 text-amber-600 border-amber-500/20"
+                : "bg-emerald-500/10 text-emerald-600 border-emerald-500/20")
+            }>
+              {process.env.NODE_ENV === "development" ? "Pi Testnet (Sandbox)" : "Pi Mainnet"}
+            </Badge>
+          </div>
+
+          {/* Health check */}
+          <div className="flex items-center justify-between py-2 border-b border-border/30">
+            <div className="flex items-center gap-2">
+              <Server className="h-4 w-4 text-muted-foreground" />
+              <span className="text-xs">Pi API (الصحة)</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              {netStatus.health === "loading" ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+              ) : netStatus.health === "ok" ? (
+                <span className="text-emerald-500 text-sm">✅</span>
+              ) : (
+                <span className="text-red-500 text-sm">❌</span>
+              )}
+              <span className="text-[10px] text-muted-foreground">
+                {netStatus.health === "loading" ? "جارٍ الفحص..." :
+                 netStatus.health === "ok" ? "متصل" : "غير متصل"}
+              </span>
+            </div>
+          </div>
+
+          {/* A2U Wallet config */}
+          <div className="flex items-center justify-between py-2 border-b border-border/30">
+            <div className="flex items-center gap-2">
+              <Wallet className="h-4 w-4 text-muted-foreground" />
+              <span className="text-xs">محفظة A2U</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              {netStatus.a2u === "loading" ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+              ) : netStatus.a2u === "ok" && netStatus.a2uConfigured ? (
+                <span className="text-emerald-500 text-sm">✅</span>
+              ) : netStatus.a2u === "ok" && !netStatus.a2uConfigured ? (
+                <span className="text-amber-500 text-sm">⚠️</span>
+              ) : (
+                <span className="text-red-500 text-sm">❌</span>
+              )}
+              <span className="text-[10px] text-muted-foreground">
+                {netStatus.a2u === "loading" ? "جارٍ الفحص..." :
+                 netStatus.a2u === "ok" && netStatus.a2uConfigured ? "مُعدّة" :
+                 netStatus.a2u === "ok" && !netStatus.a2uConfigured ? "غير مُعدّة" : "خطأ"}
+              </span>
+            </div>
+          </div>
+
+          {/* Webhook status */}
+          <div className="flex items-center justify-between py-2">
+            <div className="flex items-center gap-2">
+              <Zap className="h-4 w-4 text-muted-foreground" />
+              <span className="text-xs">نقطة Webhook</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              {netStatus.webhook === "loading" ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+              ) : netStatus.webhook === "ok" ? (
+                <span className="text-emerald-500 text-sm">✅</span>
+              ) : (
+                <span className="text-red-500 text-sm">❌</span>
+              )}
+              <span className="text-[10px] text-muted-foreground">
+                {netStatus.webhook === "loading" ? "جارٍ الفحص..." :
+                 netStatus.webhook === "ok" ? "نشطة" : "غير متاحة"}
+              </span>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* ═══ Escrow Fee Calculator ═══ */}
+      <Card className="border-0 shadow-sm border-t-2 border-t-emerald-500/20">
+        <CardHeader className="pb-3 pt-4 px-4">
+          <CardTitle className="text-xs font-bold flex items-center gap-2">
+            <Calculator className="h-3.5 w-3.5 text-emerald-500" />
+            حاسبة رسوم الضمان
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="px-4 pb-4 space-y-3">
+          <div className="space-y-1.5">
+            <Label className="text-xs">المبلغ (Pi)</Label>
+            <Input
+              type="text"
+              inputMode="decimal"
+              value={escrowInput}
+              onChange={function(e) { setEscrowInput(e.target.value); }}
+              placeholder="10"
+              className="text-sm"
+              dir="ltr"
+            />
+          </div>
+
+          {function() {
+            const parsedAmount = parseFloat(escrowInput);
+            const isValid = !isNaN(parsedAmount) && parsedAmount > 0;
+            const fee = isValid ? calcEscrowFee(parsedAmount, 0.02) : 0;
+            const total = isValid ? roundPi(parsedAmount + fee) : 0;
+            return (
+              <div className="bg-muted/50 rounded-lg p-3 space-y-2">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground">المبلغ</span>
+                  <span className="font-semibold font-mono" dir="ltr">
+                    {isValid ? parsedAmount.toFixed(7) : "—"} π
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground">رسوم الضمان (2%)</span>
+                  <span className="font-semibold text-amber-600 font-mono" dir="ltr">
+                    {isValid ? fee.toFixed(7) : "—"} π
+                  </span>
+                </div>
+                <Separator />
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-medium">الإجمالي</span>
+                  <span className="font-bold text-emerald-600 font-mono" dir="ltr">
+                    {isValid ? total.toFixed(7) : "—"} π
+                  </span>
+                </div>
+              </div>
+            );
+          }()}
+
+          <p className="text-[10px] text-muted-foreground leading-relaxed">
+            رسوم الضمان الافتراضية هي 2% من المبلغ. يتم إضافتها إلى المبلغ الإجمالي الذي يدفعه المشتري.
+          </p>
+        </CardContent>
+      </Card>
+
+      {/* ═══ Environment Variables Checklist ═══ */}
+      <Card className="border-0 shadow-sm border-t-2 border-t-amber-500/20">
+        <CardHeader className="pb-3 pt-4 px-4">
+          <CardTitle className="text-xs font-bold flex items-center gap-2">
+            <Terminal className="h-3.5 w-3.5 text-amber-500" />
+            متغيرات البيئة (Env Vars)
+            <Badge variant="outline" className="text-[10px]">
+              {Object.values(netStatus.envVars).filter(Boolean).length} / 4
+            </Badge>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="px-4 pb-4 space-y-2">
+          {[
+            { key: "PI_API_KEY", label: "مفتاح Pi API", val: netStatus.envVars.PI_API_KEY },
+            { key: "PI_WALLET_ADDRESS", label: "عنوان المحفظة", val: netStatus.envVars.PI_WALLET_ADDRESS },
+            { key: "PI_WALLET_SEED", label: "بذرة المحفظة", val: netStatus.envVars.PI_WALLET_SEED },
+            { key: "NEXT_PUBLIC_PI_CLIENT_ID", label: "معرّف العميل", val: netStatus.envVars.NEXT_PUBLIC_PI_CLIENT_ID },
+          ].map(function(item) {
+            return (
+              <div key={item.key} className="flex items-center justify-between py-1.5 border-b border-border/20 last:border-0">
+                <div className="flex items-center gap-2">
+                  <span className={item.val ? "text-emerald-500 text-sm" : "text-red-400 text-sm"}>
+                    {item.val ? "✅" : "❌"}
+                  </span>
+                  <span className="text-xs font-medium">{item.label}</span>
+                </div>
+                <code className="text-[10px] font-mono text-muted-foreground" dir="ltr">{item.key}</code>
+              </div>
+            );
+          })}
+          <div className="mt-2 p-2 bg-amber-500/5 rounded-lg border border-amber-500/10">
+            <p className="text-[11px] text-amber-700 dark:text-amber-400 leading-relaxed">
+              {Object.values(netStatus.envVars).every(Boolean)
+                ? "✅ جميع متغيرات البيئة مُعدّة بشكل صحيح."
+                : "⚠️ بعض متغيرات البيئة غير مُعدّة. أضفها إلى ملف .env.local لتفعيل الميزات."}
             </p>
           </div>
         </CardContent>
