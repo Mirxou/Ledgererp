@@ -466,8 +466,11 @@ function AuthenticatedApp({ piUid, username }: { piUid: string; username: string
               <CircleDot className="h-3 w-3" />{username}
             </Badge>
             {role === "manager" && (
-              <button className="p-1.5 rounded-md hover:bg-muted" onClick={function() { setTheme(theme === "dark" ? "light" : "dark"); }} aria-label={theme === "dark" ? "تفعيل الوضع الفاتح" : "تفعيل الوضع الداكن"}>
-                {theme === "dark" ? <Sun className="h-3.5 w-3.5 text-muted-foreground" /> : <Moon className="h-3.5 w-3.5 text-muted-foreground" />}
+              <button className="p-1.5 rounded-md hover:bg-muted" onClick={function() { setTheme(theme === "dark" ? "light" : "dark"); }} aria-label="تبديل المظهر">
+                {/* Both icons rendered on server & client — CSS picks the visible one via the
+                    `.dark` class next-themes sets on <html>. Zero hydration mismatch. */}
+                <Sun className="hidden h-3.5 w-3.5 text-muted-foreground dark:block" />
+                <Moon className="h-3.5 w-3.5 text-muted-foreground dark:hidden" />
               </button>
             )}
             <button className="p-1.5 rounded-md hover:bg-muted" onClick={function() { copyText(piUid, toast, "تم نسخ المعرف"); }} aria-label="نسخ المعرف">
