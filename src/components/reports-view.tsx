@@ -15,7 +15,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { api } from "@/lib/api-client";
-import { microToPi, roundPi, formatPi } from "@/lib/pi-amount";
+import { formatPi } from "@/lib/pi-amount";
 import { fmtDate } from "@/lib/helpers";
 import type {
   TransactionLogData, LocalSaleData, ExpenseData, ProductData, InvoiceData,
@@ -191,28 +191,28 @@ export function ReportsView({ storeId, piUid }: ReportsViewProps) {
   /* ── KPIs ── */
   const piRevenue = filteredInvoices
     .filter(function(inv) { return inv.status === "completed"; })
-    .reduce(function(sum, inv) { return sum + microToPi(inv.total); }, 0);
+    .reduce(function(sum, inv) { return sum + inv.total; }, 0);
 
-  const localRevenue = filteredSales.reduce(function(sum, s) { return sum + microToPi(s.total); }, 0);
+  const localRevenue = filteredSales.reduce(function(sum, s) { return sum + s.total; }, 0);
   const totalRevenue = piRevenue + localRevenue;
-  const totalExpenses = filteredExpenses.reduce(function(sum, e) { return sum + microToPi(e.amount); }, 0);
+  const totalExpenses = filteredExpenses.reduce(function(sum, e) { return sum + e.amount; }, 0);
   const netProfit = totalRevenue - totalExpenses;
 
   /* ── Revenue by payment method ── */
   const revenueByMethod: Record<string, number> = {};
   for (const inv of filteredInvoices.filter(function(i) { return i.status === "completed"; })) {
     const method = "pi";
-    revenueByMethod[method] = (revenueByMethod[method] || 0) + microToPi(inv.subtotal);
+    revenueByMethod[method] = (revenueByMethod[method] || 0) + inv.subtotal;
   }
   for (const sale of filteredSales) {
     const method = sale.paymentMethod || "cash";
-    revenueByMethod[method] = (revenueByMethod[method] || 0) + microToPi(sale.total);
+    revenueByMethod[method] = (revenueByMethod[method] || 0) + sale.total;
   }
 
   /* ── Expense by category ── */
   const expByCategory: Record<string, number> = {};
   for (const exp of filteredExpenses) {
-    expByCategory[exp.category] = (expByCategory[exp.category] || 0) + microToPi(exp.amount);
+    expByCategory[exp.category] = (expByCategory[exp.category] || 0) + exp.amount;
   }
 
   /* ── Invoice status distribution ── */
@@ -230,7 +230,7 @@ export function ReportsView({ storeId, piUid }: ReportsViewProps) {
         productRevenue[key] = { name: item.productName, qty: 0, revenue: 0 };
       }
       productRevenue[key].qty += item.quantity;
-      productRevenue[key].revenue += microToPi(item.totalPrice);
+      productRevenue[key].revenue += item.totalPrice;
     }
   }
   const topProducts = Object.values(productRevenue).sort(function(a, b) { return b.revenue - a.revenue; }).slice(0, 5);
@@ -251,14 +251,14 @@ export function ReportsView({ storeId, piUid }: ReportsViewProps) {
 
     const dayRevenue = filteredSales
       .filter(function(s) { return s.createdAt.startsWith(dateStr); })
-      .reduce(function(sum, s) { return sum + microToPi(s.total); }, 0)
+      .reduce(function(sum, s) { return sum + s.total; }, 0)
       + filteredInvoices
         .filter(function(inv) { return inv.status === "completed" && inv.completedAt && inv.completedAt.startsWith(dateStr); })
-        .reduce(function(sum, inv) { return sum + microToPi(inv.subtotal); }, 0);
+        .reduce(function(sum, inv) { return sum + inv.subtotal; }, 0);
 
     const dayExpenses = filteredExpenses
       .filter(function(e) { return (e.date || e.createdAt).startsWith(dateStr); })
-      .reduce(function(sum, e) { return sum + microToPi(e.amount); }, 0);
+      .reduce(function(sum, e) { return sum + e.amount; }, 0);
 
     dailyTrend.push({ date: dateStr, revenue: dayRevenue, expenses: dayExpenses });
   }
@@ -610,7 +610,7 @@ export function ReportsView({ storeId, piUid }: ReportsViewProps) {
                             <TableCell className="text-[10px] py-1">{typeLabels[tx.type] || tx.type}</TableCell>
                             <TableCell className="text-[10px] py-1 max-w-[120px] truncate">{tx.description}</TableCell>
                             <TableCell className={"text-[10px] py-1 text-left font-mono " + (tx.amount > 0 ? "text-emerald-600" : "text-red-600")}>
-                              {formatPi(microToPi(tx.amount))}
+                              {formatPi(tx.amount)}
                             </TableCell>
                             <TableCell className="text-[10px] py-1">{fmtDate(tx.createdAt)}</TableCell>
                           </TableRow>
