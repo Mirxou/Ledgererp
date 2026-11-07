@@ -49,6 +49,8 @@ import { PaymentsView } from "@/components/payments-view";
 import { CashierPOSView } from "@/components/cashier-pos-view";
 import { ReportsView } from "@/components/reports-view";
 import { BackupView } from "@/components/backup-view";
+import { PiBannerAd, useInterstitialAd, PiRewardedAdButton, PiAdNetworkStatus } from "@/components/pi-ads";
+import { showInterstitialAd as triggerPiAd } from "@/lib/pi-ads";
 
 /* ═══ App Entry ═══ */
 import { Suspense } from "react";
@@ -481,6 +483,9 @@ function AuthenticatedApp({ piUid, username }: { piUid: string; username: string
       {/* Offline Banner */}
       <OfflineIndicator />
 
+      {/* Pi Ad Network — Banner Ad (top of page) */}
+      {role === "manager" && myStore && <PiBannerAd position="top" />}
+
       {/* Main */}
       <main id="main-content" className="flex-1 max-w-5xl mx-auto w-full px-4 py-5 space-y-5">
         {storesRes.isLoading && !myStore ? (
@@ -504,7 +509,7 @@ function AuthenticatedApp({ piUid, username }: { piUid: string; username: string
           />
         ) : (
           /* ═══ Manager Tabbed View ═══ */
-          <Tabs value={tab} onValueChange={setTab} className="space-y-5">
+          <Tabs value={tab} onValueChange={function(newTab: string) { setTab(newTab); /* Pi Ad: show interstitial on tab transitions (respects cooldown) */ triggerPiAd(); }} className="space-y-5">
             <TabsList className={"grid w-full h-auto p-1 bg-muted/50 " + (tabList.length <= 4 ? "grid-cols-" + tabList.length : "grid-cols-4 sm:grid-cols-" + tabList.length)}>
               {tabList.map(function(t) {
                 const Ic = t[1] as React.ElementType;
@@ -598,6 +603,17 @@ function AuthenticatedApp({ piUid, username }: { piUid: string; username: string
             {/* 11. Pi Setup */}
             <TabsContent value="pisetup">
               <PiSetupView piUid={piUid} />
+              {/* Pi Ad Network Status & Controls */}
+              <div className="mt-4">
+                <PiAdNetworkStatus />
+              </div>
+              <div className="mt-3 flex items-center gap-3">
+                <PiRewardedAdButton
+                  label="شاهد إعلان واحصل على مكافأة"
+                  rewardDescription="0.01π"
+                  onReward={function(r) { toast({ title: "تم الحصول على مكافأة! 🎉", description: r.type + ": " + r.amount }); }}
+                />
+              </div>
             </TabsContent>
           </Tabs>
         )}
