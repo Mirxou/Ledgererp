@@ -1,0 +1,39 @@
+# ─── Ledgererp Caddyfile (Production) ───────────────────────────
+# Automatic HTTPS via Let's Encrypt — no manual certificate work.
+# DOMAIN is read from the .env file (e.g. DOMAIN=erp.example.com)
+
+{$DOMAIN} {
+	# Compression
+	encode gzip zstd
+
+	# Reverse proxy to the Next.js app
+	reverse_proxy ledgererp:3000
+
+	# Edge security headers (app adds more via next.config.ts)
+	header {
+		Strict-Transport-Security "max-age=63072000; includeSubDomains; preload"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		X-Permitted-Cross-Domain-Policies "none"
+		-Server
+	}
+
+	# Limit request body size (product images / uploads)
+	request_body {
+		max_size 20MB
+	}
+
+	# Cache static assets aggressively
+	@static path /_next/static/* /icon-* /favicon.svg /logo.svg /manifest.json
+	header @static Cache-Control "public, max-age=31536000, immutable"
+
+	# Logging
+	log {
+		output file /data/access.log {
+			roll_size 10MiB
+			roll_keep 5
+		}
+	}
+}
+
+# HTTP → HTTPS redirect is automatic in Caddy

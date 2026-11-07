@@ -1,0 +1,255 @@
+# 🚀 دليل نشر Ledgererp على النطاق (VPS + HTTPS تلقائي)
+
+هذا الدليل يشرح خطوة بخطوة كيف تنشر تطبيق **Ledgererp** على خادم خاص (VPS) مع نطاقك الخاص وشهادة HTTPS تلقائية — وهي متطلبات إلزامية لتشغيل تطبيقات Pi Network.
+
+---
+
+## 📋 المتطلبات
+
+| المتطلب | التفاصيل |
+|---------|----------|
+| خادم VPS | Ubuntu 22.04+ — 2GB RAM كحد أدنى (مثل Hetzner / DigitalOcean / Contabo) |
+| نطاق (Domain) | نطاقك الخاص مثل `erp.example.com` |
+| Docker | الإصدار 24 أو أحدث مع إضافة Compose |
+| مفاتيح Pi | PI_API_KEY من Pi Developer Portal |
+
+---
+
+## 1️⃣ ربط النطاق بالخادم (DNS)
+
+من لوحة تحكم مزوّد النطاق، أضف سجل **A Record**:
+
+```
+النوع: A
+الاسم: erp          (أو @ إذا أردت النطاق الرئيسي)
+القيمة: IP_الخادم_الخاص_بك
+TTL: 300
+```
+
+✅ تحقق من الانتشار قبل المتابعة:
+```bash
+ping erp.example.com
+# يجب أن يظهر IP الخادم
+```
+
+> ⚠️ **مهم جداً:** لن تصدر شهادة HTTPS قبل أن يشير النطاق إلى الخادم بشكل صحيح.
+
+---
+
+## 2️⃣ تجهيز الخادم (مرة واحدة فقط)
+
+اتصل بالخادم عبر SSH:
+```bash
+ssh root@IP_الخادم
+```
+
+ثبّت Docker:
+```bash
+curl -fsSL https://get.docker.com | sh
+```
+
+أنشئ مجلد التطبيق وثبّت Git إن لم يكن موجوداً:
+```bash
+apt update && apt install -y git
+mkdir -p /opt && cd /opt
+```
+
+---
+
+## 3️⃣ استنساخ المشروع من GitHub
+
+```bash
+git clone https://github.com/Mirxou/Ledgererp.git
+cd Ledgererp
+```
+
+> 💡 مستودع خاص؟ استخدم Personal Access Token:
+> `git clone https://TOKEN@github.com/Mirxou/Ledgererp.git`
+
+---
+
+## 4️⃣ إعداد ملف البيئة `.env`
+
+```bash
+cp .env.example .env
+nano .env
+```
+
+عدّل القيم التالية:
+
+```env
+# 🔴 إلزامي — نطاقك الحقيقي
+DOMAIN=erp.example.com
+
+# 🔴 إلزامي — مفاتيح Pi Network من Developer Portal
+PI_API_KEY=مفتاحك_الحقيقي
+PI_WALLET_ADDRESS=عنوان_محفظتك
+PI_APP_ID=معرف_تطبيقك
+
+# إعلانات Pi Ad Network (من Developer Portal → Ad Network → Create Ad Unit)
+NEXT_PUBLIC_PI_CLIENT_ID=معرف_العميل
+NEXT_PUBLIC_PI_BANNER_AD_ID=معرف_وحدة_البانر
+NEXT_PUBLIC_PI_INTERSTITIAL_AD_ID=معرف_وحدة_الإعلان_البيني
+NEXT_PUBLIC_PI_REWARDED_AD_ID=معرف_وحدة_الإعلان_المكافئ
+
+# 🔴 الإنتاج — يجب أن يكون false
+NEXT_PUBLIC_DEMO_MODE=false
+```
+
+احفظ الملف: `Ctrl+O` ثم `Enter` ثم `Ctrl+X`
+
+---
+
+## 5️⃣ النشر بأمر واحد 🎯
+
+```bash
+chmod +x deploy.sh
+./deploy.sh
+```
+
+السكربت يقوم تلقائياً بـ:
+1. ✅ بناء صورة التطبيق (Next.js standalone + Prisma)
+2. ✅ إنشاء/تحديث قاعدة بيانات SQLite داخل volume دائم
+3. ✅ تشغيل التطبيق + Caddy (شهادة HTTPS تلقائية من Let's Encrypt)
+4. ✅ فحص صحة التطبيق
+
+بعد دقيقة تقريباً سيكون تطبيقك متاحاً على:
+
+```
+https://erp.example.com  ✅
+```
+
+---
+
+## 6️⃣ التحقق من سلامة النشر
+
+```bash
+# حالة الخدمات
+docker compose ps
+
+# سجلات التطبيق المباشرة
+docker compose logs -f ledgererp
+
+# سجلات Caddy (إصدار شهادة HTTPS)
+docker compose logs -f caddy
+
+# فحص سريع
+curl -I https://erp.example.com
+```
+
+يجب أن ترى `HTTP/2 200` وشهادة صالحة.
+
+---
+
+## 7️⃣ توثيق النطاق في Pi Developer Portal 🔑
+
+بعد نشر التطبيق، يجب توثيق ملكية النطاق داخل Pi Developer Portal حتى يعمل التطبيق داخل Pi Browser:
+
+1. افتح **Pi Developer Portal** → تطبيقك → **Settings**
+2. تأكد أن **App URL** يطابق نطاقك: `https://erp.example.com`
+3. اضغط **Validate Domain** واختر إحدى الطريقتين:
+   - **HTML file**: حمّل ملف التوثيق الذي يمنحك إياه Pi، ثم ضعه في مجلد `public/` بالمشروع على الخادم وأعد التشغيل:
+     ```bash
+     # مثال — استبدل باسم الملف الفعلي من Pi
+     nano public/validation-file.html   # الصق محتوى الملف
+     docker compose restart ledgererp
+     ```
+   - **Meta tag**: أضف الوسم في `src/app/layout.tsx` داخل `<head>` ثم أعد البناء والنشر.
+4. بعد التوثيق، اختبر التطبيق من **Pi Browser** على هاتفك.
+
+---
+
+## 8️⃣ تشغيل إعلانات Pi Ad Network على النطاق 📺
+
+الإعلانات **لن تُعرض** إلا بعد استيفاء الشروط التالية:
+
+- [ ] التطبيق يعمل على نطاق موثّق فوق ☝️
+- [ ] `NEXT_PUBLIC_DEMO_MODE=false` في `.env`
+- [ ] معرّفات وحدات الإعلانات الحقيقية في `.env` (وليس القيم التجريبية)
+- [ ] التطبيق مفتوح من داخل **Pi Browser** (الإعلانات لا تعمل في متصفح عادي — تظهر رسالة تلفّ ذلك بأمان)
+
+ثم قدّم طلب **Pi Ad Network** من Developer Portal — الكود جاهز بالكامل في المستودع:
+- `src/lib/pi-ads.ts` — محرك الإعلانات (Banner / Interstitial / Rewarded)
+- `src/components/pi-ads.tsx` — مكوّنات الواجهة
+
+---
+
+## 🔄 التحديث بعد تعديل الكود
+
+```bash
+cd /opt/Ledgererp
+git pull
+./deploy.sh    # يعيد البناء والتشغيل — البيانات محفوظة في volume
+```
+
+---
+
+## 💾 النسخ الاحتياطي
+
+```bash
+chmod +x backup.sh
+./backup.sh     # نسخة مضغوطة في db/backups/
+
+# نسخ احتياطي يومي تلقائي (الساعة 3 صباحاً):
+crontab -e
+# أضف السطر:
+0 3 * * * cd /opt/Ledgererp && ./backup.sh >> /var/log/ledgererp-backup.log 2>&1
+```
+
+لاستعادة نسخة احتياطية:
+```bash
+gunzip -c db/backups/ledgererp_YYYYMMDD_HHMMSS.db.gz > /tmp/restore.db
+docker cp /tmp/restore.db ledgererp-app:/app/db/ledgererp.db
+docker compose restart ledgererp
+```
+
+---
+
+## 🧯 حل المشاكل الشائعة
+
+| المشكلة | الحل |
+|---------|------|
+| الشهادة لا تصدر | انتظر دقيقتين، تأكد من سجل DNS وفتح المنفذين 80 و443: `ufw allow 80,443/tcp` |
+| التطبيق يظهر unhealthy | `docker compose logs ledgererp` — غالباً متغير ناقص في `.env` |
+| 502 Bad Gateway | التطبيق لم يصبح جاهزاً بعد — انتظر 30 ثانية ثم أعد المحاولة |
+| بيانات اختفت بعد إعادة النشر | تأكد أنك لم تحذف volume: `docker volume ls` يجب أن يظهر `ledgererp-db` |
+| نسيان كلمة مرور قاعدة البيانات | SQLite لا يحتاج كلمة مرور — البيانات في ملف واحد داخل volume |
+| أريد تحديث إعدادات `.env` | عدّل الملف ثم: `docker compose up -d --force-recreate ledgererp` |
+
+---
+
+## 🗺️ ملخص معماري
+
+```
+الإنترنت
+   │  (80/443)
+   ▼
+┌─────────┐   HTTPS تلقائي   ┌──────────────────┐
+│  Caddy  │ ───────────────▶ │  ledgererp-app   │
+│ (proxy) │                  │  Next.js+Bun     │
+└─────────┘                  │  :3000 (داخلي)   │
+     │                       └────────┬─────────┘
+     │ شهادات Let's Encrypt            │
+     ▼                                 ▼
+┌──────────┐                  ┌──────────────┐
+│ caddy-data│                 │ ledgererp-db │  ← بياناتك محفوظة هنا
+└──────────┘                  │  (SQLite)    │
+                              └──────────────┘
+```
+
+---
+
+## ✅ قائمة تحقق نهائية قبل إطلاق الحقيقي
+
+- [ ] سجل DNS يشير للخادم
+- [ ] `DOMAIN` مضبوط في `.env`
+- [ ] `NEXT_PUBLIC_DEMO_MODE=false`
+- [ ] `PI_API_KEY` الجديد (بعد إبطال المفتاح القديم المكشوف)
+- [ ] `./deploy.sh` نجح و`curl -I` يعيد 200
+- [ ] النطاق موثّق في Pi Developer Portal
+- [ ] التطبيق يفتح داخل Pi Browser ويصرف دفعة تجريبية sandbox
+- [ ] `backup.sh` مجدول في crontab
+- [ ] PAT الخاص بـ GitHub **مُبطَل** وتم إنشاء بديل جديد (لأن القديم كُشف في المحادثة)
+
+---
+© Ledgererp — نظام ERP للجملة والتجزئة على شبكة Pi Network

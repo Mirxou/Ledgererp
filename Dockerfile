@@ -7,7 +7,7 @@ FROM oven/bun:1 AS deps
 WORKDIR /app
 
 # Copy lockfile and manifest for dependency installation
-COPY package.json bun.lockb ./
+COPY package.json bun.lock ./
 
 # Install all dependencies (including devDependencies for build)
 RUN bun install --frozen-lockfile
@@ -18,11 +18,13 @@ WORKDIR /app
 
 # Copy installed node_modules from deps stage
 COPY --from=deps /app/node_modules ./node_modules
-COPY --from=deps /app/package.json ./package.json
-COPY --from=deps /app/bun.lockb ./bun.lockb
+COPY package.json bun.lock ./
 
 # Copy application source code
 COPY . .
+
+# Generate Prisma Client (required before next build)
+RUN bunx prisma generate
 
 # Build the Next.js application (standalone output)
 RUN bun run build
@@ -53,5 +55,20 @@ EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
-# Standalone mode requires Node.js to run server.js
-CMD ["node", "server.js"]
+# Run Next.js standalone server with Bun (guaranteed present in oven/bun)
+CMD ["bun", "server.js"]
+
+# ─── Stage 4: Migrator (one-off schema push) ───────────────────
+# Usage: docker compose build migrator && docker compose run --rm migrator
+# Mounts the same /app/db volume and pushes the Prisma schema to SQLite
+FROM oven/bun:1 AS migrator
+WORKDIR /app
+
+COPY --from=deps /app/node_modules ./node_modules
+COPY package.json bun.lock ./
+COPY prisma ./prisma
+
+# db directory will be volume-mounted at /app/db (schema resolves file:../db/ledgererp.db)
+RUN mkdir -p /app/db
+
+CMD ["bunx", "prisma", "db", "push", "--skip-generate"]

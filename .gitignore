@@ -48,6 +48,8 @@ db/*.db-journal
 # Sandbox / CI
 .zscripts/
 Caddyfile
+# Production Caddy config lives in deploy/ and must be committed
+!deploy/Caddyfile
 dev.log
 server.log
 

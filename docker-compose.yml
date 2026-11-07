@@ -1,23 +1,34 @@
-version: "3.8"
+# ─── Ledgererp Production Stack ─────────────────────────────────
+# App (Next.js standalone + SQLite) behind Caddy (automatic HTTPS).
+#
+# Quick start:
+#   cp .env.example .env          # then fill values (DOMAIN is required!)
+#   docker compose build
+#   docker compose run --rm migrator   # one-time: create/push DB schema
+#   docker compose up -d
 
 services:
+  # ─── Next.js Application ──────────────────────────────────────
   ledgererp:
     build:
       context: .
       dockerfile: Dockerfile
+      target: runner
     container_name: ledgererp-app
-    ports:
-      - "3000:3000"
+    # Not exposed to host — only reachable through Caddy
+    expose:
+      - "3000"
     volumes:
       - ledgererp-db:/app/db
-      - ledgererp-backups:/app/db/backups
     env_file:
       - .env
     environment:
       - NODE_ENV=production
+      - PORT=3000
+      - HOSTNAME=0.0.0.0
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3000/api/health || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -38,10 +49,47 @@ services:
     networks:
       - ledgererp-net
 
+  # ─── One-off DB Schema Push (run manually once / after schema changes) ──
+  migrator:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: migrator
+    container_name: ledgererp-migrator
+    volumes:
+      - ledgererp-db:/app/db
+    env_file:
+      - .env
+    restart: "no"
+    networks:
+      - ledgererp-net
+
+  # ─── Caddy Reverse Proxy (automatic HTTPS) ────────────────────
+  caddy:
+    image: caddy:2-alpine
+    container_name: ledgererp-caddy
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    environment:
+      - DOMAIN=${DOMAIN}
+    restart: unless-stopped
+    depends_on:
+      - ledgererp
+    networks:
+      - ledgererp-net
+
 volumes:
   ledgererp-db:
     driver: local
-  ledgererp-backups:
+  caddy-data:
+    driver: local
+  caddy-config:
     driver: local
 
 networks:
