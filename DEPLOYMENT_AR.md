@@ -38,10 +38,32 @@
 5. **تحقق:** افتح `https://نطاقك/api/health` — يجب أن ترى `"status":"healthy"`.
    عند أول طلب سينشئ التطبيق **جداول قاعدة البيانات تلقائياً** (17 جدول) + بيانات تجريبية إذا كان وضع demo مفعلاً.
 
-### ملاحظات مهمة لنشر Vercel:
-- إن كان نطاقك خلف **Cloudflare**: تأكد أن وضع SSL هو **Full** (وليس Flexible حتى لا يحدث حلقة تحويل)، وإن استمر خطأ `ERR_CONNECTION_ABORTED` على الهاتف جرّب تعطيل **HTTP/3** من Network settings.
-- `NEXT_PUBLIC_*` تُثبّت وقت البناء — بعد تغييرها اضغط Redeploy دائماً.
-- قبل مراجعة Pi Ad Network الرسمية: اجعل `NEXT_PUBLIC_DEMO_MODE=false` ليتم استخدام مصادقة Pi الحقيقية داخل Pi Browser.
+### ملاحظات مهمة لنشر Vercel (دروس موثقة من النشر الفعلي 2026-11-08):
+
+1. **🔴 الأهم — النطاق خلف Cloudflare يجب أن يكون DNS only (سحابة رمادية):**
+   - إذا كان سجل النطاق "Proxied" (سحابة برتقالية) فإن Cloudflare يضيف تلقائياً ترويسة `X-Frame-Options: SAMEORIGIN` على كل استجابة
+   - Pi Browser يعرض التطبيقات داخل إطار مدمج → تظهر `net::ERR_BLOCKED_BY_RESPONSE` ولا يفتح التطبيق إطلاقاً
+   - **الحل**: DNS → Records → اضغط السجل الأساسي → حوّل السحابة من Proxied إلى **DNS only** → Save
+   - بديل: احذف تطبيق "Security Headers" من قسم Apps، أو قاعدة Modify Response Header من Rules → Transform Rules
+   - SSL يظل يعمل بعد ذلك من Vercel تلقائياً (شهادة صالحة تُصدر تلقائياً للنطاق)
+
+2. **🔴 منطقة الوظائف (Function Region) يجب أن تطابق موقع قاعدة Turso:**
+   - Settings → Functions → Function Region → اختر نفس منطقة قاعدة البيانات (مثلاً **Frankfurt fra1** مع قاعدة `aws-eu-central-1`)
+   - الفرق هائل: زمن استجابة قاعدة البيانات انخفض من ~950ms إلى **7ms**
+
+3. **🔴 ممنوع إضافة هذه الترويسات في الكود أو vercel.json (تكسر Pi Browser):**
+   - `X-Frame-Options`، و`frame-ancestors` في CSP، و`Cross-Origin-Embedder-Policy`، و`Cross-Origin-Resource-Policy`
+   - (تمت إزالتها من `vercel.json` و`next.config.ts` في commit `90e354c` — راجع ملاحظة الأمان أعلى `next.config.ts`)
+
+4. **🔴 `NEXT_PUBLIC_PI_CLIENT_ID` إلزامي لتسجيل الدخول:**
+   - بدون معرّف العميل من Developer Portal → Pi Sign-In لن يعمل داخل Pi Browser
+   - تأكد أيضاً أن Redirect URI في Developer Portal يحتوي `https://نطاقك/`
+
+5. **متفرقات:**
+   - وضع SSL في Cloudflare: **Full** (وليس Flexible حتى لا يحدث حلقة تحويل) — لا يهم بعد DNS only
+   - `NEXT_PUBLIC_*` تُثبّت وقت البناء — بعد تغييرها اضغط Redeploy دائماً
+   - قبل مراجعة Pi Ad Network الرسمية: اجعل `NEXT_PUBLIC_DEMO_MODE=false` ليتم استخدام مصادقة Pi الحقيقية داخل Pi Browser
+   - تحقق سريع بعد أي تغيير: `curl -I https://نطاقك/` — تأكد أنه لا توجد `x-frame-options` وأن `server: Vercel` (وليس cloudflare)
 
 ---
 
