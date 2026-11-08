@@ -1,5 +1,8 @@
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  // Required for the Turso/libSQL driver adapter used on Vercel (serverless).
+  // Local/Docker SQLite keeps working exactly as before.
+  previewFeatures = ["driverAdapters"]
 }
 
 datasource db {

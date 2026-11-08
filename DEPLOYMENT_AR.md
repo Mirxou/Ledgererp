@@ -4,7 +4,48 @@
 
 ---
 
-## 📋 المتطلبات
+## 🅱️ المسار البديل: Vercel + Turso (بدون خادم — مجاني)
+
+إذا لم يكن لديك VPS، نشر التطبيق على **Vercel** ممكن لكن **قاعدة البيانات المحلية SQLite لن تعمل** لأن Vercel بنظام ملفات للقراءة فقط (خطأ `Unable to open the database file`). الحل: قاعدة بيانات سحابية متوافقة مع SQLite من **Turso** (خطة مجانية).
+
+> ⚠️ التطبيق مبرمج بحيث يتعرف تلقائياً على Turso عبر متغيرات البيئة — **لا حاجة لأي تعديل في الكود**، وسيُنشئ الجداول والبيانات التجريبية تلقائياً عند أول تشغيل.
+
+### الخطوات:
+
+1. **أنشئ قاعدة بيانات مجانية على Turso:**
+   - سجّل الدخول على [app.turso.tech](https://app.turso.tech) بحساب GitHub
+   - Databases → **Create database** → اختر اسماً مثل `ledgererp` وموقعاً قريباً (مثل `fra` أو `ams`)
+   - انسخ **Database URL** (يبدأ بـ `libsql://`)
+
+2. **أنشئ توكن لقاعدة البيانات:**
+   - من صفحة القاعدة → Tokens → **Create token**
+   - انسخ التوكن (سرّي — لا تشاركه)
+
+3. **أضف المتغيرات في Vercel:**
+   - مشروعك → Settings → **Environment Variables** → أضف:
+
+   | المتغير | القيمة |
+   |---------|--------|
+   | `TURSO_DATABASE_URL` | `libsql://ledgererp-xxx.turso.io` |
+   | `TURSO_AUTH_TOKEN` | التوكن الذي أنشأته |
+   | `NEXT_PUBLIC_DEMO_MODE` | `false` (ضع `true` مؤقتاً للتجربة السريعة في متصفح عادي) |
+   | `PI_API_KEY` | مفتاحك من Pi Developer Portal |
+   | `PI_WALLET_ADDRESS` | عنوان محفظتك |
+   | `PI_APP_ID` / `PI_APP_SECRET` | من Developer Portal |
+
+4. **أعد النشر:** Deployments → أحدث نشر → **Redeploy**
+
+5. **تحقق:** افتح `https://نطاقك/api/health` — يجب أن ترى `"status":"healthy"`.
+   عند أول طلب سينشئ التطبيق **جداول قاعدة البيانات تلقائياً** (17 جدول) + بيانات تجريبية إذا كان وضع demo مفعلاً.
+
+### ملاحظات مهمة لنشر Vercel:
+- إن كان نطاقك خلف **Cloudflare**: تأكد أن وضع SSL هو **Full** (وليس Flexible حتى لا يحدث حلقة تحويل)، وإن استمر خطأ `ERR_CONNECTION_ABORTED` على الهاتف جرّب تعطيل **HTTP/3** من Network settings.
+- `NEXT_PUBLIC_*` تُثبّت وقت البناء — بعد تغييرها اضغط Redeploy دائماً.
+- قبل مراجعة Pi Ad Network الرسمية: اجعل `NEXT_PUBLIC_DEMO_MODE=false` ليتم استخدام مصادقة Pi الحقيقية داخل Pi Browser.
+
+---
+
+## 📋 المتطلبات (مسار VPS)
 
 | المتطلب | التفاصيل |
 |---------|----------|

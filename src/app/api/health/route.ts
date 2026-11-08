@@ -32,11 +32,31 @@ export async function GET(req: NextRequest) {
       },
     });
   } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+
+    // Actionable diagnostics instead of raw driver errors
+    let code = "database_error";
+    let hint = message;
+    if (!process.env.TURSO_DATABASE_URL && process.env.VERCEL) {
+      code = "database_not_configured";
+      hint =
+        "TURSO_DATABASE_URL is missing on this Vercel deployment. " +
+        "Add TURSO_DATABASE_URL + TURSO_AUTH_TOKEN in Vercel → Settings → Environment Variables, then redeploy.";
+    } else if (/Unable to open the database file/i.test(message)) {
+      code = "sqlite_file_unreachable";
+      hint =
+        "Local SQLite file could not be opened. On serverless platforms use TURSO_DATABASE_URL (cloud SQLite) instead.";
+    } else if (/UNAUTHORIZED|unauthorized|invalid token/i.test(message)) {
+      code = "database_auth_failed";
+      hint = "Turso rejected the auth token — check TURSO_AUTH_TOKEN and regenerate if needed.";
+    }
+
     return NextResponse.json(
       {
         status: "unhealthy",
+        code,
         timestamp: new Date().toISOString(),
-        error: error instanceof Error ? error.message : "Unknown error",
+        hint,
       },
       { status: 503 }
     );
