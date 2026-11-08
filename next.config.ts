@@ -1,8 +1,10 @@
 import type { NextConfig } from "next";
 
 const securityHeaders = [
-  // Pi Browser uses WebView/iframe, so we use SAMEORIGIN instead of DENY
-  { key: "X-Frame-Options", value: "SAMEORIGIN" },
+  // NOTE: X-Frame-Options and CSP frame-ancestors MUST NOT be set —
+  // Pi Browser renders Pi Apps inside an embedded frame, and those headers
+  // trigger net::ERR_BLOCKED_BY_RESPONSE in Pi Browser. Frame-blocking is
+  // acceptable here because every sensitive action requires Pi SDK auth.
   { key: "X-Content-Type-Options", value: "nosniff" },
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
   // L6: Removed deprecated X-XSS-Protection (CSP provides equivalent protection)
@@ -18,10 +20,11 @@ const securityHeaders = [
       "default-src 'self'",
       "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://sdk.minepi.com",
       "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-      "font-src 'self' https://fonts.gstatic.com",
+      "font-src 'self' data: https://fonts.gstatic.com",
       "img-src 'self' data: https: blob:",
-      "connect-src 'self' https://api.minepi.com https://api.sandbox.minepi.com",
-      "frame-ancestors 'self'",
+      "media-src 'self' https: blob:",
+      "connect-src 'self' https:",
+      "frame-src 'self' https://*.minepi.com",
       "base-uri 'self'",
       "form-action 'self'",
     ].join("; "),
