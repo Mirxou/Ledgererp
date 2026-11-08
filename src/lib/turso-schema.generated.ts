@@ -4,7 +4,7 @@
 // Statements are idempotent (IF NOT EXISTS) so they are safe to run repeatedly on Turso/libSQL.
 
 export const TURSO_SCHEMA_STATEMENTS: readonly string[] = [
-  `CREATE TABLE "Store" (
+  `CREATE TABLE IF NOT EXISTS "Store" (
     "id" TEXT NOT NULL PRIMARY KEY,
     "piUid" TEXT NOT NULL,
     "name" TEXT NOT NULL,
@@ -22,7 +22,7 @@ export const TURSO_SCHEMA_STATEMENTS: readonly string[] = [
     "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" DATETIME NOT NULL
 )`,
-  `CREATE TABLE "Category" (
+  `CREATE TABLE IF NOT EXISTS "Category" (
     "id" TEXT NOT NULL PRIMARY KEY,
     "nameAr" TEXT NOT NULL,
     "nameEn" TEXT NOT NULL,
@@ -36,7 +36,7 @@ export const TURSO_SCHEMA_STATEMENTS: readonly string[] = [
     "updatedAt" DATETIME NOT NULL,
     CONSTRAINT "Category_parentId_fkey" FOREIGN KEY ("parentId") REFERENCES "Category" ("id") ON DELETE SET NULL ON UPDATE CASCADE
 )`,
-  `CREATE TABLE "Product" (
+  `CREATE TABLE IF NOT EXISTS "Product" (
     "id" TEXT NOT NULL PRIMARY KEY,
     "storeId" TEXT NOT NULL,
     "name" TEXT NOT NULL,
@@ -56,7 +56,7 @@ export const TURSO_SCHEMA_STATEMENTS: readonly string[] = [
     CONSTRAINT "Product_storeId_fkey" FOREIGN KEY ("storeId") REFERENCES "Store" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
     CONSTRAINT "Product_categoryId_fkey" FOREIGN KEY ("categoryId") REFERENCES "Category" ("id") ON DELETE SET NULL ON UPDATE CASCADE
 )`,
-  `CREATE TABLE "Customer" (
+  `CREATE TABLE IF NOT EXISTS "Customer" (
     "id" TEXT NOT NULL PRIMARY KEY,
     "storeId" TEXT NOT NULL,
     "name" TEXT NOT NULL,
@@ -72,7 +72,7 @@ export const TURSO_SCHEMA_STATEMENTS: readonly string[] = [
     "updatedAt" DATETIME NOT NULL,
     CONSTRAINT "Customer_storeId_fkey" FOREIGN KEY ("storeId") REFERENCES "Store" ("id") ON DELETE CASCADE ON UPDATE CASCADE
 )`,
-  `CREATE TABLE "Inventory" (
+  `CREATE TABLE IF NOT EXISTS "Inventory" (
     "id" TEXT NOT NULL PRIMARY KEY,
     "productId" TEXT NOT NULL,
     "storeId" TEXT NOT NULL,
@@ -87,7 +87,7 @@ export const TURSO_SCHEMA_STATEMENTS: readonly string[] = [
     CONSTRAINT "Inventory_productId_fkey" FOREIGN KEY ("productId") REFERENCES "Product" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
     CONSTRAINT "Inventory_storeId_fkey" FOREIGN KEY ("storeId") REFERENCES "Store" ("id") ON DELETE CASCADE ON UPDATE CASCADE
 )`,
-  `CREATE TABLE "InventoryMovement" (
+  `CREATE TABLE IF NOT EXISTS "InventoryMovement" (
     "id" TEXT NOT NULL PRIMARY KEY,
     "inventoryId" TEXT NOT NULL,
     "type" TEXT NOT NULL,
@@ -98,7 +98,7 @@ export const TURSO_SCHEMA_STATEMENTS: readonly string[] = [
     "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT "InventoryMovement_inventoryId_fkey" FOREIGN KEY ("inventoryId") REFERENCES "Inventory" ("id") ON DELETE CASCADE ON UPDATE CASCADE
 )`,
-  `CREATE TABLE "Invoice" (
+  `CREATE TABLE IF NOT EXISTS "Invoice" (
     "id" TEXT NOT NULL PRIMARY KEY,
     "invoiceNumber" TEXT NOT NULL,
     "storeId" TEXT NOT NULL,
@@ -123,7 +123,7 @@ export const TURSO_SCHEMA_STATEMENTS: readonly string[] = [
     "cancelledAt" DATETIME,
     CONSTRAINT "Invoice_storeId_fkey" FOREIGN KEY ("storeId") REFERENCES "Store" ("id") ON DELETE RESTRICT ON UPDATE CASCADE
 )`,
-  `CREATE TABLE "InvoiceItem" (
+  `CREATE TABLE IF NOT EXISTS "InvoiceItem" (
     "id" TEXT NOT NULL PRIMARY KEY,
     "invoiceId" TEXT NOT NULL,
     "productId" TEXT,
@@ -134,7 +134,7 @@ export const TURSO_SCHEMA_STATEMENTS: readonly string[] = [
     CONSTRAINT "InvoiceItem_invoiceId_fkey" FOREIGN KEY ("invoiceId") REFERENCES "Invoice" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
     CONSTRAINT "InvoiceItem_productId_fkey" FOREIGN KEY ("productId") REFERENCES "Product" ("id") ON DELETE SET NULL ON UPDATE CASCADE
 )`,
-  `CREATE TABLE "TransactionLog" (
+  `CREATE TABLE IF NOT EXISTS "TransactionLog" (
     "id" TEXT NOT NULL PRIMARY KEY,
     "storeId" TEXT NOT NULL,
     "invoiceId" TEXT,
@@ -147,7 +147,7 @@ export const TURSO_SCHEMA_STATEMENTS: readonly string[] = [
     "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT "TransactionLog_storeId_fkey" FOREIGN KEY ("storeId") REFERENCES "Store" ("id") ON DELETE RESTRICT ON UPDATE CASCADE
 )`,
-  `CREATE TABLE "LocalSale" (
+  `CREATE TABLE IF NOT EXISTS "LocalSale" (
     "id" TEXT NOT NULL PRIMARY KEY,
     "storeId" TEXT NOT NULL,
     "customerId" TEXT,
@@ -163,7 +163,7 @@ export const TURSO_SCHEMA_STATEMENTS: readonly string[] = [
     CONSTRAINT "LocalSale_storeId_fkey" FOREIGN KEY ("storeId") REFERENCES "Store" ("id") ON DELETE RESTRICT ON UPDATE CASCADE,
     CONSTRAINT "LocalSale_customerId_fkey" FOREIGN KEY ("customerId") REFERENCES "Customer" ("id") ON DELETE SET NULL ON UPDATE CASCADE
 )`,
-  `CREATE TABLE "LocalSaleItem" (
+  `CREATE TABLE IF NOT EXISTS "LocalSaleItem" (
     "id" TEXT NOT NULL PRIMARY KEY,
     "localSaleId" TEXT NOT NULL,
     "productId" TEXT,
@@ -174,7 +174,7 @@ export const TURSO_SCHEMA_STATEMENTS: readonly string[] = [
     CONSTRAINT "LocalSaleItem_localSaleId_fkey" FOREIGN KEY ("localSaleId") REFERENCES "LocalSale" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
     CONSTRAINT "LocalSaleItem_productId_fkey" FOREIGN KEY ("productId") REFERENCES "Product" ("id") ON DELETE SET NULL ON UPDATE CASCADE
 )`,
-  `CREATE TABLE "Expense" (
+  `CREATE TABLE IF NOT EXISTS "Expense" (
     "id" TEXT NOT NULL PRIMARY KEY,
     "storeId" TEXT NOT NULL,
     "category" TEXT NOT NULL,
@@ -186,7 +186,7 @@ export const TURSO_SCHEMA_STATEMENTS: readonly string[] = [
     "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT "Expense_storeId_fkey" FOREIGN KEY ("storeId") REFERENCES "Store" ("id") ON DELETE RESTRICT ON UPDATE CASCADE
 )`,
-  `CREATE TABLE "User" (
+  `CREATE TABLE IF NOT EXISTS "User" (
     "id" TEXT NOT NULL PRIMARY KEY,
     "piUid" TEXT NOT NULL,
     "username" TEXT NOT NULL,
@@ -199,7 +199,7 @@ export const TURSO_SCHEMA_STATEMENTS: readonly string[] = [
     "updatedAt" DATETIME NOT NULL,
     "lastLoginAt" DATETIME
 )`,
-  `CREATE TABLE "Notification" (
+  `CREATE TABLE IF NOT EXISTS "Notification" (
     "id" TEXT NOT NULL PRIMARY KEY,
     "userId" TEXT NOT NULL,
     "type" TEXT NOT NULL,
@@ -213,14 +213,14 @@ export const TURSO_SCHEMA_STATEMENTS: readonly string[] = [
     "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT "Notification_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User" ("id") ON DELETE CASCADE ON UPDATE CASCADE
 )`,
-  `CREATE TABLE "UserSetting" (
+  `CREATE TABLE IF NOT EXISTS "UserSetting" (
     "id" TEXT NOT NULL PRIMARY KEY,
     "userId" TEXT NOT NULL,
     "key" TEXT NOT NULL,
     "value" TEXT NOT NULL,
     CONSTRAINT "UserSetting_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User" ("id") ON DELETE CASCADE ON UPDATE CASCADE
 )`,
-  `CREATE TABLE "EscrowTransaction" (
+  `CREATE TABLE IF NOT EXISTS "EscrowTransaction" (
     "id" TEXT NOT NULL PRIMARY KEY,
     "type" TEXT NOT NULL,
     "invoiceId" TEXT NOT NULL,
@@ -235,7 +235,7 @@ export const TURSO_SCHEMA_STATEMENTS: readonly string[] = [
     CONSTRAINT "EscrowTransaction_fromUid_fkey" FOREIGN KEY ("fromUid") REFERENCES "User" ("piUid") ON DELETE RESTRICT ON UPDATE CASCADE,
     CONSTRAINT "EscrowTransaction_toUid_fkey" FOREIGN KEY ("toUid") REFERENCES "User" ("piUid") ON DELETE RESTRICT ON UPDATE CASCADE
 )`,
-  `CREATE TABLE "AuditLog" (
+  `CREATE TABLE IF NOT EXISTS "AuditLog" (
     "id" TEXT NOT NULL PRIMARY KEY,
     "action" TEXT NOT NULL,
     "userId" TEXT NOT NULL DEFAULT '',
@@ -245,7 +245,7 @@ export const TURSO_SCHEMA_STATEMENTS: readonly string[] = [
     "ip" TEXT NOT NULL DEFAULT '',
     "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 )`,
-  `CREATE TABLE "BackupRecord" (
+  `CREATE TABLE IF NOT EXISTS "BackupRecord" (
     "id" TEXT NOT NULL PRIMARY KEY,
     "piUid" TEXT NOT NULL,
     "storeId" TEXT NOT NULL,
@@ -255,72 +255,72 @@ export const TURSO_SCHEMA_STATEMENTS: readonly string[] = [
     "dataJson" TEXT NOT NULL,
     "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 )`,
-  `CREATE UNIQUE INDEX "Store_piUid_key" ON "Store"("piUid")`,
-  `CREATE UNIQUE INDEX "Store_slug_key" ON "Store"("slug")`,
-  `CREATE UNIQUE INDEX "Category_slug_key" ON "Category"("slug")`,
-  `CREATE INDEX "Category_parentId_idx" ON "Category"("parentId")`,
-  `CREATE INDEX "Category_sortOrder_idx" ON "Category"("sortOrder")`,
-  `CREATE INDEX "Category_isActive_idx" ON "Category"("isActive")`,
-  `CREATE INDEX "Product_storeId_idx" ON "Product"("storeId")`,
-  `CREATE INDEX "Product_storeId_isActive_idx" ON "Product"("storeId", "isActive")`,
-  `CREATE INDEX "Product_categoryId_idx" ON "Product"("categoryId")`,
-  `CREATE INDEX "Product_sku_idx" ON "Product"("sku")`,
-  `CREATE INDEX "Customer_storeId_idx" ON "Customer"("storeId")`,
-  `CREATE INDEX "Customer_storeId_isActive_idx" ON "Customer"("storeId", "isActive")`,
-  `CREATE INDEX "Customer_piUid_idx" ON "Customer"("piUid")`,
-  `CREATE INDEX "Customer_phone_idx" ON "Customer"("phone")`,
-  `CREATE INDEX "Inventory_storeId_idx" ON "Inventory"("storeId")`,
-  `CREATE INDEX "Inventory_quantity_idx" ON "Inventory"("quantity")`,
-  `CREATE UNIQUE INDEX "Inventory_productId_storeId_key" ON "Inventory"("productId", "storeId")`,
-  `CREATE INDEX "InventoryMovement_inventoryId_idx" ON "InventoryMovement"("inventoryId")`,
-  `CREATE INDEX "InventoryMovement_type_idx" ON "InventoryMovement"("type")`,
-  `CREATE INDEX "InventoryMovement_createdAt_idx" ON "InventoryMovement"("createdAt")`,
-  `CREATE UNIQUE INDEX "Invoice_invoiceNumber_key" ON "Invoice"("invoiceNumber")`,
-  `CREATE UNIQUE INDEX "Invoice_paymentTxId_key" ON "Invoice"("paymentTxId")`,
-  `CREATE INDEX "Invoice_storeId_idx" ON "Invoice"("storeId")`,
-  `CREATE INDEX "Invoice_customerPiUid_idx" ON "Invoice"("customerPiUid")`,
-  `CREATE INDEX "Invoice_status_idx" ON "Invoice"("status")`,
-  `CREATE INDEX "Invoice_storeId_status_idx" ON "Invoice"("storeId", "status")`,
-  `CREATE INDEX "Invoice_createdAt_idx" ON "Invoice"("createdAt")`,
-  `CREATE INDEX "Invoice_paymentMethod_idx" ON "Invoice"("paymentMethod")`,
-  `CREATE INDEX "InvoiceItem_invoiceId_idx" ON "InvoiceItem"("invoiceId")`,
-  `CREATE INDEX "InvoiceItem_productId_idx" ON "InvoiceItem"("productId")`,
-  `CREATE INDEX "TransactionLog_storeId_idx" ON "TransactionLog"("storeId")`,
-  `CREATE INDEX "TransactionLog_invoiceId_idx" ON "TransactionLog"("invoiceId")`,
-  `CREATE INDEX "TransactionLog_type_idx" ON "TransactionLog"("type")`,
-  `CREATE INDEX "TransactionLog_createdAt_idx" ON "TransactionLog"("createdAt")`,
-  `CREATE INDEX "LocalSale_storeId_idx" ON "LocalSale"("storeId")`,
-  `CREATE INDEX "LocalSale_customerId_idx" ON "LocalSale"("customerId")`,
-  `CREATE INDEX "LocalSale_paymentMethod_idx" ON "LocalSale"("paymentMethod")`,
-  `CREATE INDEX "LocalSale_createdAt_idx" ON "LocalSale"("createdAt")`,
-  `CREATE INDEX "LocalSaleItem_localSaleId_idx" ON "LocalSaleItem"("localSaleId")`,
-  `CREATE INDEX "LocalSaleItem_productId_idx" ON "LocalSaleItem"("productId")`,
-  `CREATE INDEX "Expense_storeId_idx" ON "Expense"("storeId")`,
-  `CREATE INDEX "Expense_category_idx" ON "Expense"("category")`,
-  `CREATE INDEX "Expense_date_idx" ON "Expense"("date")`,
-  `CREATE INDEX "Expense_createdAt_idx" ON "Expense"("createdAt")`,
-  `CREATE UNIQUE INDEX "User_piUid_key" ON "User"("piUid")`,
-  `CREATE INDEX "User_piUid_idx" ON "User"("piUid")`,
-  `CREATE INDEX "User_lastLoginAt_idx" ON "User"("lastLoginAt")`,
-  `CREATE INDEX "Notification_userId_idx" ON "Notification"("userId")`,
-  `CREATE INDEX "Notification_userId_read_idx" ON "Notification"("userId", "read")`,
-  `CREATE INDEX "Notification_createdAt_idx" ON "Notification"("createdAt")`,
-  `CREATE INDEX "Notification_type_idx" ON "Notification"("type")`,
-  `CREATE INDEX "UserSetting_userId_idx" ON "UserSetting"("userId")`,
-  `CREATE UNIQUE INDEX "UserSetting_userId_key_key" ON "UserSetting"("userId", "key")`,
-  `CREATE UNIQUE INDEX "EscrowTransaction_txid_key" ON "EscrowTransaction"("txid")`,
-  `CREATE INDEX "EscrowTransaction_invoiceId_idx" ON "EscrowTransaction"("invoiceId")`,
-  `CREATE INDEX "EscrowTransaction_fromUid_idx" ON "EscrowTransaction"("fromUid")`,
-  `CREATE INDEX "EscrowTransaction_toUid_idx" ON "EscrowTransaction"("toUid")`,
-  `CREATE INDEX "EscrowTransaction_type_idx" ON "EscrowTransaction"("type")`,
-  `CREATE INDEX "EscrowTransaction_status_idx" ON "EscrowTransaction"("status")`,
-  `CREATE INDEX "EscrowTransaction_createdAt_idx" ON "EscrowTransaction"("createdAt")`,
-  `CREATE INDEX "AuditLog_action_idx" ON "AuditLog"("action")`,
-  `CREATE INDEX "AuditLog_userId_idx" ON "AuditLog"("userId")`,
-  `CREATE INDEX "AuditLog_entity_entityId_idx" ON "AuditLog"("entity", "entityId")`,
-  `CREATE INDEX "AuditLog_createdAt_idx" ON "AuditLog"("createdAt")`,
-  `CREATE INDEX "BackupRecord_piUid_createdAt_idx" ON "BackupRecord"("piUid", "createdAt")`,
-  `CREATE INDEX "BackupRecord_storeId_createdAt_idx" ON "BackupRecord"("storeId", "createdAt")`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS "Store_piUid_key" ON "Store"("piUid")`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS "Store_slug_key" ON "Store"("slug")`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS "Category_slug_key" ON "Category"("slug")`,
+  `CREATE INDEX IF NOT EXISTS "Category_parentId_idx" ON "Category"("parentId")`,
+  `CREATE INDEX IF NOT EXISTS "Category_sortOrder_idx" ON "Category"("sortOrder")`,
+  `CREATE INDEX IF NOT EXISTS "Category_isActive_idx" ON "Category"("isActive")`,
+  `CREATE INDEX IF NOT EXISTS "Product_storeId_idx" ON "Product"("storeId")`,
+  `CREATE INDEX IF NOT EXISTS "Product_storeId_isActive_idx" ON "Product"("storeId", "isActive")`,
+  `CREATE INDEX IF NOT EXISTS "Product_categoryId_idx" ON "Product"("categoryId")`,
+  `CREATE INDEX IF NOT EXISTS "Product_sku_idx" ON "Product"("sku")`,
+  `CREATE INDEX IF NOT EXISTS "Customer_storeId_idx" ON "Customer"("storeId")`,
+  `CREATE INDEX IF NOT EXISTS "Customer_storeId_isActive_idx" ON "Customer"("storeId", "isActive")`,
+  `CREATE INDEX IF NOT EXISTS "Customer_piUid_idx" ON "Customer"("piUid")`,
+  `CREATE INDEX IF NOT EXISTS "Customer_phone_idx" ON "Customer"("phone")`,
+  `CREATE INDEX IF NOT EXISTS "Inventory_storeId_idx" ON "Inventory"("storeId")`,
+  `CREATE INDEX IF NOT EXISTS "Inventory_quantity_idx" ON "Inventory"("quantity")`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS "Inventory_productId_storeId_key" ON "Inventory"("productId", "storeId")`,
+  `CREATE INDEX IF NOT EXISTS "InventoryMovement_inventoryId_idx" ON "InventoryMovement"("inventoryId")`,
+  `CREATE INDEX IF NOT EXISTS "InventoryMovement_type_idx" ON "InventoryMovement"("type")`,
+  `CREATE INDEX IF NOT EXISTS "InventoryMovement_createdAt_idx" ON "InventoryMovement"("createdAt")`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS "Invoice_invoiceNumber_key" ON "Invoice"("invoiceNumber")`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS "Invoice_paymentTxId_key" ON "Invoice"("paymentTxId")`,
+  `CREATE INDEX IF NOT EXISTS "Invoice_storeId_idx" ON "Invoice"("storeId")`,
+  `CREATE INDEX IF NOT EXISTS "Invoice_customerPiUid_idx" ON "Invoice"("customerPiUid")`,
+  `CREATE INDEX IF NOT EXISTS "Invoice_status_idx" ON "Invoice"("status")`,
+  `CREATE INDEX IF NOT EXISTS "Invoice_storeId_status_idx" ON "Invoice"("storeId", "status")`,
+  `CREATE INDEX IF NOT EXISTS "Invoice_createdAt_idx" ON "Invoice"("createdAt")`,
+  `CREATE INDEX IF NOT EXISTS "Invoice_paymentMethod_idx" ON "Invoice"("paymentMethod")`,
+  `CREATE INDEX IF NOT EXISTS "InvoiceItem_invoiceId_idx" ON "InvoiceItem"("invoiceId")`,
+  `CREATE INDEX IF NOT EXISTS "InvoiceItem_productId_idx" ON "InvoiceItem"("productId")`,
+  `CREATE INDEX IF NOT EXISTS "TransactionLog_storeId_idx" ON "TransactionLog"("storeId")`,
+  `CREATE INDEX IF NOT EXISTS "TransactionLog_invoiceId_idx" ON "TransactionLog"("invoiceId")`,
+  `CREATE INDEX IF NOT EXISTS "TransactionLog_type_idx" ON "TransactionLog"("type")`,
+  `CREATE INDEX IF NOT EXISTS "TransactionLog_createdAt_idx" ON "TransactionLog"("createdAt")`,
+  `CREATE INDEX IF NOT EXISTS "LocalSale_storeId_idx" ON "LocalSale"("storeId")`,
+  `CREATE INDEX IF NOT EXISTS "LocalSale_customerId_idx" ON "LocalSale"("customerId")`,
+  `CREATE INDEX IF NOT EXISTS "LocalSale_paymentMethod_idx" ON "LocalSale"("paymentMethod")`,
+  `CREATE INDEX IF NOT EXISTS "LocalSale_createdAt_idx" ON "LocalSale"("createdAt")`,
+  `CREATE INDEX IF NOT EXISTS "LocalSaleItem_localSaleId_idx" ON "LocalSaleItem"("localSaleId")`,
+  `CREATE INDEX IF NOT EXISTS "LocalSaleItem_productId_idx" ON "LocalSaleItem"("productId")`,
+  `CREATE INDEX IF NOT EXISTS "Expense_storeId_idx" ON "Expense"("storeId")`,
+  `CREATE INDEX IF NOT EXISTS "Expense_category_idx" ON "Expense"("category")`,
+  `CREATE INDEX IF NOT EXISTS "Expense_date_idx" ON "Expense"("date")`,
+  `CREATE INDEX IF NOT EXISTS "Expense_createdAt_idx" ON "Expense"("createdAt")`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS "User_piUid_key" ON "User"("piUid")`,
+  `CREATE INDEX IF NOT EXISTS "User_piUid_idx" ON "User"("piUid")`,
+  `CREATE INDEX IF NOT EXISTS "User_lastLoginAt_idx" ON "User"("lastLoginAt")`,
+  `CREATE INDEX IF NOT EXISTS "Notification_userId_idx" ON "Notification"("userId")`,
+  `CREATE INDEX IF NOT EXISTS "Notification_userId_read_idx" ON "Notification"("userId", "read")`,
+  `CREATE INDEX IF NOT EXISTS "Notification_createdAt_idx" ON "Notification"("createdAt")`,
+  `CREATE INDEX IF NOT EXISTS "Notification_type_idx" ON "Notification"("type")`,
+  `CREATE INDEX IF NOT EXISTS "UserSetting_userId_idx" ON "UserSetting"("userId")`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS "UserSetting_userId_key_key" ON "UserSetting"("userId", "key")`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS "EscrowTransaction_txid_key" ON "EscrowTransaction"("txid")`,
+  `CREATE INDEX IF NOT EXISTS "EscrowTransaction_invoiceId_idx" ON "EscrowTransaction"("invoiceId")`,
+  `CREATE INDEX IF NOT EXISTS "EscrowTransaction_fromUid_idx" ON "EscrowTransaction"("fromUid")`,
+  `CREATE INDEX IF NOT EXISTS "EscrowTransaction_toUid_idx" ON "EscrowTransaction"("toUid")`,
+  `CREATE INDEX IF NOT EXISTS "EscrowTransaction_type_idx" ON "EscrowTransaction"("type")`,
+  `CREATE INDEX IF NOT EXISTS "EscrowTransaction_status_idx" ON "EscrowTransaction"("status")`,
+  `CREATE INDEX IF NOT EXISTS "EscrowTransaction_createdAt_idx" ON "EscrowTransaction"("createdAt")`,
+  `CREATE INDEX IF NOT EXISTS "AuditLog_action_idx" ON "AuditLog"("action")`,
+  `CREATE INDEX IF NOT EXISTS "AuditLog_userId_idx" ON "AuditLog"("userId")`,
+  `CREATE INDEX IF NOT EXISTS "AuditLog_entity_entityId_idx" ON "AuditLog"("entity", "entityId")`,
+  `CREATE INDEX IF NOT EXISTS "AuditLog_createdAt_idx" ON "AuditLog"("createdAt")`,
+  `CREATE INDEX IF NOT EXISTS "BackupRecord_piUid_createdAt_idx" ON "BackupRecord"("piUid", "createdAt")`,
+  `CREATE INDEX IF NOT EXISTS "BackupRecord_storeId_createdAt_idx" ON "BackupRecord"("storeId", "createdAt")`,
 ];
 
 // Table names in dependency-safe first order (for health checks / bootstrap validation)

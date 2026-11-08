@@ -35,12 +35,22 @@ for (const stmt of raw) {
   if (m && !tableNames.includes(m[1])) tableNames.push(m[1]);
 }
 
+// Prisma migrate diff does NOT emit IF NOT EXISTS. The bootstrap runs these
+// statements against EXISTING databases on every cold start, so idempotence
+// is mandatory — add it to every CREATE statement.
+const idempotent = raw.map((s) =>
+  s
+    .replace(/^CREATE TABLE "/, "CREATE TABLE IF NOT EXISTS \"")
+    .replace(/^CREATE UNIQUE INDEX "/, "CREATE UNIQUE INDEX IF NOT EXISTS \"")
+    .replace(/^CREATE INDEX "/, "CREATE INDEX IF NOT EXISTS \"")
+);
+
 // Escape backticks and ${} for template literals
 function tpl(s: string): string {
   return s.replace(/\\/g, "\\").replace(/`/g, "\\`").replace(/\$\{/g, "\\${");
 }
 
-const statementsTs = raw.map((s) => "  `" + tpl(s) + "`").join(",\n");
+const statementsTs = idempotent.map((s) => "  `" + tpl(s) + "`").join(",\n");
 const namesTs = JSON.stringify(tableNames);
 
 const out = `// AUTO-GENERATED from prisma/schema.prisma — do not edit by hand.

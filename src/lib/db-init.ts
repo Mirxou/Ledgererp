@@ -25,10 +25,19 @@ export async function ensureTursoSchema(libsql: Client): Promise<{ created: bool
   )
   const alreadyExists = Number(res.rows[0]?.c ?? 0) > 0
 
-  // Apply all DDL (CREATE TABLE / INDEX ... IF NOT EXISTS)
+  // Apply all DDL (CREATE TABLE / INDEX ... IF NOT EXISTS).
+  // Each statement is isolated: one failure (e.g. a race on a busy database)
+  // must never break the whole boot — log and continue.
+  let failures = 0
   for (const stmt of TURSO_SCHEMA_STATEMENTS) {
-    await libsql.execute(stmt)
+    try {
+      await libsql.execute(stmt)
+    } catch (err) {
+      failures++
+      console.error('[turso-schema] statement failed:', String(err).slice(0, 200))
+    }
   }
+  if (failures > 0) console.warn(`[turso-schema] completed with ${failures} failed statements`)
   return { created: !alreadyExists }
 }
 
