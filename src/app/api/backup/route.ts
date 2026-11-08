@@ -1,22 +1,33 @@
+/**
+ * Serverless-safe backup API.
+ *
+ * Backups are JSON snapshots of the store's business data stored IN the
+ * database (BackupRecord table) — NOT on the filesystem. This works on
+ * Vercel (read-only FS, Turso cloud DB) and local SQLite alike.
+ *
+ * GET    /api/backup?list=true  → list backups for the authenticated user
+ * GET    /api/backup            → create a new backup snapshot
+ * POST   /api/backup            → restore (safe subset — see below)
+ * DELETE /api/backup            → delete one backup
+ *
+ * Restore restores the "business catalog" only: store settings, products,
+ * inventory, customers and expenses. It deliberately does NOT touch
+ * invoices, local sales, escrow transactions or transaction logs —
+ * restoring stale payment state could desync the app from Pi Network
+ * ledger reality and cause double payments.
+ *
+ * Every operation is scoped to the authenticated user's own store
+ * (verifyPiAuth → uid → store.piUid), so cross-tenant access is impossible.
+ */
+
 import { NextRequest, NextResponse } from "next/server";
-import fs from "fs";
-import path from "path";
 import { verifyPiAuth, checkRateLimit, sanitizeString } from "@/lib/api-auth";
 
-const DB_PATH = path.join(process.cwd(), "db", "ledgererp.db");
-const BACKUP_DIR = path.join(process.cwd(), "db", "backups");
 const MAX_BACKUPS = 10;
 
-/** In-memory rate limit: one backup trigger per minute */
+/** In-memory rate limit: one backup creation per minute (per lambda instance) */
 let lastBackupTime = 0;
 const BACKUP_COOLDOWN_MS = 60_000;
-
-/** Ensure backup directory exists */
-function ensureBackupDir(): void {
-  if (!fs.existsSync(BACKUP_DIR)) {
-    fs.mkdirSync(BACKUP_DIR, { recursive: true });
-  }
-}
 
 /** Generate backup filename with timestamp */
 function generateBackupFilename(): string {
@@ -27,15 +38,7 @@ function generateBackupFilename(): string {
   const HH = String(now.getHours()).padStart(2, "0");
   const mm = String(now.getMinutes()).padStart(2, "0");
   const ss = String(now.getSeconds()).padStart(2, "0");
-  return `ledgererp-backup-${yyyy}-${MM}-${dd}-${HH}${mm}${ss}.db`;
-}
-
-/** Parse timestamp from backup filename for sorting */
-function parseBackupDate(filename: string): Date {
-  const match = filename.match(/ledgererp-backup-(\d{4})-(\d{2})-(\d{2})-(\d{2})(\d{2})(\d{2})\.db/);
-  if (!match) return new Date(0);
-  const [, y, mo, d, h, mi, s] = match;
-  return new Date(parseInt(y), parseInt(mo) - 1, parseInt(d), parseInt(h), parseInt(mi), parseInt(s));
+  return `ledgererp-backup-${yyyy}-${MM}-${dd}-${HH}${mm}${ss}.json`;
 }
 
 /** Format file size in human-readable format */
@@ -45,29 +48,175 @@ function formatSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
 }
 
-/** Prune old backups, keeping only the most recent MAX_BACKUPS */
-function pruneOldBackups(): void {
-  ensureBackupDir();
-  const files = fs.readdirSync(BACKUP_DIR)
-    .filter((f) => f.startsWith("ledgererp-backup-") && f.endsWith(".db"))
-    .sort((a, b) => parseBackupDate(b).getTime() - parseBackupDate(a).getTime());
+/* ─────────────────────────── Snapshot builder ─────────────────────────── */
 
-  if (files.length > MAX_BACKUPS) {
-    const toDelete = files.slice(MAX_BACKUPS);
-    for (const file of toDelete) {
-      try {
-        fs.unlinkSync(path.join(BACKUP_DIR, file));
-      } catch {
-        // Ignore deletion errors for individual files
-      }
-    }
-  }
+async function buildSnapshot(storeId: string): Promise<{ json: string; storeName: string }> {
+  const { db } = await import("@/lib/db");
+
+  const store = await db.store.findUnique({
+    where: { id: storeId },
+    select: {
+      id: true, piUid: true, name: true, description: true, avatar: true,
+      isVerified: true, source: true, piAppUrl: true, slug: true,
+      currency: true, taxRate: true, phone: true, address: true, logo: true,
+    },
+  });
+  if (!store) throw new Error("Store not found");
+
+  const [products, customers, expenses, inventory] = await Promise.all([
+    db.product.findMany({ where: { storeId } }),
+    db.customer.findMany({ where: { storeId } }),
+    db.expense.findMany({ where: { storeId }, orderBy: { date: "desc" } }),
+    db.inventory.findMany({ where: { storeId } }),
+  ]);
+
+  // Resolve category slugs so restore can re-link to the global catalog
+  const categoryIds = [...new Set(products.map((p) => p.categoryId).filter(Boolean))] as string[];
+  const cats = categoryIds.length
+    ? await db.category.findMany({ where: { id: { in: categoryIds } }, select: { id: true, slug: true } })
+    : [];
+  const catSlugById = new Map(cats.map((c) => [c.id, c.slug]));
+
+  const snapshot = {
+    version: 2,
+    createdAt: new Date().toISOString(),
+    store,
+    products: products.map((p) => ({ ...p, categorySlug: p.categoryId ? catSlugById.get(p.categoryId) ?? null : null })),
+    customers,
+    expenses,
+    inventory,
+  };
+
+  return { json: JSON.stringify(snapshot), storeName: store.name };
 }
 
-// ═══════════════════════════════════════════════════════════════════════
-// GET /api/backup         → Trigger a new backup
-// GET /api/backup?list=true → List all backups
-// ═══════════════════════════════════════════════════════════════════════
+/* ─────────────────────────── Restore (safe subset) ────────────────────── */
+
+async function restoreSnapshot(snapshotJson: string, storeId: string): Promise<void> {
+  const { db } = await import("@/lib/db");
+  const snap = JSON.parse(snapshotJson) as {
+    store?: Record<string, unknown>;
+    products?: Array<Record<string, unknown> & { categorySlug?: string | null }>;
+    customers?: Array<Record<string, unknown>>;
+    expenses?: Array<Record<string, unknown>>;
+    inventory?: Array<Record<string, unknown>>;
+  };
+
+  if (!snap || snap.version !== 2) throw new Error("Unsupported backup format");
+
+  await db.$transaction(async (tx) => {
+    // 1) Store settings
+    const s = snap.store ?? {};
+    await tx.store.update({
+      where: { id: storeId },
+      data: {
+        name: typeof s.name === "string" ? s.name : undefined,
+        description: typeof s.description === "string" ? s.description : undefined,
+        avatar: typeof s.avatar === "string" ? s.avatar : undefined,
+        currency: typeof s.currency === "string" ? s.currency : undefined,
+        taxRate: typeof s.taxRate === "number" ? s.taxRate : undefined,
+        phone: typeof s.phone === "string" ? s.phone : undefined,
+        address: typeof s.address === "string" ? s.address : undefined,
+        logo: typeof s.logo === "string" ? s.logo : undefined,
+      },
+    });
+
+    // 2) Products + inventory: replace (cascade removes inventory/movements;
+    //    invoice & sale items keep their rows via ON DELETE SET NULL)
+    await tx.product.deleteMany({ where: { storeId } });
+    const catBySlug = new Map<string, string>();
+    const slugs = (snap.products ?? []).map((p) => p.categorySlug).filter(Boolean) as string[];
+    if (slugs.length) {
+      const cats = await tx.category.findMany({ where: { slug: { in: slugs } }, select: { id: true, slug: true } });
+      for (const c of cats) catBySlug.set(c.slug, c.id);
+    }
+
+    for (const p of snap.products ?? []) {
+      if (typeof p.id !== "string" || typeof p.name !== "string" || typeof p.price !== "number") continue;
+      await tx.product.create({
+        data: {
+          id: p.id,
+          storeId,
+          name: p.name,
+          description: typeof p.description === "string" ? p.description : "",
+          price: p.price,
+          costPrice: typeof p.costPrice === "number" ? p.costPrice : 0,
+          sku: typeof p.sku === "string" ? p.sku : "",
+          stockQuantity: typeof p.stockQuantity === "number" ? p.stockQuantity : 0,
+          lowStockThreshold: typeof p.lowStockThreshold === "number" ? p.lowStockThreshold : 5,
+          trackInventory: p.trackInventory !== false,
+          categoryId: p.categorySlug ? catBySlug.get(p.categorySlug) ?? null : null,
+          unit: typeof p.unit === "string" ? p.unit : "unit",
+          image: typeof p.image === "string" ? p.image : "",
+          isActive: p.isActive !== false,
+        },
+      });
+    }
+
+    // 3) Inventory rows (re-link to restored products by stored ids)
+    for (const inv of snap.inventory ?? []) {
+      if (typeof inv.id !== "string" || typeof inv.productId !== "string") continue;
+      const productExists = (snap.products ?? []).some((p) => p.id === inv.productId);
+      if (!productExists) continue;
+      await tx.inventory.create({
+        data: {
+          id: inv.id,
+          productId: inv.productId,
+          storeId,
+          quantity: typeof inv.quantity === "number" ? inv.quantity : 0,
+          reservedQuantity: typeof inv.reservedQuantity === "number" ? inv.reservedQuantity : 0,
+          version: typeof inv.version === "number" ? inv.version : 0,
+          lowStockThreshold: typeof inv.lowStockThreshold === "number" ? inv.lowStockThreshold : 5,
+          trackInventory: inv.trackInventory !== false,
+        },
+      });
+    }
+
+    // 4) Customers (LocalSale.customerId is ON DELETE SET NULL — history safe)
+    await tx.customer.deleteMany({ where: { storeId } });
+    for (const c of snap.customers ?? []) {
+      if (typeof c.id !== "string" || typeof c.name !== "string") continue;
+      await tx.customer.create({
+        data: {
+          id: c.id,
+          storeId,
+          name: c.name,
+          phone: typeof c.phone === "string" ? c.phone : "",
+          email: typeof c.email === "string" ? c.email : "",
+          address: typeof c.address === "string" ? c.address : "",
+          piUid: typeof c.piUid === "string" ? c.piUid : null,
+          notes: typeof c.notes === "string" ? c.notes : "",
+          totalSpent: typeof c.totalSpent === "number" ? c.totalSpent : 0,
+          totalOrders: typeof c.totalOrders === "number" ? c.totalOrders : 0,
+          isActive: c.isActive !== false,
+        },
+      });
+    }
+
+    // 5) Expenses
+    await tx.expense.deleteMany({ where: { storeId } });
+    for (const e of snap.expenses ?? []) {
+      if (typeof e.id !== "string" || typeof e.category !== "string" || typeof e.amount !== "number") continue;
+      await tx.expense.create({
+        data: {
+          id: e.id,
+          storeId,
+          category: e.category,
+          description: typeof e.description === "string" ? e.description : "",
+          amount: e.amount,
+          date: typeof e.date === "string" ? new Date(e.date) : new Date(),
+          receipt: typeof e.receipt === "string" ? e.receipt : "",
+          createdBy: typeof e.createdBy === "string" ? e.createdBy : "",
+        },
+      });
+    }
+  });
+}
+
+/* ─────────────────────────────── Routes ───────────────────────────────── */
+
+// GET /api/backup         → create backup
+// GET /api/backup?list=1  → list backups
 export async function GET(req: NextRequest) {
   try {
     const rateLimitErr = checkRateLimit(req);
@@ -75,33 +224,33 @@ export async function GET(req: NextRequest) {
 
     const auth = await verifyPiAuth(req);
     if (!auth.ok) return auth.response;
+    const { db } = await import("@/lib/db");
 
     const { searchParams } = new URL(req.url);
     const listMode = searchParams.get("list") === "true";
 
     // ── List mode ──
     if (listMode) {
-      ensureBackupDir();
-      const files = fs.readdirSync(BACKUP_DIR)
-        .filter((f) => f.startsWith("ledgererp-backup-") && f.endsWith(".db"))
-        .sort((a, b) => parseBackupDate(b).getTime() - parseBackupDate(a).getTime());
-
-      const backups = files.map((filename) => {
-        const filePath = path.join(BACKUP_DIR, filename);
-        const stat = fs.statSync(filePath);
-        return {
-          filename,
-          size: stat.size,
-          sizeFormatted: formatSize(stat.size),
-          createdAt: stat.birthtime.toISOString(),
-        };
+      const rows = await db.backupRecord.findMany({
+        where: { piUid: auth.user.uid },
+        orderBy: { createdAt: "desc" },
+        select: { filename: true, size: true, createdAt: true },
       });
-
+      const backups = rows.map((r) => ({
+        filename: r.filename,
+        size: r.size,
+        sizeFormatted: formatSize(r.size),
+        createdAt: r.createdAt.toISOString(),
+      }));
       return NextResponse.json({ backups });
     }
 
-    // ── Trigger backup mode ──
-    // Rate limit: one backup per minute
+    // ── Create backup ──
+    const store = await db.store.findUnique({ where: { piUid: auth.user.uid }, select: { id: true } });
+    if (!store) {
+      return NextResponse.json({ error: "No store found for this user" }, { status: 404 });
+    }
+
     const now = Date.now();
     if (now - lastBackupTime < BACKUP_COOLDOWN_MS) {
       const remaining = Math.ceil((BACKUP_COOLDOWN_MS - (now - lastBackupTime)) / 1000);
@@ -111,48 +260,52 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    // Check that the database file exists
-    if (!fs.existsSync(DB_PATH)) {
-      return NextResponse.json(
-        { error: "Database file not found" },
-        { status: 404 }
-      );
-    }
-
-    ensureBackupDir();
+    const { json, storeName } = await buildSnapshot(store.id);
     const filename = generateBackupFilename();
-    const backupPath = path.join(BACKUP_DIR, filename);
+    const size = Buffer.byteLength(json, "utf8");
 
-    // Copy the SQLite database file
-    fs.copyFileSync(DB_PATH, backupPath);
+    const record = await db.backupRecord.create({
+      data: {
+        piUid: auth.user.uid,
+        storeId: store.id,
+        storeName,
+        filename,
+        size,
+        dataJson: json,
+      },
+      select: { filename: true, createdAt: true },
+    });
 
-    const stat = fs.statSync(backupPath);
     lastBackupTime = Date.now();
 
-    // Prune old backups
-    pruneOldBackups();
+    // Prune old backups (keep MAX_BACKUPS most recent for this user)
+    const old = await db.backupRecord.findMany({
+      where: { piUid: auth.user.uid },
+      orderBy: { createdAt: "desc" },
+      select: { id: true },
+      skip: MAX_BACKUPS,
+    });
+    if (old.length) {
+      await db.backupRecord.deleteMany({ where: { id: { in: old.map((r) => r.id) } } });
+    }
 
     return NextResponse.json({
       success: true,
-      filename,
-      size: stat.size,
-      sizeFormatted: formatSize(stat.size),
-      timestamp: new Date().toISOString(),
+      filename: record.filename,
+      size,
+      sizeFormatted: formatSize(size),
+      timestamp: record.createdAt.toISOString(),
     });
   } catch (error) {
     console.error("[backup] GET error:", error);
-    return NextResponse.json(
-      { error: "Backup operation failed" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Backup operation failed" }, { status: 500 });
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════════
-// POST /api/backup → Restore from a specific backup
-// Body: { filename: "ledgererp-backup-2025-01-01-120000.db" }
-// CRITICAL: Requires manager role (checked via X-User-Role header)
-// ═══════════════════════════════════════════════════════════════════════
+// POST /api/backup → restore from a backup
+// Body: { filename: "ledgererp-backup-....json" }
+// CRITICAL: Requires manager role (X-User-Role header) and restores only
+// the authenticated user's own data.
 export async function POST(req: NextRequest) {
   try {
     const rateLimitErr = checkRateLimit(req);
@@ -161,7 +314,6 @@ export async function POST(req: NextRequest) {
     const auth = await verifyPiAuth(req);
     if (!auth.ok) return auth.response;
 
-    // ── Role check: only managers can restore ──
     const userRole = req.headers.get("X-User-Role") || "viewer";
     if (userRole !== "manager" && userRole !== "admin") {
       return NextResponse.json(
@@ -170,42 +322,43 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const { db } = await import("@/lib/db");
+
     const body = await req.json();
-    const filename = sanitizeString(body.filename, 100);
+    const filename = sanitizeString(body.filename, 120);
 
-    if (!filename || !filename.startsWith("ledgererp-backup-") || !filename.endsWith(".db")) {
-      return NextResponse.json(
-        { error: "Invalid backup filename" },
-        { status: 400 }
-      );
+    if (!filename.startsWith("ledgererp-backup-") || !(filename.endsWith(".json") || filename.endsWith(".db"))) {
+      return NextResponse.json({ error: "Invalid backup filename" }, { status: 400 });
     }
 
-    const backupPath = path.join(BACKUP_DIR, filename);
-    if (!fs.existsSync(backupPath)) {
-      return NextResponse.json(
-        { error: "Backup file not found" },
-        { status: 404 }
-      );
+    const record = await db.backupRecord.findFirst({
+      where: { piUid: auth.user.uid, filename },
+      select: { id: true, dataJson: true, storeId: true },
+    });
+    if (!record) {
+      return NextResponse.json({ error: "Backup not found" }, { status: 404 });
     }
 
-    if (!fs.existsSync(DB_PATH)) {
-      return NextResponse.json(
-        { error: "Current database file not found" },
-        { status: 404 }
-      );
+    // Safety backup of current data before restoring
+    let safetyFilename: string | null = null;
+    try {
+      const { json } = await buildSnapshot(record.storeId);
+      safetyFilename = `ledgererp-backup-pre-restore-${generateBackupFilename().replace("ledgererp-backup-", "")}`;
+      await db.backupRecord.create({
+        data: {
+          piUid: auth.user.uid,
+          storeId: record.storeId,
+          storeName: "",
+          filename: safetyFilename,
+          size: Buffer.byteLength(json, "utf8"),
+          dataJson: json,
+        },
+      });
+    } catch (e) {
+      console.warn("[backup] safety snapshot failed (continuing):", e);
     }
 
-    // ── Create safety backup of current DB before restoring ──
-    ensureBackupDir();
-    const safetyFilename = `ledgererp-backup-pre-restore-${generateBackupFilename().replace("ledgererp-backup-", "")}`;
-    const safetyPath = path.join(BACKUP_DIR, safetyFilename);
-    fs.copyFileSync(DB_PATH, safetyPath);
-
-    // ── Restore: copy backup over current DB ──
-    fs.copyFileSync(backupPath, DB_PATH);
-
-    // Prune old backups
-    pruneOldBackups();
+    await restoreSnapshot(record.dataJson, record.storeId);
 
     return NextResponse.json({
       success: true,
@@ -215,17 +368,14 @@ export async function POST(req: NextRequest) {
     });
   } catch (error) {
     console.error("[backup] POST (restore) error:", error);
-    return NextResponse.json(
-      { error: "Restore operation failed" },
-      { status: 500 }
-    );
+    const message = error instanceof Error && error.message === "Unsupported backup format"
+      ? "نسخة احتياطية بتنسيق غير مدعوم"
+      : "Restore operation failed";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════════
-// DELETE /api/backup → Delete a specific backup file
-// Body: { filename: "ledgererp-backup-..." }
-// ═══════════════════════════════════════════════════════════════════════
+// DELETE /api/backup → delete one backup
 export async function DELETE(req: NextRequest) {
   try {
     const rateLimitErr = checkRateLimit(req);
@@ -233,26 +383,21 @@ export async function DELETE(req: NextRequest) {
 
     const auth = await verifyPiAuth(req);
     if (!auth.ok) return auth.response;
+    const { db } = await import("@/lib/db");
 
     const body = await req.json();
-    const filename = sanitizeString(body.filename, 100);
+    const filename = sanitizeString(body.filename, 120);
 
-    if (!filename || !filename.startsWith("ledgererp-backup-") || !filename.endsWith(".db")) {
-      return NextResponse.json(
-        { error: "Invalid backup filename" },
-        { status: 400 }
-      );
+    if (!filename) {
+      return NextResponse.json({ error: "Invalid backup filename" }, { status: 400 });
     }
 
-    const backupPath = path.join(BACKUP_DIR, filename);
-    if (!fs.existsSync(backupPath)) {
-      return NextResponse.json(
-        { error: "Backup file not found" },
-        { status: 404 }
-      );
+    const deleted = await db.backupRecord.deleteMany({
+      where: { piUid: auth.user.uid, filename },
+    });
+    if (deleted.count === 0) {
+      return NextResponse.json({ error: "Backup not found" }, { status: 404 });
     }
-
-    fs.unlinkSync(backupPath);
 
     return NextResponse.json({
       success: true,
@@ -261,9 +406,6 @@ export async function DELETE(req: NextRequest) {
     });
   } catch (error) {
     console.error("[backup] DELETE error:", error);
-    return NextResponse.json(
-      { error: "Delete operation failed" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Delete operation failed" }, { status: 500 });
   }
 }

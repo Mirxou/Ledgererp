@@ -495,3 +495,27 @@ model AuditLog {
   @@index([entity, entityId])
   @@index([createdAt])
 }
+
+/// ─── Backup Record (serverless-safe backups) ───────────────────────────
+/// Store data snapshots stored IN the database itself (not the filesystem),
+/// so backups work on Vercel (read-only FS) and locally alike.
+/// The snapshot is a JSON dump of the store's business data.
+
+model BackupRecord {
+  id        String   @id @default(cuid())
+  /// Owner of the backup (Pi UID of the authenticated manager)
+  piUid     String
+  /// Store the snapshot belongs to
+  storeId   String
+  storeName String   @default("")
+  /// Display filename, e.g. ledgererp-backup-2026-11-08-224500.json
+  filename  String
+  /// Snapshot size in bytes (length of dataJson)
+  size      Int
+  /// Full JSON snapshot of the store's business data
+  dataJson  String
+  createdAt DateTime @default(now())
+
+  @@index([piUid, createdAt])
+  @@index([storeId, createdAt])
+}

@@ -15,18 +15,21 @@ import { TURSO_SCHEMA_STATEMENTS } from './turso-schema.generated'
 export const DEMO_UID = 'demo_user_pi_uid'
 
 export async function ensureTursoSchema(libsql: Client): Promise<{ created: boolean }> {
-  // Fast path: schema already applied on this database?
+  // NOTE: We no longer early-return when "Store" exists. All statements are
+  // IF NOT EXISTS (idempotent), so re-running them on every cold start is safe
+  // AND required — otherwise NEW tables added in later releases would never be
+  // created on databases bootstrapped by older versions. 18 statements cost
+  // only ~50ms per cold start against Turso.
   const res = await libsql.execute(
     "SELECT count(*) AS c FROM sqlite_master WHERE type = 'table' AND name = 'Store'"
   )
   const alreadyExists = Number(res.rows[0]?.c ?? 0) > 0
-  if (alreadyExists) return { created: false }
 
   // Apply all DDL (CREATE TABLE / INDEX ... IF NOT EXISTS)
   for (const stmt of TURSO_SCHEMA_STATEMENTS) {
     await libsql.execute(stmt)
   }
-  return { created: true }
+  return { created: !alreadyExists }
 }
 
 /**

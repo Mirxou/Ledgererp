@@ -13,6 +13,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
+import { apiFetch } from "@/lib/api-client";
 
 interface BackupInfo {
   filename: string;
@@ -37,9 +38,9 @@ export function BackupView({ piUid }: BackupViewProps) {
 
   const fetchBackups = useCallback(async function() {
     try {
-      const res = await fetch("/api/backup?list=true", {
-        headers: { "X-Demo-Uid": piUid },
-      });
+      // apiFetch sends the Pi Bearer token in Pi Browser (production) and
+      // falls back to X-Demo-Uid in development/demo sessions.
+      const res = await apiFetch("/api/backup?list=true", {}, piUid);
       if (!res.ok) throw new Error("Failed to fetch backups");
       const data = await res.json();
       setBackups(data.backups || []);
@@ -62,9 +63,7 @@ export function BackupView({ piUid }: BackupViewProps) {
   const handleCreateBackup = async function() {
     setCreating(true);
     try {
-      const res = await fetch("/api/backup", {
-        headers: { "X-Demo-Uid": piUid },
-      });
+      const res = await apiFetch("/api/backup", {}, piUid);
       const data = await res.json();
       if (!res.ok) {
         toast({ title: data.error || "فشل إنشاء النسخة الاحتياطية", variant: "destructive" });
@@ -82,15 +81,11 @@ export function BackupView({ piUid }: BackupViewProps) {
   const handleRestore = async function(filename: string) {
     setRestoring(filename);
     try {
-      const res = await fetch("/api/backup", {
+      const res = await apiFetch("/api/backup", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Demo-Uid": piUid,
-          "X-User-Role": "manager",
-        },
+        headers: { "X-User-Role": "manager" },
         body: JSON.stringify({ filename }),
-      });
+      }, piUid);
       const data = await res.json();
       if (!res.ok) {
         toast({ title: data.error || "فشل الاستعادة", variant: "destructive" });
@@ -111,14 +106,10 @@ export function BackupView({ piUid }: BackupViewProps) {
   const handleDelete = async function(filename: string) {
     setDeleting(filename);
     try {
-      const res = await fetch("/api/backup", {
+      const res = await apiFetch("/api/backup", {
         method: "DELETE",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Demo-Uid": piUid,
-        },
         body: JSON.stringify({ filename }),
-      });
+      }, piUid);
       const data = await res.json();
       if (!res.ok) {
         toast({ title: data.error || "فشل الحذف", variant: "destructive" });
@@ -266,7 +257,8 @@ export function BackupView({ piUid }: BackupViewProps) {
                             تأكيد الاستعادة
                           </AlertDialogTitle>
                           <AlertDialogDescription className="text-xs space-y-2">
-                            <p>سيتم استبدال قاعدة البيانات الحالية بهذه النسخة الاحتياطية.</p>
+                            <p>ستُعاد بيانات المتجر من هذه النسخة: الإعدادات والمنتجات والمخزون والعملاء والمصاريف.</p>
+                            <p>الفواتير والمدفوعات ومحفوظات البيع لا تُمسّ حفاظاً على سلامة حساباتك.</p>
                             <p className="font-mono text-[10px] bg-muted/50 p-2 rounded" dir="ltr">{backup.filename}</p>
                             <p className="text-amber-600 font-medium">⚠️ سيتم إنشاء نسخة أمان تلقائياً قبل الاستعادة.</p>
                           </AlertDialogDescription>
