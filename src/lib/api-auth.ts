@@ -33,10 +33,15 @@ export type AuthResult =
  * In development, also accepts "X-Demo-Uid" header for testing.
  */
 export async function verifyPiAuth(req: NextRequest): Promise<AuthResult> {
-  // ── Development: Accept demo header ──
-  if (process.env.NODE_ENV === "development") {
-    const demoUid = req.headers.get("X-Demo-Uid");
-    if (demoUid) {
+  // ── Demo header (dev OR explicitly enabled demo mode on the server) ──
+  // In production, X-Demo-Uid is only accepted when NEXT_PUBLIC_DEMO_MODE=true
+  // is set in the server environment — otherwise it is ignored for security.
+  const demoUid = req.headers.get("X-Demo-Uid");
+  if (demoUid) {
+    const demoAllowed =
+      process.env.NODE_ENV === "development" ||
+      process.env.NEXT_PUBLIC_DEMO_MODE === "true";
+    if (demoAllowed) {
       return { ok: true, user: { uid: demoUid, username: "demo_user" } };
     }
   }

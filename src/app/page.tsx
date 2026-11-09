@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { usePiAuth } from "@/hooks/use-pi-auth";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { createPiPayment, type PiPaymentData, type PiPaymentCallbacks } from "@/lib/pi-sdk";
-import { api, setAccessToken } from "@/lib/api-client";
+import { api, setAccessToken, apiErrorMessage, SESSION_EXPIRED_EVENT } from "@/lib/api-client";
 import {
   Shield, BarChart3, Package, FileText, ShoppingCart,
   Settings, Zap, CircleDot, Sun, Moon, Copy, Bell,
@@ -129,16 +129,19 @@ function AuthenticatedApp({ piUid, username }: { piUid: string; username: string
   /* Store — persist store ID in localStorage for reload resilience */
   const [createdStore, setCreatedStore] = useState<StoreData | null>(null);
 
-  // On mount, try to restore store from localStorage
+  // On mount, try to restore store from localStorage (must belong to the CURRENT user)
   useEffect(function() {
     if (createdStore) return;
     try {
       const saved = localStorage.getItem("ledgererp_store");
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (parsed && parsed.id && parsed.piUid) {
+        if (parsed && parsed.id && parsed.piUid === piUid) {
           // eslint-disable-next-line react-hooks/set-state-in-effect
           setCreatedStore(parsed);
+        } else if (parsed && parsed.piUid !== piUid) {
+          // Store from a DIFFERENT Pi account (or demo ghost) — drop it
+          localStorage.removeItem("ledgererp_store");
         }
       }
     } catch {}
@@ -155,18 +158,35 @@ function AuthenticatedApp({ piUid, username }: { piUid: string; username: string
     queryKey: ["stores"],
     queryFn: function() { return api.get("/api/stores", piUid).then(function(r) { return r.json(); }); },
     staleTime: 30_000,
+    retry: 2,
   });
   const stores = ((storesRes.data as Record<string, unknown>)?.data || []) as StoreData[];
 
-  const myStore = useMemo(function() {
-    if (createdStore) return createdStore;
-    if (stores) {
-      for (let i = 0; i < stores.length; i++) {
-        if (stores[i].piUid === piUid) return stores[i];
-      }
+  /* Server is the source of truth: prefer the store returned by the DB.
+     If the server query succeeded and does NOT know the localStorage store,
+     it was a ghost (saved during a failed request) — clean it up. */
+  const serverStore = useMemo(function() {
+    for (let i = 0; i < stores.length; i++) {
+      if (stores[i].piUid === piUid) return stores[i];
     }
     return null;
-  }, [createdStore, stores, piUid]);
+  }, [stores, piUid]);
+
+  useEffect(function() {
+    if (!storesRes.isSuccess || storesRes.isFetching) return;
+    if (serverStore) {
+      if (!createdStore || createdStore.id !== serverStore.id) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setCreatedStore(serverStore as StoreData);
+      }
+    } else if (createdStore) {
+      // Ghost store from a failed save — remove silently
+      setCreatedStore(null);
+      try { localStorage.removeItem("ledgererp_store"); } catch {}
+    }
+  }, [storesRes.isSuccess, storesRes.isFetching, serverStore, createdStore]);
+
+  const myStore = createdStore || serverStore;
 
   /* Invoices */
   const merchantInvRes = useQuery({
@@ -270,7 +290,7 @@ function AuthenticatedApp({ piUid, username }: { piUid: string; username: string
       return api.post("/api/stores", data, piUid).then(function(r) { return r.json(); });
     },
     onSuccess: function(data) { setCreatedStore(data); qc.invalidateQueries({ queryKey: ["stores"] }); const imported = (data as Record<string, unknown>)._importedProducts as number || 0; toast({ title: imported > 0 ? "تم إنشاء المتجر واستيراد " + imported + " منتج" : "تم إنشاء المتجر بنجاح" }); try { localStorage.setItem("ledgererp_store", JSON.stringify(data)); } catch {} },
-    onError: function() { toast({ title: "فشل إنشاء المتجر", variant: "destructive" }); },
+    onError: function(err) { toast({ title: "فشل إنشاء المتجر", description: apiErrorMessage(err), variant: "destructive" }); },
   });
 
   /* Connect existing Pi store */
@@ -291,7 +311,7 @@ function AuthenticatedApp({ piUid, username }: { piUid: string; username: string
       return api.patch("/api/stores", data, piUid).then(function(r) { return r.json(); });
     },
     onSuccess: function(data) { setCreatedStore(function(prev) { return prev ? Object.assign({}, prev, data) : (data as StoreData); }); qc.invalidateQueries({ queryKey: ["stores"] }); toast({ title: "تم تحديث المتجر" }); },
-    onError: function() { toast({ title: "فشل التحديث", variant: "destructive" }); },
+    onError: function(err) { toast({ title: "فشل التحديث", description: apiErrorMessage(err), variant: "destructive" }); },
   });
 
   const deleteStoreMut = useMutation({
@@ -299,8 +319,23 @@ function AuthenticatedApp({ piUid, username }: { piUid: string; username: string
       return api.delete("/api/stores", { id: id }, piUid).then(function(r) { return r.json(); });
     },
     onSuccess: function() { setCreatedStore(null); try { localStorage.removeItem("ledgererp_store"); } catch {} qc.invalidateQueries({ queryKey: ["stores"] }); toast({ title: "تم حذف المتجر" }); },
-    onError: function() { toast({ title: "فشل الحذف", variant: "destructive" }); },
+    onError: function(err) { toast({ title: "فشل الحذف", description: apiErrorMessage(err), variant: "destructive" }); },
   });
+
+  /* Session expiry: when ANY request returns 401, the Pi access token is no
+     longer valid. Reload the page — Pi SDK auto-authenticates with a fresh
+     token on load, so the session recovers without user action. */
+  useEffect(function() {
+    let reloading = false;
+    function onSessionExpired() {
+      if (reloading) return;
+      reloading = true;
+      toast({ title: "انتهت صلاحية الجلسة", description: "جارٍ إعادة الاتصال بشبكة Pi..." });
+      setTimeout(function() { window.location.reload(); }, 1200);
+    }
+    window.addEventListener(SESSION_EXPIRED_EVENT, onSessionExpired);
+    return function() { window.removeEventListener(SESSION_EXPIRED_EVENT, onSessionExpired); };
+  }, [toast]);
 
   const updateInvoiceMut = useMutation({
     mutationFn: function(data: { id: string; status: string; paymentTxId?: string; releaseTxId?: string }) {
@@ -377,7 +412,7 @@ function AuthenticatedApp({ piUid, username }: { piUid: string; username: string
       }
     }).then(function(err) {
       if (err && err.error) toast({ title: "فشل الإطلاق", description: err.error, variant: "destructive" });
-    }).catch(function() { toast({ title: "خطأ في الاتصال", variant: "destructive" }); });
+    }).catch(function(err) { toast({ title: "خطأ", description: apiErrorMessage(err), variant: "destructive" }); });
   }, [myStore, qc, toast, piUid]);
 
   const handleShip = useCallback(function(inv: InvoiceData) { updateInvoiceMut.mutate({ id: inv.id, status: "shipped" }); toast({ title: "تم تحديث الحالة: تم الشحن" }); }, [updateInvoiceMut, toast]);
@@ -385,13 +420,13 @@ function AuthenticatedApp({ piUid, username }: { piUid: string; username: string
     api.post("/api/invoices/buyer-action", { invoiceId: inv.id, action: "confirmDelivery" }, piUid).then(function(res) {
       if (res.ok) { qc.invalidateQueries({ queryKey: ["invoices"] }); toast({ title: "تم تأكيد التسليم ✅" }); }
       else { res.json().catch(function() { return {}; }).then(function(err) { toast({ title: "فشل تأكيد التسليم", description: err.error || "خطأ غير معروف", variant: "destructive" }); }); }
-    }).catch(function() { toast({ title: "خطأ في الاتصال", variant: "destructive" }); });
+    }).catch(function(err) { toast({ title: "خطأ", description: apiErrorMessage(err), variant: "destructive" }); });
   }, [qc, toast, piUid]);
   const handleDispute = useCallback(function(inv: InvoiceData) {
     api.post("/api/invoices/buyer-action", { invoiceId: inv.id, action: "dispute", reason: "" }, piUid).then(function(res) {
       if (res.ok) { qc.invalidateQueries({ queryKey: ["invoices"] }); toast({ title: "تم فتح نزاع" }); }
       else { res.json().catch(function() { return {}; }).then(function(err) { toast({ title: "فشل فتح النزاع", description: err.error || "", variant: "destructive" }); }); }
-    }).catch(function() { toast({ title: "خطأ في الاتصال", variant: "destructive" }); });
+    }).catch(function(err) { toast({ title: "خطأ", description: apiErrorMessage(err), variant: "destructive" }); });
   }, [qc, toast, piUid]);
   const handleCancel = useCallback(function(inv: InvoiceData) { updateInvoiceMut.mutate({ id: inv.id, status: "cancelled" }); toast({ title: "تم إلغاء الطلب" }); }, [updateInvoiceMut, toast]);
 
@@ -485,6 +520,23 @@ function AuthenticatedApp({ piUid, username }: { piUid: string; username: string
 
       {/* Offline Banner */}
       <OfflineIndicator />
+
+      {/* Data error banner — never show empty data as if it were real */}
+      {storesRes.isError && (
+        <div className="sticky top-14 z-40 w-full bg-red-50 dark:bg-red-950/40 border-b border-red-200 dark:border-red-900">
+          <div className="max-w-5xl mx-auto px-4 py-2 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2 min-w-0">
+              <AlertTriangle className="h-4 w-4 text-red-500 shrink-0" />
+              <span className="text-xs sm:text-sm text-red-700 dark:text-red-300 truncate">
+                تعذر تحميل بيانات المتجر — {apiErrorMessage(storesRes.error)}
+              </span>
+            </div>
+            <Button variant="outline" size="sm" onClick={function() { storesRes.refetch(); }} className="h-7 text-xs shrink-0 border-red-300 text-red-700 hover:bg-red-100 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-900/40">
+              إعادة المحاولة
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Pi Ad Network — Banner Ad (top of page) */}
       {role === "manager" && myStore && <PiBannerAd position="top" />}

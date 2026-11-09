@@ -30,7 +30,7 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { useDebounce } from "@/hooks/use-debounce";
-import { api } from "@/lib/api-client";
+import { api, apiErrorMessage } from "@/lib/api-client";
 import { formatPi } from "@/lib/pi-amount";
 import type { ProductData, CategoryData, InventoryData } from "@/lib/types";
 
@@ -71,7 +71,7 @@ export function ProductsView({ products, storeId, piUid, categories, inventory }
     api.post("/api/products", body, piUid).then(function(res) {
       if (res.ok) { qc.invalidateQueries({ queryKey: ["products", storeId] }); setOpen(false); setForm({ name: "", description: "", price: "", costPrice: "", image: "", sku: "", categoryId: "none", unit: "unit" }); toast({ title: "تم إضافة المنتج" }); }
       else { res.json().catch(function() { return {}; }).then(function(err) { toast({ title: "فشل الإضافة", description: err.error || "خطأ غير معروف", variant: "destructive" }); }); }
-    }).catch(function() { toast({ title: "خطأ في الاتصال", variant: "destructive" }); }).finally(function() { setSaving(false); });
+    }).catch(function(err) { toast({ title: "خطأ", description: apiErrorMessage(err), variant: "destructive" }); }).finally(function() { setSaving(false); });
   };
 
   const handleEdit = function() {
@@ -81,21 +81,21 @@ export function ProductsView({ products, storeId, piUid, categories, inventory }
     api.patch("/api/products", { id: ef.id, name: ef.name.trim(), description: ef.description.trim(), price: ef.price, costPrice: ef.costPrice, sku: ef.sku, unit: ef.unit, categoryId: ef.categoryId, isActive: ef.isActive }, piUid).then(function(res) {
       if (res.ok) { qc.invalidateQueries({ queryKey: ["products", storeId] }); setEditOpen(false); setEditForm(null); toast({ title: "تم تحديث المنتج" }); }
       else { toast({ title: "فشل التحديث", variant: "destructive" }); }
-    }).catch(function() { toast({ title: "خطأ في الاتصال", variant: "destructive" }); }).finally(function() { setSaving(false); });
+    }).catch(function(err) { toast({ title: "خطأ", description: apiErrorMessage(err), variant: "destructive" }); }).finally(function() { setSaving(false); });
   };
 
   const handleDelete = function(id: string) {
     api.delete("/api/products", { id: id }, piUid).then(function(res) {
       if (res.ok) { qc.invalidateQueries({ queryKey: ["products", storeId] }); toast({ title: "تم حذف المنتج" }); }
       else toast({ title: "فشل الحذف", variant: "destructive" });
-    }).catch(function() { toast({ title: "خطأ في الاتصال", variant: "destructive" }); });
+    }).catch(function(err) { toast({ title: "خطأ", description: apiErrorMessage(err), variant: "destructive" }); });
   };
 
   const handleToggle = function(p: ProductData) {
     api.patch("/api/products", { id: p.id, isActive: !p.isActive }, piUid).then(function(res) {
       if (res.ok) { qc.invalidateQueries({ queryKey: ["products", storeId] }); toast({ title: p.isActive ? "تم تعطيل المنتج" : "تم تفعيل المنتج" }); }
       else toast({ title: "فشل التحديث", variant: "destructive" });
-    }).catch(function() { toast({ title: "خطأ في الاتصال", variant: "destructive" }); });
+    }).catch(function(err) { toast({ title: "خطأ", description: apiErrorMessage(err), variant: "destructive" }); });
   };
 
   /* ─── Batch Operations ─── */
@@ -124,7 +124,7 @@ export function ProductsView({ products, storeId, piUid, categories, inventory }
       const ok = results.every(function(r) { return r.ok; });
       if (ok) { qc.invalidateQueries({ queryKey: ["products", storeId] }); setSelectedIds(new Set()); toast({ title: val ? "تم تفعيل المنتجات المحددة" : "تم تعطيل المنتجات المحددة" }); }
       else { toast({ title: "فشل في بعض التحديثات", variant: "destructive" }); }
-    }).catch(function() { toast({ title: "خطأ في الاتصال", variant: "destructive" }); }).finally(function() { setBatchLoading(false); });
+    }).catch(function(err) { toast({ title: "خطأ", description: apiErrorMessage(err), variant: "destructive" }); }).finally(function() { setBatchLoading(false); });
   };
 
   const handleBatchDelete = function() {
@@ -136,7 +136,7 @@ export function ProductsView({ products, storeId, piUid, categories, inventory }
       const ok = results.every(function(r) { return r.ok; });
       if (ok) { qc.invalidateQueries({ queryKey: ["products", storeId] }); setSelectedIds(new Set()); setBatchDeleteOpen(false); toast({ title: "تم حذف المنتجات المحددة" }); }
       else { toast({ title: "فشل في بعض الحذف", variant: "destructive" }); }
-    }).catch(function() { toast({ title: "خطأ في الاتصال", variant: "destructive" }); }).finally(function() { setBatchLoading(false); });
+    }).catch(function(err) { toast({ title: "خطأ", description: apiErrorMessage(err), variant: "destructive" }); }).finally(function() { setBatchLoading(false); });
   };
 
   /* ─── Inventory Quick Adjust ─── */
@@ -147,12 +147,12 @@ export function ProductsView({ products, storeId, piUid, categories, inventory }
       api.patch("/api/inventory", { id: inv.id, quantity: newQty, storeId: storeId }, piUid).then(function(res) {
         if (res.ok) { qc.invalidateQueries({ queryKey: ["inventory", storeId] }); qc.invalidateQueries({ queryKey: ["products", storeId] }); toast({ title: delta > 0 ? "تم زيادة المخزون" : "تم تقليل المخزون" }); }
         else { toast({ title: "فشل تحديث المخزون", variant: "destructive" }); }
-      }).catch(function() { toast({ title: "خطأ في الاتصال", variant: "destructive" }); });
+      }).catch(function(err) { toast({ title: "خطأ", description: apiErrorMessage(err), variant: "destructive" }); });
     } else {
       api.patch("/api/products", { id: p.id, stockQuantity: Math.max(0, p.stockQuantity + delta) }, piUid).then(function(res) {
         if (res.ok) { qc.invalidateQueries({ queryKey: ["products", storeId] }); toast({ title: delta > 0 ? "تم زيادة المخزون" : "تم تقليل المخزون" }); }
         else { toast({ title: "فشل تحديث المخزون", variant: "destructive" }); }
-      }).catch(function() { toast({ title: "خطأ في الاتصال", variant: "destructive" }); });
+      }).catch(function(err) { toast({ title: "خطأ", description: apiErrorMessage(err), variant: "destructive" }); });
     }
   };
 

@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useDebounce } from "@/hooks/use-debounce";
-import { api } from "@/lib/api-client";
+import { api, apiErrorMessage } from "@/lib/api-client";
 import { formatPi, roundPi } from "@/lib/pi-amount";
 import { StatusBadge, STATUS_MAP, fmtDate, fmtTime, copyText } from "@/lib/helpers";
 import { ESCROW_FEE_RATE } from "@/lib/constants";
@@ -63,7 +63,7 @@ export function InvoicesView({ store, products, piUid }: { store: StoreData; pro
         setItems([{ productName: "", quantity: 1, unitPrice: 0, _selectedProductId: "" }]);
         toast({ title: "تم إنشاء الفاتورة" });
       } else { res.json().catch(function() { return {}; }).then(function(err) { toast({ title: "فشل إنشاء الفاتورة", description: err.error || "خطأ غير معروف", variant: "destructive" }); }); }
-    }).catch(function() { toast({ title: "خطأ في الاتصال", variant: "destructive" }); }).finally(function() { setSaving(false); });
+    }).catch(function(err) { toast({ title: "خطأ", description: apiErrorMessage(err), variant: "destructive" }); }).finally(function() { setSaving(false); });
   };
 
   const invRes = useQuery({

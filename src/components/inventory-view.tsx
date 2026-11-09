@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { useDebounce } from "@/hooks/use-debounce";
-import { api } from "@/lib/api-client";
+import { api, apiErrorMessage } from "@/lib/api-client";
 import { fmtDate, fmtTime } from "@/lib/helpers";
 import type { InventoryData, InventoryMovementData } from "@/lib/types";
 
@@ -91,7 +91,7 @@ export function InventoryView({ storeId, piUid }: { storeId: string; piUid: stri
       } else {
         res.json().catch(function() { return {}; }).then(function(err) { toast({ title: "فشل التزويد", description: err.error || "", variant: "destructive" }); });
       }
-    }).catch(function() { toast({ title: "خطأ في الاتصال", variant: "destructive" }); }).finally(function() { setSaving(false); });
+    }).catch(function(err) { toast({ title: "خطأ", description: apiErrorMessage(err), variant: "destructive" }); }).finally(function() { setSaving(false); });
   };
 
   const handleAdjust = function() {
@@ -116,7 +116,7 @@ export function InventoryView({ storeId, piUid }: { storeId: string; piUid: stri
       } else {
         res.json().catch(function() { return {}; }).then(function(err) { toast({ title: "فشل التعديل", description: err.error || "", variant: "destructive" }); });
       }
-    }).catch(function() { toast({ title: "خطأ في الاتصال", variant: "destructive" }); }).finally(function() { setSaving(false); });
+    }).catch(function(err) { toast({ title: "خطأ", description: apiErrorMessage(err), variant: "destructive" }); }).finally(function() { setSaving(false); });
   };
 
   const getAvailable = function(inv: InventoryData) {

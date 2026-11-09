@@ -8,6 +8,7 @@ import {
   PI_CLIENT_ID,
   type PiUser,
 } from "@/lib/pi-sdk";
+import { setAccessToken } from "@/lib/api-client";
 
 /* ─── Return type ─────────────────────────────────────────── */
 export interface UsePiAuthReturn {
@@ -77,6 +78,14 @@ export function usePiAuth(): UsePiAuthReturn {
     try {
       const authedUser = await authenticatePi();
       if (!mountedRef.current) return;
+
+      // CRITICAL: cache the token IMMEDIATELY (synchronously) so every API
+      // request fired from child components carries the Bearer header.
+      // (Previously the token was set in a parent useEffect which runs AFTER
+      // child components start fetching → first requests went out unauthenticated.)
+      if (authedUser.accessToken) {
+        setAccessToken(authedUser.accessToken);
+      }
 
       setUser(authedUser);
 

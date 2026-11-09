@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { useDebounce } from "@/hooks/use-debounce";
-import { api } from "@/lib/api-client";
+import { api, apiErrorMessage } from "@/lib/api-client";
 import { formatPi, roundPi } from "@/lib/pi-amount";
 import { fmtDate, fmtTime, copyText } from "@/lib/helpers";
 import type { LocalSaleData, LocalSaleItemData, ProductData, CustomerData, InventoryData, StoreData } from "@/lib/types";
@@ -128,7 +128,7 @@ export function LocalSalesView({ storeId, piUid, products, customers, inventory,
       } else {
         res.json().catch(function() { return {}; }).then(function(err) { toast({ title: "فشل التسجيل", description: err.error || "", variant: "destructive" }); });
       }
-    }).catch(function() { toast({ title: "خطأ في الاتصال", variant: "destructive" }); }).finally(function() { setSaving(false); });
+    }).catch(function(err) { toast({ title: "خطأ", description: apiErrorMessage(err), variant: "destructive" }); }).finally(function() { setSaving(false); });
   };
 
   /* ── Refund handler ── */
@@ -146,7 +146,7 @@ export function LocalSalesView({ storeId, piUid, products, customers, inventory,
           toast({ title: "فشل الإرجاع", description: err.error || "", variant: "destructive" });
         });
       }
-    }).catch(function() { toast({ title: "خطأ في الاتصال", variant: "destructive" }); }).finally(function() { setRefunding(false); });
+    }).catch(function(err) { toast({ title: "خطأ", description: apiErrorMessage(err), variant: "destructive" }); }).finally(function() { setRefunding(false); });
   };
 
   /* ── Share receipt as text ── */

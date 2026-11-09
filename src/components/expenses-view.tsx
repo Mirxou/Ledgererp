@@ -21,7 +21,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
-import { api } from "@/lib/api-client";
+import { api, apiErrorMessage } from "@/lib/api-client";
 import { formatPi, roundPi } from "@/lib/pi-amount";
 import { fmtDate } from "@/lib/helpers";
 import type { ExpenseData } from "@/lib/types";
@@ -96,14 +96,14 @@ export function ExpensesView({ storeId, piUid }: { storeId: string; piUid: strin
       } else {
         res.json().catch(function() { return {}; }).then(function(err) { toast({ title: "فشل الإضافة", description: err.error || "", variant: "destructive" }); });
       }
-    }).catch(function() { toast({ title: "خطأ في الاتصال", variant: "destructive" }); }).finally(function() { setSaving(false); });
+    }).catch(function(err) { toast({ title: "خطأ", description: apiErrorMessage(err), variant: "destructive" }); }).finally(function() { setSaving(false); });
   };
 
   const handleDelete = function(id: string) {
     api.delete("/api/expenses", { id: id }, piUid).then(function(res) {
       if (res.ok) { qc.invalidateQueries({ queryKey: ["expenses", storeId] }); qc.invalidateQueries({ queryKey: ["expenses-stats", storeId] }); toast({ title: "تم حذف المصروف" }); }
       else toast({ title: "فشل الحذف", variant: "destructive" });
-    }).catch(function() { toast({ title: "خطأ في الاتصال", variant: "destructive" }); });
+    }).catch(function(err) { toast({ title: "خطأ", description: apiErrorMessage(err), variant: "destructive" }); });
   };
 
   return (

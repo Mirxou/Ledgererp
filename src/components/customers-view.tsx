@@ -23,7 +23,7 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { useDebounce } from "@/hooks/use-debounce";
-import { api } from "@/lib/api-client";
+import { api, apiErrorMessage } from "@/lib/api-client";
 import { formatPi } from "@/lib/pi-amount";
 import type { CustomerData } from "@/lib/types";
 
@@ -65,7 +65,7 @@ export function CustomersView({ storeId, piUid }: { storeId: string; piUid: stri
     api.post("/api/customers", { storeId: storeId, name: form.name.trim(), phone: form.phone.trim(), email: form.email.trim(), address: form.address.trim(), notes: form.notes.trim(), piUid: form.piUid.trim() || null }, piUid).then(function(res) {
       if (res.ok) { qc.invalidateQueries({ queryKey: ["customers", storeId] }); setOpen(false); setForm({ name: "", phone: "", email: "", address: "", notes: "", piUid: "" }); toast({ title: "تم إضافة الزبون" }); }
       else { res.json().catch(function() { return {}; }).then(function(err) { toast({ title: "فشل الإضافة", description: err.error || "", variant: "destructive" }); }); }
-    }).catch(function() { toast({ title: "خطأ في الاتصال", variant: "destructive" }); }).finally(function() { setSaving(false); });
+    }).catch(function(err) { toast({ title: "خطأ", description: apiErrorMessage(err), variant: "destructive" }); }).finally(function() { setSaving(false); });
   };
 
   const handleEdit = function() {
@@ -74,14 +74,14 @@ export function CustomersView({ storeId, piUid }: { storeId: string; piUid: stri
     api.patch("/api/customers", { id: editForm.id, name: editForm.name.trim(), phone: editForm.phone.trim(), email: editForm.email.trim(), address: editForm.address.trim(), notes: editForm.notes.trim(), piUid: editForm.piUid || null }, piUid).then(function(res) {
       if (res.ok) { qc.invalidateQueries({ queryKey: ["customers", storeId] }); setEditOpen(false); setEditForm(null); toast({ title: "تم تحديث الزبون" }); }
       else { toast({ title: "فشل التحديث", variant: "destructive" }); }
-    }).catch(function() { toast({ title: "خطأ في الاتصال", variant: "destructive" }); }).finally(function() { setSaving(false); });
+    }).catch(function(err) { toast({ title: "خطأ", description: apiErrorMessage(err), variant: "destructive" }); }).finally(function() { setSaving(false); });
   };
 
   const handleDelete = function(id: string) {
     api.delete("/api/customers", { id: id }, piUid).then(function(res) {
       if (res.ok) { qc.invalidateQueries({ queryKey: ["customers", storeId] }); toast({ title: "تم حذف الزبون" }); }
       else toast({ title: "فشل الحذف", variant: "destructive" });
-    }).catch(function() { toast({ title: "خطأ في الاتصال", variant: "destructive" }); });
+    }).catch(function(err) { toast({ title: "خطأ", description: apiErrorMessage(err), variant: "destructive" }); });
   };
 
   return (

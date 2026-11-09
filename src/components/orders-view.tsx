@@ -24,7 +24,7 @@ import { formatPi } from "@/lib/pi-amount";
 import { useDebounce } from "@/hooks/use-debounce";
 import { StatusBadge, fmtDate, fmtTime, copyText } from "@/lib/helpers";
 import { useToast } from "@/hooks/use-toast";
-import { api } from "@/lib/api-client";
+import { api, apiErrorMessage } from "@/lib/api-client";
 import type { StoreData, InvoiceData } from "@/lib/types";
 
 /* ═══ Orders ═══ */
@@ -130,7 +130,7 @@ function OrderCard({ invoice: inv, view, store, customerUid, onPay, onShip, onCo
       } else {
         res.json().catch(function() { return {}; }).then(function(err) { toast({ title: "فشل حل النزاع", description: err.error || "", variant: "destructive" }); });
       }
-    }).catch(function() { toast({ title: "خطأ في الاتصال", variant: "destructive" }); }).finally(function() { setLoading(false); setResolveOpen(false); });
+    }).catch(function(err) { toast({ title: "خطأ", description: apiErrorMessage(err), variant: "destructive" }); }).finally(function() { setLoading(false); setResolveOpen(false); });
   };
 
   const handleCancelDispute = function() {
@@ -142,7 +142,7 @@ function OrderCard({ invoice: inv, view, store, customerUid, onPay, onShip, onCo
       } else {
         res.json().catch(function() { return {}; }).then(function(err) { toast({ title: "فشل سحب النزاع", description: err.error || "", variant: "destructive" }); });
       }
-    }).catch(function() { toast({ title: "خطأ في الاتصال", variant: "destructive" }); }).finally(function() { setLoading(false); });
+    }).catch(function(err) { toast({ title: "خطأ", description: apiErrorMessage(err), variant: "destructive" }); }).finally(function() { setLoading(false); });
   };
 
   return (
@@ -263,7 +263,7 @@ function OrderCard({ invoice: inv, view, store, customerUid, onPay, onShip, onCo
                 } else {
                   res.json().catch(function() { return {}; }).then(function(err) { toast({ title: "فشل فتح النزاع", description: err.error || "", variant: "destructive" }); });
                 }
-              }).catch(function() { toast({ title: "خطأ في الاتصال", variant: "destructive" }); }).finally(function() {
+              }).catch(function(err) { toast({ title: "خطأ", description: apiErrorMessage(err), variant: "destructive" }); }).finally(function() {
                 setDisputeSubmitting(false);
                 setDisputeOpen(false);
                 setDisputeReason("");
@@ -512,7 +512,7 @@ function DisputeResolutionPanel({ invoice: inv, view, store, customerUid, loadin
           toast({ title: "فشل حل النزاع", description: err.error || "", variant: "destructive" });
         });
       }
-    }).catch(function() { toast({ title: "خطأ في الاتصال", variant: "destructive" }); }).finally(function() {
+    }).catch(function(err) { toast({ title: "خطأ", description: apiErrorMessage(err), variant: "destructive" }); }).finally(function() {
       setLoading(false);
     });
   };
